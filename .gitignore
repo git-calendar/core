@@ -1,3 +1,6 @@
 .DS_Store
+.zed/
 
 build/
+web-pkg/dist/
+web-pkg/node_modules/

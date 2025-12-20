@@ -1,4 +1,4 @@
-package gitcalendarcore
+package core
 
 // calendar repo structure:
 //

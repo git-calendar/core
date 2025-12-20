@@ -1,4 +1,4 @@
-package gitcalendarcore
+package core
 
 import (
 	"errors"

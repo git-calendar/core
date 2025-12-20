@@ -1,4 +1,4 @@
-package gitcalendarcore
+package core
 
 import (
 	"encoding/json"
@@ -172,7 +172,7 @@ func (a *apiImpl) GetEvent(id int) (string, error) {
 }
 
 func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
-	return "", nil
+	return "test test hahhah", nil
 }
 
 func (a *apiImpl) Initialize(repoPath string) error {

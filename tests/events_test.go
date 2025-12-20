@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/firu11/git-calendar-core/gitcalendarcore"
+	"github.com/firu11/git-calendar-core/core"
 )
 
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
