@@ -4,3 +4,4 @@
 build/
 web-pkg/dist/
 web-pkg/node_modules/
+web-pkg/src/wasm/api.wasm
