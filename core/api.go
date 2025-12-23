@@ -111,7 +111,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	gitPath := filepath.ToSlash(filePath)
+	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename)) // relative to git, not the fs root
 	if _, err := w.Add(gitPath); err != nil {
 		return fmt.Errorf("failed to stage event file: %w", err)
 	}

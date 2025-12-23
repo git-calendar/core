@@ -157,6 +157,8 @@ func (fs *OPFS) Chroot(path string) (billy.Filesystem, error) {
 }
 
 func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
+	fmt.Println("readdir:", path)
+
 	defer func() { // recover any panic that could happen along the way: Get(), Index()
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS ReadDir %q failed: %+v", path, r)
@@ -170,7 +172,7 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 	}
 
 	// get the AsyncIterator from entries() https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncIterator
-	itValue, err := await(dirHandle.Call("entries"))
+	itValue := dirHandle.Call("entries")
 	if err != nil {
 		return nil, err
 	}
