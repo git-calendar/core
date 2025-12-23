@@ -2,9 +2,9 @@ package core
 
 // calendar repo structure:
 //
-//	root
+//	git-calendar-data
 //	- index.jsonl
-//	- rich-index.jsonl
+//	- index-rich.jsonl
 //	- events/
 //	  - UUID.json
 //	- groups/
@@ -12,7 +12,9 @@ package core
 
 const (
 	IndexFileName     string = "index.json"
-	RichIndexFileName string = "rich-index.json"
-	EventsDirName     string = "events"
-	GroupsDirName     string = "groups"
+	RichIndexFileName string = "index-rich.json"
+
+	RootDirName   string = "git-calendar-data"
+	EventsDirName string = "events"
+	GroupsDirName string = "groups"
 )

@@ -48,7 +48,7 @@ func NewApi() Api {
 	api.events = make(map[int]*Event)
 
 	var err error
-	api.fs, err = filesystem.GetRepoFS()
+	api.fs, err = filesystem.GetRepoFS(RootDirName)
 	if err != nil {
 		panic(err)
 	}
