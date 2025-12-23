@@ -3,11 +3,13 @@
 package filesystem
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall/js"
 	"time"
@@ -16,21 +18,24 @@ import (
 	"github.com/go-git/go-billy/v5/helper/chroot"
 )
 
-func GetRepoFS(dirName string) (billy.Filesystem, error) {
+const RepoDirName = "git-calendar-data"
+
+func GetRepoFS() (billy.Filesystem, string, error) {
 	rootHandle := js.Global().Get("opfsRootHandle")
+	if rootHandle.IsUndefined() {
+		return nil, "", errors.New("opfsRootHandle not initialized")
+	}
 
 	return &OPFS{
-		root:    rootHandle,
-		dirName: dirName,
-	}, nil
+		root: rootHandle,
+	}, RepoDirName, nil
 }
 
 // Origin private file system
 //
 // https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system
 type OPFS struct {
-	root    js.Value // FileSystemDirectoryHandle
-	dirName string
+	root js.Value // FileSystemDirectoryHandle
 }
 
 var _ billy.Filesystem = (*OPFS)(nil) // makes sure that it implements all the interface methods, it wont compile without it
@@ -52,34 +57,47 @@ func (fs *OPFS) Join(elem ...string) string {
 	return strings.Join(parts, "/")
 }
 
-func (fs *OPFS) OpenFile(name string, flag int, perm os.FileMode) (billy.File, error) {
-	// OPFS ignores permissions (perm)
-
+func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, error) {
 	create := flag&os.O_CREATE != 0
+	fmt.Println("open:", path, create)
 
 	var handle js.Value
 	var err error
 
-	defer func() { // recover any panic that could happen along the way: Get(), Index()
+	defer func() { // recover any panic that could happen along the way: Call()
 		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", name, r)
+			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", path, r)
 		}
 	}()
 
+	// get direct parent dir handle
+	path, fileName := filepath.Split(path)
+	dirHandle, err := fs.getDirectoryHandle(path, create)
+	if err != nil {
+		if strings.Contains(err.Error(), "NotFoundError") {
+			return nil, os.ErrNotExist
+		}
+		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+	}
+
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
-	handle, err = await(fs.root.Call("getFileHandle", name, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
+	handle, err = await(dirHandle.Call("getFileHandle", fileName, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
+	if err != nil {
+		if strings.Contains(err.Error(), "NotFoundError") {
+			return nil, os.ErrNotExist
+		}
+		return nil, fmt.Errorf("failed to get file handle: %w", err)
+	}
 
 	f := &OPFSFile{
 		handle: handle,
 		offset: 0,
 	}
 
-	// handle O_TRUNC
 	if flag&os.O_TRUNC != 0 {
 		err = f.Truncate(0)
 	}
 
-	// handle O_APPEND
 	if flag&os.O_APPEND != 0 {
 		// prepare the file for appending
 		f.openAccess()
@@ -91,6 +109,7 @@ func (fs *OPFS) OpenFile(name string, flag int, perm os.FileMode) (billy.File, e
 }
 
 func (fs *OPFS) Remove(filename string) error {
+	fmt.Println("remove:", filename)
 	// OPFS FileSystemDirectoryHandle provides a native removeEntry method
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/removeEntry
 	// a non-empty directory will not be removed
@@ -130,7 +149,7 @@ func (fs *OPFS) Rename(oldpath, newpath string) error {
 }
 
 func (fs *OPFS) Root() string {
-	return fs.dirName
+	return "/"
 }
 
 func (fs *OPFS) Chroot(path string) (billy.Filesystem, error) {
@@ -191,23 +210,23 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 	return
 }
 
-func (s *OPFS) Lstat(filename string) (fs.FileInfo, error) {
+func (fs *OPFS) Lstat(filename string) (fs.FileInfo, error) {
 	// Lstat() is just Stat(), which doesnt follow links, but we do not have links in OPFS
-	return s.Stat(filename)
+	return fs.Stat(filename)
 }
 
-func (s *OPFS) TempFile(dir string, prefix string) (billy.File, error) {
+func (fs *OPFS) TempFile(dir string, prefix string) (billy.File, error) {
 	// generate a unique filename: prefix + timestamp + random
 	tempName := fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), rand.Intn(1000))
-	fullPath := s.Join(dir, tempName)
+	fullPath := fs.Join(dir, tempName)
 
 	// ensure the temp directory exists
 	if dir != "" && dir != "." {
-		_ = s.MkdirAll(dir, 0o755)
+		_ = fs.MkdirAll(dir, 0o755)
 	}
 
 	// use your existing Create method to get a billy.File (OPFSFile)
-	return s.Create(fullPath)
+	return fs.Create(fullPath)
 }
 
 func (fs *OPFS) Create(name string) (billy.File, error) {
@@ -224,43 +243,76 @@ func (fs *OPFS) Open(name string) (billy.File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (fs *OPFS) Stat(name string) (os.FileInfo, error) {
+func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
+	// get direct parent dir handle
+	path, name := filepath.Split(path)
+	parentDirHandle, err := fs.getDirectoryHandle(path, false)
+	if err != nil {
+		if strings.Contains(err.Error(), "NotFoundError") {
+			return nil, os.ErrNotExist
+		}
+		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+	}
+
+	defer func() { // recover any panic
+		if r := recover(); r != nil {
+			err = fmt.Errorf("OPFS Stat %q failed: %+v", path, r)
+		}
+	}()
+
+	// Try as file first
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
-	handle, err := await(fs.root.Call("getFileHandle", name)) // returns Promise<FileSystemFileHandle>
-	if err != nil {
-		return nil, err
+	handle, err := await(parentDirHandle.Call("getFileHandle", name))
+	if err == nil {
+		// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/getFile
+		file, err := await(handle.Call("getFile")) // returns Promise<File>
+		if err != nil {
+			return nil, err
+		}
+		return &OPFSFileInfo{
+			name:    name,
+			size:    int64(file.Get("size").Int()),                         // native File(Blob) "size" property
+			modTime: time.UnixMilli(int64(file.Get("lastModified").Int())), // native File "lastModified" property
+			isDir:   false,
+			// https://developer.mozilla.org/en-US/docs/Web/API/File
+		}, nil
 	}
 
-	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/getFile
-	file, err := await(handle.Call("getFile")) // returns Promise<File>
-	if err != nil {
-		return nil, err
+	// If file failed, try as directory
+	_, err = await(parentDirHandle.Call("getDirectoryHandle", name))
+	if err == nil {
+		return &OPFSFileInfo{
+			name:  name,
+			isDir: true,
+		}, nil
 	}
 
-	return &OPFSFileInfo{
-		name:    file.Get("name").String(),                             // native File "name" property
-		size:    int64(file.Get("size").Int()),                         // native File(Blob) "size" property
-		modTime: time.UnixMilli(int64(file.Get("lastModified").Int())), // native File "lastModified" property
-		// https://developer.mozilla.org/en-US/docs/Web/API/File
-	}, nil
+	// neither file nor directory exists -> ErrNotExist
+	if strings.Contains(err.Error(), "NotFoundError") || strings.Contains(err.Error(), "NotFound") {
+		return nil, os.ErrNotExist
+	}
+
+	return nil, err
 }
 
-func (s *OPFS) Symlink(target, link string) error {
+func (fs *OPFS) Symlink(target, link string) error {
 	return billy.ErrNotSupported // go-git will probably handle this
 }
 
-func (s *OPFS) Readlink(link string) (string, error) {
+func (fs *OPFS) Readlink(link string) (string, error) {
 	return "", billy.ErrNotSupported // go-git will probably handle this
 }
 
+// A helper function which traverses to the last dir in path.
 func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 	parts := strings.Split(path, "/")
 
 	dir := fs.root
 	for _, part := range parts {
-		if part == "" {
+		if part == "" || part == "." {
 			continue
 		}
+
 		d, err := await(dir.Call("getDirectoryHandle", part, map[string]any{"create": create}))
 		if err != nil {
 			return js.Undefined(), err
@@ -294,7 +346,17 @@ func await(p js.Value) (js.Value, error) {
 
 	// create a callback "catch" function
 	catch := js.FuncOf(func(this js.Value, args []js.Value) any {
-		errCh <- fmt.Errorf("js error: %s", args[0].String())
+		jsErr := args[0]
+		// extract the message and the "name" (e.g., NotFoundError)
+		msg := jsErr.Get("message").String()
+		name := jsErr.Get("name").String()
+
+		if msg == "" {
+			msg = "unknown JS error"
+		}
+
+		// we wrap it in a custom struct or just check the name
+		errCh <- fmt.Errorf("%s: %s", name, msg)
 		return nil
 	})
 

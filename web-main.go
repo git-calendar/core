@@ -22,14 +22,12 @@ func RegisterCallbacks(api core.Api) {
 		"initialize": js.FuncOf(func(this js.Value, args []js.Value) any {
 			// error handling: returns a promise to JS
 			return wrapPromise(func() (any, error) {
-				err := api.Initialize(args[0].String())
-				return nil, err
+				return nil, api.Initialize()
 			})
 		}),
 		"addEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
 			return wrapPromise(func() (any, error) {
-				err := api.AddEvent(args[0].String())
-				return nil, err
+				return nil, api.AddEvent(args[0].String())
 			})
 		}),
 		"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -59,7 +57,22 @@ func wrapPromise(fn func() (any, error)) any {
 		go func() {
 			res, err := fn()
 			if err != nil {
-				reject.Invoke(js.ValueOf(err.Error()))
+				// cretes a JS new Error(message) and invokes it (throws it whatever)
+
+				// Check if the error is a wrapper for a JS value
+				// If it is, try to get the 'message' property
+				errorMessage := err.Error()
+
+				// This is a trick to see if the error contains a JS value
+				if jsErr, ok := err.(js.Error); ok {
+					message := jsErr.Value.Get("message")
+					if message.Truthy() {
+						errorMessage = message.String()
+					}
+				}
+
+				errorConstructor := js.Global().Get("Error")
+				reject.Invoke(errorConstructor.New(errorMessage))
 			} else {
 				resolve.Invoke(js.ValueOf(res))
 			}

@@ -14,8 +14,7 @@ import (
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	a := core.NewApi()
 
-	tmpDir := t.TempDir()
-	err := a.Initialize(tmpDir)
+	err := a.Initialize()
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -37,7 +36,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to create an event: %v", err)
 	}
 
-	b, err := os.ReadFile(path.Join(tmpDir, core.EventsDirName, "1.json"))
+	b, err := os.ReadFile(path.Join(core.EventsDirName, "1.json"))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
 	}
@@ -62,8 +61,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 func Test_AddEventAndGetEvent_Works(t *testing.T) {
 	a := core.NewApi()
 
-	tmpDir := t.TempDir()
-	err := a.Initialize(tmpDir)
+	err := a.Initialize()
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}

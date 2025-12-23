@@ -2,7 +2,9 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -21,8 +23,8 @@ type (
 	// cannot expose channels, maps or some goofy types which do not have bindings to other languages
 	// As even an array does not work, Ive decided to use json everywhere instead of Event, even though you can return a *Event from a function. You cannot pass it as argument, return a array of events or anything else. Using json everywhere as a rest api would...
 	Api interface {
-		Initialize(repoPath string) error
-		Clone(repoUrl, repoPath string) error
+		Initialize() error
+		Clone(repoUrl string) error
 		// AddRemote()
 
 		AddEvent(eventJson string) error // TODO: check that it gets translated to a throwing exception for Kotlin/JS
@@ -33,11 +35,11 @@ type (
 	}
 
 	apiImpl struct {
-		eventTree *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
-		events    map[int]*Event
-		repoPath  string
-		repo      *git.Repository
-		fs        billy.Filesystem
+		eventTree          *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
+		events             map[int]*Event
+		repoPathFromFSRoot string
+		repo               *git.Repository
+		fs                 billy.Filesystem
 	}
 )
 
@@ -48,7 +50,7 @@ func NewApi() Api {
 	api.events = make(map[int]*Event)
 
 	var err error
-	api.fs, err = filesystem.GetRepoFS(RootDirName)
+	api.fs, api.repoPathFromFSRoot, err = filesystem.GetRepoFS()
 	if err != nil {
 		panic(err)
 	}
@@ -59,6 +61,9 @@ func NewApi() Api {
 func (a *apiImpl) AddEvent(eventJson string) error {
 	var e Event
 	err := json.Unmarshal([]byte(eventJson), &e)
+	if err != nil {
+		return fmt.Errorf("failed to parse event data: %w", err)
+	}
 
 	if err := e.Validate(); err != nil {
 		return fmt.Errorf("invalid event data: %w", err)
@@ -79,14 +84,14 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		return fmt.Errorf("failed to marshal event to JSON: %w", err)
 	}
 
-	dirPath := filepath.Join(a.repoPath, EventsDirName)
-	err = a.fs.MkdirAll(dirPath, 0o755) // Ensure the 'events' folder exists
+	dirPath := filepath.Join(a.repoPathFromFSRoot, EventsDirName)
+	err = a.fs.MkdirAll(dirPath, 0) // ensure the "events" folder exists
 	if err != nil {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
 	filename := fmt.Sprintf("%d.json", e.Id)
-	filePath := filepath.Join(a.repoPath, EventsDirName, filename)
+	filePath := filepath.Join(a.repoPathFromFSRoot, EventsDirName, filename)
 	file, err := a.fs.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create event file: %w", err)
@@ -154,7 +159,7 @@ func (a *apiImpl) UpdateEvent(eventJson string) error {
 }
 
 func (a *apiImpl) RemoveEvent(eventJson string) error {
-	return nil
+	return nil // TODO
 }
 
 func (a *apiImpl) GetEvent(id int) (string, error) {
@@ -172,64 +177,57 @@ func (a *apiImpl) GetEvent(id int) (string, error) {
 }
 
 func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
-	return "test test hahhah", nil
+	return "EVENTS", nil // TODO
 }
 
-func (a *apiImpl) Initialize(repoPath string) error {
-	a.repoPath = repoPath
-
-	_, err := a.fs.Stat(".git")
-
-	dotGitFs, _ := a.fs.Chroot(".git")
-	storage := gogitfs.NewStorage(dotGitFs, cache.NewObjectLRUDefault())
-
-	if err == nil {
-		// Repo exists! Open it instead of Init
-		repo, err := git.Open(storage, a.fs)
-		if err != nil {
-			return fmt.Errorf("failed to open existing repo: %w", err)
-		}
-		a.repo = repo
-		return nil
+func (a *apiImpl) Initialize() error {
+	// a.fs is OPFS root
+	if err := a.fs.MkdirAll(a.repoPathFromFSRoot, 0o755); err != nil {
+		return fmt.Errorf("create repo dir: %w", err)
 	}
 
-	repo, err := git.Init(storage, a.fs)
+	repoFS, err := a.fs.Chroot(a.repoPathFromFSRoot)
 	if err != nil {
-		return fmt.Errorf("failed to init repo")
+		return fmt.Errorf("chroot repo dir: %w", err)
+	}
+
+	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
+		return fmt.Errorf("create .git: %w", err)
+	}
+
+	dotGitFS, err := repoFS.Chroot(".git")
+	if err != nil {
+		return fmt.Errorf("chroot .git: %w", err)
+	}
+
+	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
+
+	repo, err := git.Init(storage, repoFS)
+	if errors.Is(err, git.ErrRepositoryAlreadyExists) {
+		repo, err = git.Open(storage, repoFS)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
 	}
 
 	a.repo = repo
 
-	// create the events directory and an initial commit to ensure a master branch exists
-	// err = a.setupInitialRepoStructure(repoPath)
-	return err
+	return a.setupInitialRepoStructure()
 }
 
-func (a *apiImpl) Clone(repoUrl, repoPath string) error {
-	// // check if the directory already exists and is non-empty
-	// if _, err := os.Stat(repoPath); err == nil {
-	// 	// if the directory exists, try to open it instead of cloning over it.
-	// 	// if the user meant to re-clone, they should delete the directory first.
-	// 	return a.Initialize(repoPath)
-	// }
+func (a *apiImpl) Clone(repoUrl string) error {
+	return nil // TODO
+}
 
-	// repo, err := git.Clone(memory.NewStorage(), a.fs, &git.CloneOptions{
-	// 	URL:      repoUrl,
-	// 	Progress: os.Stdout, // optional: for logging clone progress
-	// })
-	// if err != nil {
-	// 	return fmt.Errorf("failed to clone repository from '%s': %w", repoUrl, err)
-	// }
+// helper function to setup the inital "events" folder
+func (a *apiImpl) setupInitialRepoStructure() error {
+	eventsDirPath := path.Join(a.repoPathFromFSRoot, EventsDirName)
+	err := a.fs.MkdirAll(eventsDirPath, 0o755)
+	if err != nil {
+		return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)
+	}
 
-	// a.repo = repo
 	return nil
 }
-
-// func (a *apiImpl) setupInitialRepoStructure(repoPath string) error {
-// 	err := os.Mkdir(path.Join(repoPath, EventsDirName), 0o755)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create folder '%s': %w", path.Join(repoPath, EventsDirName), err)
-// 	}
-
-// 	return nil
-// }

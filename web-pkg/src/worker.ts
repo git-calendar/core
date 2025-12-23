@@ -8,25 +8,35 @@ const ctx: Worker = self as any;
 
 async function startGo() {
   try {
-    // 1. Inject Go Glue
+    // create a opfs handle
+    await initOPFS();
+
+    // inject Go Glue
     (0, eval)(wasmExecCode);
     const go = new (self as any).Go();
 
-    // 2. Define the ready callback for Go
+    // define the ready callback for Go
     (self as any).onWasmReady = () => {
       ctx.postMessage({ type: 'wasm_ready' });
     };
 
-    // 3. Load & Run WASM
+    // load and run Wasm
     const response = await fetch(wasmUrl);
     const buffer = await response.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(buffer, go.importObject);
 
-    // Start Go (Non-blocking)
+    // start Go (non-blocking)
     go.run(instance);
   } catch (err: any) {
     ctx.postMessage({ type: 'wasm_error', error: err.message });
   }
+}
+
+let opfsRootHandle: FileSystemDirectoryHandle | null = null;
+async function initOPFS() {
+  opfsRootHandle = await navigator.storage.getDirectory();
+  // Expose for Go
+  (self as any).opfsRootHandle = opfsRootHandle;
 }
 
 // Listen for function calls from the Proxy
