@@ -103,6 +103,8 @@ func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, e
 		f.openAccess()
 		size := f.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
 		f.offset = int64(size)                 // set the offset to the end so that future Write() calls append
+
+		f.closeAccess()
 	}
 
 	return f, err

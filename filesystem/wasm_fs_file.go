@@ -18,19 +18,6 @@ type OPFSFile struct {
 
 var _ billy.File = (*OPFSFile)(nil) // makes sure that it implements all the interface methods, it wont compile without it
 
-// helper function to open sync access for file
-func (f *OPFSFile) openAccess() error {
-	// skip if already has access
-	if f.access.Truthy() { // basically "if f.access != nil"
-		return nil
-	}
-
-	var err error
-	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
-	f.access, err = await(f.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
-	return err
-}
-
 func (f *OPFSFile) Write(p []byte) (int, error) {
 	// use already implemented WriteAt
 	n, err := f.WriteAt(p, f.offset)
@@ -45,6 +32,7 @@ func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
 		return 0, fmt.Errorf("failed to open access: %w", err)
 	}
+	defer f.closeAccess()
 
 	defer func() { // // recover a panic from Get("Uint8Array") or Call("write")
 		if r := recover(); r != nil {
@@ -80,6 +68,7 @@ func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
 		return 0, fmt.Errorf("failed to open access: %w", err)
 	}
+	defer f.closeAccess()
 
 	defer func() { // recover a panic from Get("Uint8Array") or Call("read")
 		if r := recover(); r != nil {
@@ -105,7 +94,10 @@ func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
-	f.openAccess()
+	if err := f.openAccess(); err != nil {
+		return 0, fmt.Errorf("failed to open access: %w", err)
+	}
+	defer f.closeAccess()
 
 	defer func() { // recover a panic from Call("getSize")
 		if r := recover(); r != nil {
@@ -155,7 +147,10 @@ func (f *OPFSFile) Name() (name string) {
 }
 
 func (f *OPFSFile) Truncate(size int64) error {
-	f.openAccess()
+	if err := f.openAccess(); err != nil {
+		return fmt.Errorf("failed to open access: %w", err)
+	}
+	defer f.closeAccess()
 
 	var err error
 	defer func() { // recover a panic from Call("truncate")
@@ -174,7 +169,7 @@ func (f *OPFSFile) Truncate(size int64) error {
 }
 
 func (f *OPFSFile) Close() error {
-	if f.access.IsUndefined() || f.access.IsNull() {
+	if !f.access.Truthy() {
 		return nil // already closed
 	}
 
@@ -198,4 +193,28 @@ func (f *OPFSFile) Lock() error {
 
 func (f *OPFSFile) Unlock() error {
 	return nil // will do nothing i guess
+}
+
+// -----------------------------------------------------------
+
+// helper function to open sync access for file
+func (f *OPFSFile) openAccess() error {
+	// skip if already has access
+	if f.access.Truthy() { // basically "if f.access != nil"
+		return nil
+	}
+
+	var err error
+	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
+	f.access, err = await(f.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
+	return err
+}
+
+// Helper to close just the access handle
+func (f *OPFSFile) closeAccess() {
+	if f.access.Truthy() {
+		f.access.Call("flush")
+		f.access.Call("close")
+		f.access = js.Undefined()
+	}
 }
