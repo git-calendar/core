@@ -19,14 +19,16 @@ type OPFSFile struct {
 var _ billy.File = (*OPFSFile)(nil) // makes sure that it implements all the interface methods, it wont compile without it
 
 // helper function to open sync access for file
-func (f *OPFSFile) openAccess() {
+func (f *OPFSFile) openAccess() error {
 	// skip if already has access
 	if f.access.Truthy() { // basically "if f.access != nil"
-		return
+		return nil
 	}
 
+	var err error
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
-	f.access, _ = await(f.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
+	f.access, err = await(f.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
+	return err
 }
 
 func (f *OPFSFile) Write(p []byte) (int, error) {
@@ -40,7 +42,9 @@ func (f *OPFSFile) Write(p []byte) (int, error) {
 }
 
 func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
-	f.openAccess()
+	if err := f.openAccess(); err != nil {
+		return 0, fmt.Errorf("failed to open access: %w", err)
+	}
 
 	defer func() { // // recover a panic from Get("Uint8Array") or Call("write")
 		if r := recover(); r != nil {
@@ -73,7 +77,9 @@ func (f *OPFSFile) Read(p []byte) (int, error) {
 }
 
 func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
-	f.openAccess()
+	if err := f.openAccess(); err != nil {
+		return 0, fmt.Errorf("failed to open access: %w", err)
+	}
 
 	defer func() { // recover a panic from Get("Uint8Array") or Call("read")
 		if r := recover(); r != nil {
@@ -168,21 +174,21 @@ func (f *OPFSFile) Truncate(size int64) error {
 }
 
 func (f *OPFSFile) Close() error {
+	if f.access.IsUndefined() || f.access.IsNull() {
+		return nil // already closed
+	}
+
 	var err error
 	defer func() { // recover a panic from Call("flush"/"close")
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS File Close failed: %+v", r)
+			f.access = js.Undefined()
 		}
 	}()
 
-	if f.access.Truthy() { // basically "if f.access != nil"
-		f.access.Call("flush")
-		f.access.Call("close")
-	}
-
-	// reset
-	f.access = js.Null()
-	f.offset = 0
+	f.access.Call("flush")
+	f.access.Call("close")
+	f.access = js.Undefined() // reset
 	return err
 }
 

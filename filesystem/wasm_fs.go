@@ -108,12 +108,35 @@ func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, e
 	return f, err
 }
 
-func (fs *OPFS) Remove(filename string) error {
-	fmt.Println("remove:", filename)
+func (fs *OPFS) Remove(path string) error {
+	fmt.Println("remove:", path)
+
+	// get direct parent dir handle
+	dirPath, name := filepath.Split(path)
+	dirHandle, err := fs.getDirectoryHandle(dirPath, false)
+	if err != nil {
+		if strings.Contains(err.Error(), "NotFoundError") {
+			return os.ErrNotExist
+		}
+		return fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+	}
+
 	// OPFS FileSystemDirectoryHandle provides a native removeEntry method
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/removeEntry
 	// a non-empty directory will not be removed
-	_, err := await(fs.root.Call("removeEntry", filename))
+	_, err = await(dirHandle.Call("removeEntry", name))
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "NotFoundError") {
+			return os.ErrNotExist
+		}
+		if strings.Contains(errMsg, "NoModificationAllowedError") {
+			// file might be locked or already removed - treat as success
+			// TODO is that ok?
+			fmt.Printf("Warning: Could not remove %s (may already be removed)\n", path)
+			return nil
+		}
+	}
 	return err
 }
 

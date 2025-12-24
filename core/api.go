@@ -85,21 +85,29 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 	}
 
 	dirPath := filepath.Join(a.repoPathFromFSRoot, EventsDirName)
-	err = a.fs.MkdirAll(dirPath, 0) // ensure the "events" folder exists
+	err = a.fs.MkdirAll(dirPath, 0o755) // ensure the "events" folder exists
 	if err != nil {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
 	filename := fmt.Sprintf("%d.json", e.Id)
 	filePath := filepath.Join(a.repoPathFromFSRoot, EventsDirName, filename)
-	file, err := a.fs.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create event file: %w", err)
+
+	// Create a scope for the file operations
+	{
+		file, err := a.fs.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create event file: %w", err)
+		}
+		if _, err := file.Write(data); err != nil {
+			file.Close()
+			return fmt.Errorf("failed to write event file: %w", err)
+		}
+		// IMPORTANT: Close the file BEFORE git operations
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close event file: %w", err)
+		}
 	}
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("failed to write event file: %w", err)
-	}
-	file.Close()
 
 	if a.repo == nil {
 		return fmt.Errorf("repo not initialized")
