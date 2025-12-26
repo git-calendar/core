@@ -57,27 +57,42 @@ func (fs *OPFS) Join(elem ...string) string {
 	return strings.Join(parts, "/")
 }
 
-func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, error) {
+func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.File, error) {
 	create := flag&os.O_CREATE != 0
-	fmt.Println("open:", path, create)
+	fmt.Println("open:", fullPath, create)
+
+	fullPath = normalizePath(fullPath)
+
+	// check the cache
+	inodeCacheMu.Lock()
+	defer inodeCacheMu.Unlock()
+	if inode, ok := inodeCache[fullPath]; ok && inode != nil {
+		inode.refs++
+		return &OPFSFile{
+			inode:  inode,
+			offset: 0,
+		}, nil
+	}
+
+	// "cache miss", create the inode
 
 	var handle js.Value
 	var err error
 
 	defer func() { // recover any panic that could happen along the way: Call()
 		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", path, r)
+			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", fullPath, r)
 		}
 	}()
 
 	// get direct parent dir handle
-	path, fileName := filepath.Split(path)
-	dirHandle, err := fs.getDirectoryHandle(path, create)
+	pathOnly, fileName := filepath.Split(fullPath)
+	dirHandle, err := fs.getDirectoryHandle(pathOnly, create)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return nil, os.ErrNotExist
 		}
-		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", pathOnly, err)
 	}
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
@@ -89,8 +104,16 @@ func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, e
 		return nil, fmt.Errorf("failed to get file handle: %w", err)
 	}
 
-	f := &OPFSFile{
+	// cache the inode
+	inode := &opfsInode{
 		handle: handle,
+		path:   fullPath,
+		refs:   1,
+	}
+	inodeCache[fullPath] = inode
+
+	f := &OPFSFile{
+		inode:  inode,
 		offset: 0,
 	}
 
@@ -100,11 +123,8 @@ func (fs *OPFS) OpenFile(path string, flag int, perm os.FileMode) (billy.File, e
 
 	if flag&os.O_APPEND != 0 {
 		// prepare the file for appending
-		f.openAccess()
-		size := f.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
-		f.offset = int64(size)                 // set the offset to the end so that future Write() calls append
-
-		f.closeAccess()
+		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
+		f.offset = int64(size)                       // set the offset to the end so that future Write() calls append
 	}
 
 	return f, err
@@ -329,6 +349,8 @@ func (fs *OPFS) Symlink(target, link string) error {
 func (fs *OPFS) Readlink(link string) (string, error) {
 	return "", billy.ErrNotSupported // go-git will probably handle this
 }
+
+// ---------------------------------------------------------
 
 // A helper function which traverses to the last dir in path.
 func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {

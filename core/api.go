@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/firu11/git-calendar-core/filesystem"
 	"github.com/go-git/go-billy/v5"
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
@@ -28,6 +30,8 @@ type (
 		// AddRemote()
 		// Delete()
 
+		SetCorsProxy(proxyUrl string) error
+
 		AddEvent(eventJson string) error // TODO: check that it gets translated to a throwing exception for Kotlin/JS
 		UpdateEvent(eventJson string) error
 		RemoveEvent(eventJson string) error
@@ -39,8 +43,9 @@ type (
 		eventTree          *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
 		events             map[int]*Event
 		repoPathFromFSRoot string
-		repo               *git.Repository
+		repo               *gogit.Repository
 		fs                 billy.Filesystem
+		proxyUrl           *url.URL
 	}
 )
 
@@ -129,7 +134,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 	// commit
 	_, err = w.Commit(
 		fmt.Sprintf("CALENDAR: Added event '%s'", e.Title),
-		&git.CommitOptions{
+		&gogit.CommitOptions{
 			Author: &object.Signature{
 				Name:  "git-calendar",
 				Email: "",
@@ -138,7 +143,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		},
 	)
 	if err != nil {
-		if errors.Is(err, git.ErrEmptyCommit) {
+		if errors.Is(err, gogit.ErrEmptyCommit) {
 			// nothing has changed
 			return nil
 		}
@@ -218,9 +223,9 @@ func (a *apiImpl) Initialize() error {
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 
-	repo, err := git.Init(storage, repoFS)
-	if errors.Is(err, git.ErrRepositoryAlreadyExists) {
-		repo, err = git.Open(storage, repoFS)
+	repo, err := gogit.Init(storage, repoFS)
+	if errors.Is(err, gogit.ErrRepositoryAlreadyExists) {
+		repo, err = gogit.Open(storage, repoFS)
 		if err != nil {
 			return err
 		}
@@ -233,8 +238,50 @@ func (a *apiImpl) Initialize() error {
 	return a.setupInitialRepoStructure()
 }
 
+func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
+	var err error
+	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
+	a.proxyUrl, err = url.Parse(trimmed)
+	return err
+}
+
 func (a *apiImpl) Clone(repoUrl string) error {
-	return nil // TODO
+	// make sure that the repo dir is created
+	if err := a.fs.MkdirAll(a.repoPathFromFSRoot, 0o755); err != nil {
+		return fmt.Errorf("create repo dir: %w", err)
+	}
+	repoFS, err := a.fs.Chroot(a.repoPathFromFSRoot)
+	if err != nil {
+		return fmt.Errorf("chroot repo dir: %w", err)
+	}
+
+	// make sure that .git dir exists
+	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
+		return fmt.Errorf("create .git: %w", err)
+	}
+	dotGitFS, err := repoFS.Chroot(".git")
+	if err != nil {
+		return fmt.Errorf("chroot .git: %w", err)
+	}
+
+	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
+
+	// add proxy if specified (only needed for the browser)
+	var finalRepoUrl string
+	if a.proxyUrl != nil {
+		finalRepoUrl = fmt.Sprintf("%s/%s", a.proxyUrl.String(), repoUrl)
+	} else {
+		finalRepoUrl = repoUrl
+	}
+	a.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+		RemoteName: "github",
+		URL:        finalRepoUrl,
+	})
+	if err != nil {
+		return fmt.Errorf("clone repo: %w", err)
+	}
+
+	return err
 }
 
 // helper function to setup the inital "events" folder

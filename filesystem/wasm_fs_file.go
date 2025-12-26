@@ -10,10 +10,10 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
+// This struct represents a file in our OPFS FileSystem, but there can by multiple instances of the single file, with different offsets, pointing at the same inode (aka. the REAL file)
 type OPFSFile struct {
-	handle js.Value // FileSystemFileHandle       - used for opening/creating files (careful, its async)
-	access js.Value // FileSystemSyncAccessHandle - used for reading/writing to files (sync)
-	offset int64    // current read/write offset
+	inode  *opfsInode // the real file underneath
+	offset int64      // current read/write offset
 }
 
 var _ billy.File = (*OPFSFile)(nil) // makes sure that it implements all the interface methods, it wont compile without it
@@ -30,9 +30,8 @@ func (f *OPFSFile) Write(p []byte) (int, error) {
 
 func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("failed to open access: %w", err)
+		return 0, fmt.Errorf("writeat: failed to open access: %w", err)
 	}
-	defer f.closeAccess()
 
 	defer func() { // // recover a panic from Get("Uint8Array") or Call("write")
 		if r := recover(); r != nil {
@@ -48,7 +47,7 @@ func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
 	js.CopyBytesToJS(buf, p)
 
 	// call .write(data, {at: offset}) in JS
-	n = f.access.Call("write", buf, map[string]any{"at": off}).Int()
+	n = f.inode.access.Call("write", buf, map[string]any{"at": off}).Int()
 
 	// std os.File.WriteAt does NOT move the file offset
 	return // returns n, err actually (named return values)
@@ -66,9 +65,8 @@ func (f *OPFSFile) Read(p []byte) (int, error) {
 
 func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("failed to open access: %w", err)
+		return 0, fmt.Errorf("readat: failed to open access: %w", err)
 	}
-	defer f.closeAccess()
 
 	defer func() { // recover a panic from Get("Uint8Array") or Call("read")
 		if r := recover(); r != nil {
@@ -81,7 +79,7 @@ func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 
 	// call .read(data, {at: offset}) in JS
-	n = f.access.Call("read", buf, map[string]any{"at": off}).Int()
+	n = f.inode.access.Call("read", buf, map[string]any{"at": off}).Int()
 
 	if n == 0 {
 		return 0, io.EOF
@@ -95,9 +93,8 @@ func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 
 func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("failed to open access: %w", err)
+		return 0, fmt.Errorf("seek: failed to open access: %w", err)
 	}
-	defer f.closeAccess()
 
 	defer func() { // recover a panic from Call("getSize")
 		if r := recover(); r != nil {
@@ -115,7 +112,7 @@ func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 		newOffset = f.offset + offset
 	case io.SeekEnd:
 		// if seek from end, get the file size and add the offset to the end
-		size := f.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
+		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
 		newOffset = int64(size) + offset
 	default:
 		return 0, fmt.Errorf("invalid whence: %d", whence)
@@ -139,8 +136,8 @@ func (f *OPFSFile) Name() (name string) {
 		}
 	}()
 
-	if f.handle.Truthy() { // basically "if f.access != nil"
-		return f.handle.Get("name").String()
+	if f.inode.handle.Truthy() { // basically "if f.access != nil"
+		return f.inode.handle.Get("name").String()
 	}
 
 	return ""
@@ -148,9 +145,8 @@ func (f *OPFSFile) Name() (name string) {
 
 func (f *OPFSFile) Truncate(size int64) error {
 	if err := f.openAccess(); err != nil {
-		return fmt.Errorf("failed to open access: %w", err)
+		return fmt.Errorf("truncate: failed to open access: %w", err)
 	}
-	defer f.closeAccess()
 
 	var err error
 	defer func() { // recover a panic from Call("truncate")
@@ -160,7 +156,7 @@ func (f *OPFSFile) Truncate(size int64) error {
 	}()
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/truncate
-	f.access.Call("truncate", size)
+	f.inode.access.Call("truncate", size)
 
 	if f.offset > size {
 		f.offset = size
@@ -169,7 +165,55 @@ func (f *OPFSFile) Truncate(size int64) error {
 }
 
 func (f *OPFSFile) Close() error {
-	if !f.access.Truthy() {
+	inodeCacheMu.Lock()
+	defer inodeCacheMu.Unlock()
+
+	f.inode.refs--
+	if f.inode.refs == 0 {
+		err := f.closeAccess()
+		delete(inodeCache, f.inode.path)
+		f.inode = nil
+		return err
+	}
+
+	f.inode = nil
+	return nil
+}
+
+func (f *OPFSFile) Lock() error {
+	// implementing like so: "f.inode.mu.Lock()" breaks it for some reason
+	return nil // will do nothing i guess
+}
+
+func (f *OPFSFile) Unlock() error {
+	// implementing like so: "f.inode.mu.Lock()" breaks it for some reason
+	return nil // will do nothing i guess
+}
+
+// -----------------------------------------------------------
+
+// Helper function to open sync access for file
+func (f *OPFSFile) openAccess() error {
+	f.inode.mu.Lock()
+	defer f.inode.mu.Unlock()
+
+	// skip if already has access
+	if f.inode.access.Truthy() { // basically "if f.access != nil"
+		return nil
+	}
+
+	var err error
+	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
+	f.inode.access, err = await(f.inode.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
+	return err
+}
+
+// Helper to close just the access handle
+func (f *OPFSFile) closeAccess() error {
+	f.inode.mu.Lock()
+	defer f.inode.mu.Unlock()
+
+	if !f.inode.access.Truthy() {
 		return nil // already closed
 	}
 
@@ -177,44 +221,13 @@ func (f *OPFSFile) Close() error {
 	defer func() { // recover a panic from Call("flush"/"close")
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS File Close failed: %+v", r)
-			f.access = js.Undefined()
+			f.inode.access = js.Undefined()
 		}
 	}()
 
-	f.access.Call("flush")
-	f.access.Call("close")
-	f.access = js.Undefined() // reset
+	f.inode.access.Call("flush")
+	f.inode.access.Call("close")
+	f.inode.access = js.Undefined()
+
 	return err
-}
-
-func (f *OPFSFile) Lock() error {
-	return nil // will do nothing i guess
-}
-
-func (f *OPFSFile) Unlock() error {
-	return nil // will do nothing i guess
-}
-
-// -----------------------------------------------------------
-
-// helper function to open sync access for file
-func (f *OPFSFile) openAccess() error {
-	// skip if already has access
-	if f.access.Truthy() { // basically "if f.access != nil"
-		return nil
-	}
-
-	var err error
-	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
-	f.access, err = await(f.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
-	return err
-}
-
-// Helper to close just the access handle
-func (f *OPFSFile) closeAccess() {
-	if f.access.Truthy() {
-		f.access.Call("flush")
-		f.access.Call("close")
-		f.access = js.Undefined()
-	}
 }
