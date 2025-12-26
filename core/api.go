@@ -40,12 +40,12 @@ type (
 	}
 
 	apiImpl struct {
-		eventTree          *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
-		events             map[int]*Event
-		repoPathFromFSRoot string
-		repo               *gogit.Repository
-		fs                 billy.Filesystem
-		proxyUrl           *url.URL
+		eventTree *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
+		events    map[int]*Event
+		repo      *gogit.Repository
+		repoPath  string
+		fs        billy.Filesystem
+		proxyUrl  *url.URL
 	}
 )
 
@@ -56,7 +56,7 @@ func NewApi() Api {
 	api.events = make(map[int]*Event)
 
 	var err error
-	api.fs, api.repoPathFromFSRoot, err = filesystem.GetRepoFS()
+	api.fs, api.repoPath, err = filesystem.GetRepoFS()
 	if err != nil {
 		panic(err)
 	}
@@ -90,14 +90,14 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		return fmt.Errorf("failed to marshal event to JSON: %w", err)
 	}
 
-	dirPath := filepath.Join(a.repoPathFromFSRoot, EventsDirName)
+	dirPath := filepath.Join(a.repoPath, EventsDirName)
 	err = a.fs.MkdirAll(dirPath, 0o755) // ensure the "events" folder exists
 	if err != nil {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
 	filename := fmt.Sprintf("%d.json", e.Id)
-	filePath := filepath.Join(a.repoPathFromFSRoot, EventsDirName, filename)
+	filePath := filepath.Join(a.repoPath, EventsDirName, filename)
 
 	// create a scope for the file operations
 	{
@@ -203,11 +203,11 @@ func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
 
 func (a *apiImpl) Initialize() error {
 	// a.fs is OPFS root
-	if err := a.fs.MkdirAll(a.repoPathFromFSRoot, 0o755); err != nil {
+	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
 
-	repoFS, err := a.fs.Chroot(a.repoPathFromFSRoot)
+	repoFS, err := a.fs.Chroot(a.repoPath)
 	if err != nil {
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
@@ -247,10 +247,10 @@ func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
 
 func (a *apiImpl) Clone(repoUrl string) error {
 	// make sure that the repo dir is created
-	if err := a.fs.MkdirAll(a.repoPathFromFSRoot, 0o755); err != nil {
+	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
-	repoFS, err := a.fs.Chroot(a.repoPathFromFSRoot)
+	repoFS, err := a.fs.Chroot(a.repoPath)
 	if err != nil {
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
@@ -286,7 +286,7 @@ func (a *apiImpl) Clone(repoUrl string) error {
 
 // helper function to setup the inital "events" folder
 func (a *apiImpl) setupInitialRepoStructure() error {
-	eventsDirPath := path.Join(a.repoPathFromFSRoot, EventsDirName)
+	eventsDirPath := path.Join(a.repoPath, EventsDirName)
 	err := a.fs.MkdirAll(eventsDirPath, 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)

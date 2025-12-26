@@ -34,8 +34,6 @@ type opfsInode struct {
 //	a/./b -> a/b
 //	./a/b -> a/b
 //	a/../a/b -> a/b
-//
-// TODO TESTS
 func normalizePath(p string) string {
 	p = filepath.Clean(p)
 	p = strings.TrimPrefix(p, "./")

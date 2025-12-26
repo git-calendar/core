@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/firu11/git-calendar-core/core"
+	"github.com/firu11/git-calendar-core/filesystem"
 )
 
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
@@ -36,7 +37,12 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to create an event: %v", err)
 	}
 
-	b, err := os.ReadFile(path.Join(core.EventsDirName, "1.json"))
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	b, err := os.ReadFile(path.Join(home, filesystem.RepoDirName, core.EventsDirName, "1.json"))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
 	}
