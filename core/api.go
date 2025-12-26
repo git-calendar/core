@@ -26,6 +26,7 @@ type (
 		Initialize() error
 		Clone(repoUrl string) error
 		// AddRemote()
+		// Delete()
 
 		AddEvent(eventJson string) error // TODO: check that it gets translated to a throwing exception for Kotlin/JS
 		UpdateEvent(eventJson string) error
@@ -93,7 +94,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 	filename := fmt.Sprintf("%d.json", e.Id)
 	filePath := filepath.Join(a.repoPathFromFSRoot, EventsDirName, filename)
 
-	// Create a scope for the file operations
+	// create a scope for the file operations
 	{
 		file, err := a.fs.Create(filePath)
 		if err != nil {
@@ -103,7 +104,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 			file.Close()
 			return fmt.Errorf("failed to write event file: %w", err)
 		}
-		// IMPORTANT: Close the file BEFORE git operations
+		// close the file BEFORE git operations
 		if err := file.Close(); err != nil {
 			return fmt.Errorf("failed to close event file: %w", err)
 		}
@@ -119,11 +120,13 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
+	// stage
 	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename)) // relative to git, not the fs root
 	if _, err := w.Add(gitPath); err != nil {
 		return fmt.Errorf("failed to stage event file: %w", err)
 	}
 
+	// commit
 	_, err = w.Commit(
 		fmt.Sprintf("CALENDAR: Added event '%s'", e.Title),
 		&git.CommitOptions{
@@ -135,6 +138,11 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		},
 	)
 	if err != nil {
+		if errors.Is(err, git.ErrEmptyCommit) {
+			// nothing has changed
+			return nil
+		}
+
 		// TODO idk
 		w.Remove(gitPath)
 		return fmt.Errorf("failed to commit event: %w", err)
