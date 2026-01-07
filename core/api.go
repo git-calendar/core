@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,8 +21,8 @@ import (
 type (
 	// The exposed API interface
 	//
-	// cannot expose channels, maps or some goofy types which do not have bindings to other languages
-	// As even an array does not work, Ive decided to use json everywhere instead of Event, even though you can return a *Event from a function. You cannot pass it as argument, return a array of events or anything else. Using json everywhere as a rest api would...
+	// Cannot expose channels, maps or some goofy types which do not have bindings to other languages...
+	// As even an array does not work, Ive decided to use json everywhere instead of Event, even though you can return a *Event from a function. You cannot pass it as argument, return a array of events or anything else. Let's use JSON everywhere as a REST API would...
 	Api interface {
 		Initialize() error
 		Clone(repoUrl string) error
@@ -32,13 +31,14 @@ type (
 
 		SetCorsProxy(proxyUrl string) error
 
-		AddEvent(eventJson string) error // TODO: check that it gets translated to a throwing exception for Kotlin/JS
+		AddEvent(eventJson string) error
 		UpdateEvent(eventJson string) error
 		RemoveEvent(eventJson string) error
 		GetEvent(id int) (string, error)
 		GetEvents(from int64, to int64) (string, error)
 	}
 
+	// Private implementation of Api
 	apiImpl struct {
 		eventTree *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
 		events    map[int]*Event
@@ -52,9 +52,11 @@ type (
 func NewApi() Api {
 	var api apiImpl
 
+	// alloc some vars
 	api.eventTree = interval.NewSearchTree[int](func(x, y int64) int { return int(x - y) })
 	api.events = make(map[int]*Event)
 
+	// get the fs, go tags handle which one (classic/wasm)
 	var err error
 	api.fs, api.repoPath, err = filesystem.GetRepoFS()
 	if err != nil {
@@ -65,6 +67,8 @@ func NewApi() Api {
 }
 
 func (a *apiImpl) AddEvent(eventJson string) error {
+	// TODO
+	// just a prototype:
 	var e Event
 	err := json.Unmarshal([]byte(eventJson), &e)
 	if err != nil {
@@ -157,48 +161,54 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 }
 
 func (a *apiImpl) UpdateEvent(eventJson string) error {
-	var e Event
-	err := json.Unmarshal([]byte(eventJson), &e)
-	if err != nil {
-		return fmt.Errorf("failed to parse event json: %w", err)
-	}
+	// TODO
 
-	if err := e.Validate(); err != nil {
-		return fmt.Errorf("invalid event data: %w", err)
-	}
+	// var e Event
+	// err := json.Unmarshal([]byte(eventJson), &e)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to parse event json: %w", err)
+	// }
 
-	// check if it exists
-	_, ok := a.events[e.Id]
-	if !ok {
-		return fmt.Errorf("event with this id doesnt exist")
-	}
+	// if err := e.Validate(); err != nil {
+	// 	return fmt.Errorf("invalid event data: %w", err)
+	// }
 
-	// replace the pointer
-	a.events[e.Id] = &e
+	// // check if it exists
+	// _, ok := a.events[e.Id]
+	// if !ok {
+	// 	return fmt.Errorf("event with this id doesnt exist")
+	// }
+
+	// // replace the pointer
+	// a.events[e.Id] = &e
 
 	return nil
 }
 
 func (a *apiImpl) RemoveEvent(eventJson string) error {
-	return nil // TODO
+	// TODO
+	return nil
 }
 
 func (a *apiImpl) GetEvent(id int) (string, error) {
-	e, ok := a.events[id]
-	if !ok {
-		return "", fmt.Errorf("event with this id doesnt exist")
-	}
+	// TODO
 
-	jsonBytes, err := json.Marshal(e)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal event: %w", err)
-	}
+	// e, ok := a.events[id]
+	// if !ok {
+	// 	return "", fmt.Errorf("event with this id doesnt exist")
+	// }
 
-	return string(jsonBytes), nil
+	// jsonBytes, err := json.Marshal(e)
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to marshal event: %w", err)
+	// }
+
+	return "", nil
 }
 
 func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
-	return "EVENTS", nil // TODO
+	// TODO
+	return "", nil
 }
 
 func (a *apiImpl) Initialize() error {
@@ -267,9 +277,14 @@ func (a *apiImpl) Clone(repoUrl string) error {
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 
 	// add proxy if specified (only needed for the browser)
+	// like so: http://cors-proxy.abc/?url=https://github.com/firu11/git-calendar-core
 	var finalRepoUrl string
 	if a.proxyUrl != nil {
-		finalRepoUrl = fmt.Sprintf("%s/%s", a.proxyUrl.String(), repoUrl)
+		final := *a.proxyUrl          // copy
+		q := final.Query()            // get parsed query (a copy)
+		q.Set("url", repoUrl)         // add the param
+		final.RawQuery = q.Encode()   // put it back
+		finalRepoUrl = final.String() // get the final string
 	} else {
 		finalRepoUrl = repoUrl
 	}
@@ -284,13 +299,15 @@ func (a *apiImpl) Clone(repoUrl string) error {
 	return err
 }
 
-// helper function to setup the inital "events" folder
+// helper function to setup the inital "events" folder etc.
 func (a *apiImpl) setupInitialRepoStructure() error {
-	eventsDirPath := path.Join(a.repoPath, EventsDirName)
-	err := a.fs.MkdirAll(eventsDirPath, 0o755)
-	if err != nil {
-		return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)
-	}
+	// TODO
+
+	// eventsDirPath := path.Join(a.repoPath, EventsDirName)
+	// err := a.fs.MkdirAll(eventsDirPath, 0o755)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)
+	// }
 
 	return nil
 }
