@@ -1,6 +1,14 @@
 # Git Calendar Cors Proxy
 ### for git-calendar-core to run in the browser.
 
+## Build and run
+```sh
+go run ./cors-proxy
+```
+```sh
+go build -o ./build/cors-proxy ./cors-proxy
+```
+
 ## Usage
 Normal HTTP request from the browser:
 ```js
