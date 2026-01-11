@@ -1,4 +1,7 @@
 # Git Calendar Core
+Related projects:
+- CORS proxy [git-calendar-cors-proxy](https://github.com/firu11/git-calendar-cors-proxy)
+- Web client [git-calendar-web](https://github.com/firu11/git-calendar-web)
 
 ### Building
 For Android and IOS bindings, make sure to install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile):
@@ -25,10 +28,10 @@ GOOS=js GOARCH=wasm go test -exec $(go env GOPATH)/bin/wasmbrowsertest ./...
 ```
 Or, if you don't wanna specify the `-exec`:
 1. Rename the exacutable so that `go test` finds it automatically:
-  ```sh
-  mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
-  ```
+```sh
+mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
+```
 2. And then run tests like you normally would:
-  ```sh
-  GOOS=js GOARCH=wasm go test ./...
-  ```
+```sh
+GOOS=js GOARCH=wasm go test ./...
+```
