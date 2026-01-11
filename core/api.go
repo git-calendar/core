@@ -28,7 +28,6 @@ type (
 		Clone(repoUrl string) error
 		// AddRemote()
 		// Delete()
-
 		SetCorsProxy(proxyUrl string) error
 
 		AddEvent(eventJson string) error
@@ -64,6 +63,94 @@ func NewApi() Api {
 	}
 
 	return &api
+}
+
+func (a *apiImpl) Initialize() error {
+	// a.fs is OPFS root
+	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
+		return fmt.Errorf("create repo dir: %w", err)
+	}
+
+	repoFS, err := a.fs.Chroot(a.repoPath)
+	if err != nil {
+		return fmt.Errorf("chroot repo dir: %w", err)
+	}
+
+	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
+		return fmt.Errorf("create .git: %w", err)
+	}
+
+	dotGitFS, err := repoFS.Chroot(".git")
+	if err != nil {
+		return fmt.Errorf("chroot .git: %w", err)
+	}
+
+	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
+
+	repo, err := gogit.Init(storage, repoFS)
+	if errors.Is(err, gogit.ErrRepositoryAlreadyExists) {
+		repo, err = gogit.Open(storage, repoFS)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	a.repo = repo
+
+	return a.setupInitialRepoStructure()
+}
+
+func (a *apiImpl) Clone(repoUrl string) error {
+	// make sure that the repo dir is created
+	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
+		return fmt.Errorf("create repo dir: %w", err)
+	}
+	repoFS, err := a.fs.Chroot(a.repoPath)
+	if err != nil {
+		return fmt.Errorf("chroot repo dir: %w", err)
+	}
+
+	// make sure that .git dir exists
+	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
+		return fmt.Errorf("create .git: %w", err)
+	}
+	dotGitFS, err := repoFS.Chroot(".git")
+	if err != nil {
+		return fmt.Errorf("chroot .git: %w", err)
+	}
+
+	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
+
+	// add proxy if specified (only needed for the browser)
+	// like so: http://cors-proxy.abc/?url=https://github.com/firu11/git-calendar-core
+	var finalRepoUrl string
+	if a.proxyUrl != nil {
+		final := *a.proxyUrl          // copy
+		q := final.Query()            // get parsed query (a copy)
+		q.Set("url", repoUrl)         // add the param
+		final.RawQuery = q.Encode()   // put it back
+		finalRepoUrl = final.String() // get the final string
+	} else {
+		finalRepoUrl = repoUrl
+	}
+	a.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+		RemoteName: "github",
+		URL:        finalRepoUrl,
+	})
+	if err != nil {
+		return fmt.Errorf("clone repo: %w", err)
+	}
+
+	return err
+}
+
+func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
+	var err error
+	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
+	a.proxyUrl, err = url.Parse(trimmed)
+	return err
 }
 
 func (a *apiImpl) AddEvent(eventJson string) error {
@@ -209,94 +296,6 @@ func (a *apiImpl) GetEvent(id int) (string, error) {
 func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
 	// TODO
 	return "", nil
-}
-
-func (a *apiImpl) Initialize() error {
-	// a.fs is OPFS root
-	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
-		return fmt.Errorf("create repo dir: %w", err)
-	}
-
-	repoFS, err := a.fs.Chroot(a.repoPath)
-	if err != nil {
-		return fmt.Errorf("chroot repo dir: %w", err)
-	}
-
-	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
-		return fmt.Errorf("create .git: %w", err)
-	}
-
-	dotGitFS, err := repoFS.Chroot(".git")
-	if err != nil {
-		return fmt.Errorf("chroot .git: %w", err)
-	}
-
-	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
-
-	repo, err := gogit.Init(storage, repoFS)
-	if errors.Is(err, gogit.ErrRepositoryAlreadyExists) {
-		repo, err = gogit.Open(storage, repoFS)
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-
-	a.repo = repo
-
-	return a.setupInitialRepoStructure()
-}
-
-func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
-	var err error
-	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
-	a.proxyUrl, err = url.Parse(trimmed)
-	return err
-}
-
-func (a *apiImpl) Clone(repoUrl string) error {
-	// make sure that the repo dir is created
-	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
-		return fmt.Errorf("create repo dir: %w", err)
-	}
-	repoFS, err := a.fs.Chroot(a.repoPath)
-	if err != nil {
-		return fmt.Errorf("chroot repo dir: %w", err)
-	}
-
-	// make sure that .git dir exists
-	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
-		return fmt.Errorf("create .git: %w", err)
-	}
-	dotGitFS, err := repoFS.Chroot(".git")
-	if err != nil {
-		return fmt.Errorf("chroot .git: %w", err)
-	}
-
-	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
-
-	// add proxy if specified (only needed for the browser)
-	// like so: http://cors-proxy.abc/?url=https://github.com/firu11/git-calendar-core
-	var finalRepoUrl string
-	if a.proxyUrl != nil {
-		final := *a.proxyUrl          // copy
-		q := final.Query()            // get parsed query (a copy)
-		q.Set("url", repoUrl)         // add the param
-		final.RawQuery = q.Encode()   // put it back
-		finalRepoUrl = final.String() // get the final string
-	} else {
-		finalRepoUrl = repoUrl
-	}
-	a.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
-		RemoteName: "github",
-		URL:        finalRepoUrl,
-	})
-	if err != nil {
-		return fmt.Errorf("clone repo: %w", err)
-	}
-
-	return err
 }
 
 // helper function to setup the inital "events" folder etc.
