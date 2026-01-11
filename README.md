@@ -1,7 +1,7 @@
 # Git Calendar Core
 Related projects:
-- CORS proxy [git-calendar-cors-proxy](https://github.com/firu11/git-calendar-cors-proxy)
-- Web client [git-calendar-web](https://github.com/firu11/git-calendar-web)
+- [CORS proxy](./cors-proxy)
+- Web client: [git-calendar-web](https://github.com/firu11/git-calendar-web)
 
 ### Building
 For Android and IOS bindings, make sure to install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile):
