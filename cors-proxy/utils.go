@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -73,4 +74,29 @@ func removeHopByHopHeaders(h http.Header) {
 	for name := range hopByHopHeaders {
 		h.Del(name)
 	}
+}
+
+// ------------------- config -------------------
+
+// External library? https://github.com/caarlos0/env
+// Overkill!
+type config struct {
+	Host       string
+	Port       string
+	Production bool
+}
+
+func loadConfig() *config {
+	var cfg config
+
+	prodEnv := os.Getenv("PRODUCTION")
+	cfg.Production = prodEnv == "true" || prodEnv == "1" || prodEnv == "True" || prodEnv == "TRUE"
+
+	cfg.Host = os.Getenv("HOST")
+	cfg.Port = os.Getenv("PORT")
+	if cfg.Port == "" {
+		cfg.Port = "8000"
+	}
+
+	return &cfg
 }

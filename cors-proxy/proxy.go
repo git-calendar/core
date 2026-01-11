@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,30 +11,38 @@ import (
 )
 
 func main() {
-	prod := os.Getenv("PRODUCTION") == "true" // TODO better config
+	// load config
+	cfg := loadConfig()
+
+	// setup logger
 	var logger *slog.Logger
-	if prod {
-		// JSON logging
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true}))
+	if cfg.Production {
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true})) // JSON logging
 	} else {
-		// basic logging
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // basic logging
 	}
 	slog.SetDefault(logger)
 
+	// create a http server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", proxyHandler)
 
 	s := &http.Server{
-		Addr:           ":8000",
+		Addr:           fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
 		Handler:        accessLog(mux),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	slog.Info("Cors Proxy is running on " + s.Addr)
-	log.Fatal(s.ListenAndServe())
+	// run the proxy
+	slog.Info("running on " + s.Addr)
+
+	err := s.ListenAndServe()
+	if err != nil {
+		slog.Error(err.Error())
+		panic(err)
+	}
 }
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
