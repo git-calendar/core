@@ -12,6 +12,8 @@ import (
 	"github.com/firu11/git-calendar-core/filesystem"
 )
 
+// It is kinda e2e, but not entirely. TODO rethink this.
+
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	a := core.NewApi()
 
@@ -23,16 +25,11 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	eventIn := core.Event{
 		Id:    1,
 		Title: "Foo Event",
-		From:  time.Now().Unix() / 1000,
-		To:    time.Now().Add(2*time.Hour).Unix() / 1000,
+		From:  uint32(time.Now().Unix() / 1000),
+		To:    uint32(time.Now().Add(2*time.Hour).Unix() / 1000),
 	}
 
-	eventInJson, err := json.Marshal(eventIn)
-	if err != nil {
-		t.Errorf("failed to marshal event: %v", err)
-	}
-
-	err = a.AddEvent(string(eventInJson))
+	err = a.AddEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
@@ -75,29 +72,18 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 	eventIn := core.Event{
 		Id:    1,
 		Title: "Foo Event",
-		From:  time.Now().Unix() / 1000,
-		To:    time.Now().Add(2*time.Hour).Unix() / 1000,
+		From:  uint32(time.Now().Unix() / 1000),                  // right now
+		To:    uint32(time.Now().Add(2*time.Hour).Unix() / 1000), // two hours from now
 	}
 
-	eventInJson, err := json.Marshal(eventIn)
-	if err != nil {
-		t.Errorf("failed to marshal event: %v", err)
-	}
-
-	err = a.AddEvent(string(eventInJson))
+	err = a.AddEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
 
-	e, err := a.GetEvent(1)
+	eventOut, err := a.GetEvent(1)
 	if err != nil {
 		t.Errorf("failed to get an event by id: %v", err)
-	}
-
-	var eventOut core.Event
-	err = json.Unmarshal([]byte(e), &eventOut)
-	if err != nil {
-		t.Errorf("failed to unmarshal event: %v", err)
 	}
 
 	if !reflect.DeepEqual(eventIn, eventOut) {
