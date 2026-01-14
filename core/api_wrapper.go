@@ -108,7 +108,7 @@ func (a *jsonApiImpl) GetEvents(from int64, to int64) (string, error) {
 	return string(jsonBytes), nil
 }
 
-// ------------------------------ HELPERS ------------------------------
+// ------------------------------ helpers ------------------------------
 
 func parseAndValidateEventHelper(eventJson string) (Event, error) {
 	// unmarshal to struct

@@ -25,7 +25,7 @@
 
 Workflow:
 1. pull changes to disk (FileSystem) (should work all right with this approach)
-2. decrypts data (using a key stored somewhere) to a separate folder on disk
-3. makes changes
-4. encrypts repository
-5. pushes to remote
+2. decrypt data (using a key stored somewhere) to a separate folder on disk
+3. make changes
+4. encrypt repository
+5. push to remote
