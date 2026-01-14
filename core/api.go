@@ -19,10 +19,9 @@ import (
 )
 
 type (
-	// The exposed API interface
+	// The real API.
 	//
-	// Cannot expose channels, maps or some goofy types which do not have bindings to other languages...
-	// As even an array does not work, Ive decided to use json everywhere instead of Event, even though you can return a *Event from a function. You cannot pass it as argument, return a array of events or anything else. Let's use JSON everywhere as a REST API would...
+	// Works with raw Go structs, use JsonApi to work with json.
 	Api interface {
 		Initialize() error
 		Clone(repoUrl string) error
@@ -30,16 +29,16 @@ type (
 		// Delete()
 		SetCorsProxy(proxyUrl string) error
 
-		AddEvent(eventJson string) error
-		UpdateEvent(eventJson string) error
-		RemoveEvent(eventJson string) error
-		GetEvent(id int) (string, error)
-		GetEvents(from int64, to int64) (string, error)
+		AddEvent(event Event) error
+		UpdateEvent(event Event) error
+		RemoveEvent(event Event) error
+		GetEvent(id int) (Event, error)
+		GetEvents(from int64, to int64) ([]Event, error)
 	}
 
-	// Private implementation of Api
+	// Private implementation of api.
 	apiImpl struct {
-		eventTree *interval.SearchTree[int, int64] // int: id; int64: timestamp end and start
+		eventTree *interval.SearchTree[int, uint32] // int: id; int64: timestamp end and start
 		events    map[int]*Event
 		repo      *gogit.Repository
 		repoPath  string
@@ -52,10 +51,10 @@ func NewApi() Api {
 	var api apiImpl
 
 	// alloc some vars
-	api.eventTree = interval.NewSearchTree[int](func(x, y int64) int { return int(x - y) })
+	api.eventTree = interval.NewSearchTree[int](func(x, y uint32) int { return int(x - y) })
 	api.events = make(map[int]*Event)
 
-	// get the fs, go tags handle which one (classic/wasm)
+	// get the fs; go tags handle which one (classic/wasm)
 	var err error
 	api.fs, api.repoPath, err = filesystem.GetRepoFS()
 	if err != nil {
@@ -153,30 +152,21 @@ func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
-func (a *apiImpl) AddEvent(eventJson string) error {
+func (a *apiImpl) AddEvent(event Event) error {
 	// TODO
 	// just a prototype:
-	var e Event
-	err := json.Unmarshal([]byte(eventJson), &e)
-	if err != nil {
-		return fmt.Errorf("failed to parse event data: %w", err)
-	}
-
-	if err := e.Validate(); err != nil {
-		return fmt.Errorf("invalid event data: %w", err)
-	}
 
 	// add to all events
-	a.events[e.Id] = &e
+	a.events[event.Id] = &event
 
 	// -------- insert into tree --------
-	err = a.eventTree.Insert(e.From, e.To, e.Id)
+	err := a.eventTree.Insert(event.From, event.To, event.Id)
 	if err != nil {
 		return fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
 	// -------- create json file --------
-	data, err := json.MarshalIndent(e, "", "  ")
+	data, err := json.MarshalIndent(event, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal event to JSON: %w", err)
 	}
@@ -187,7 +177,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("%d.json", e.Id)
+	filename := fmt.Sprintf("%d.json", event.Id)
 	filePath := filepath.Join(a.repoPath, EventsDirName, filename)
 
 	// create a scope for the file operations
@@ -224,7 +214,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 
 	// commit
 	_, err = w.Commit(
-		fmt.Sprintf("CALENDAR: Added event '%s'", e.Title),
+		fmt.Sprintf("CALENDAR: Added event '%s'", event.Title),
 		&gogit.CommitOptions{
 			Author: &object.Signature{
 				Name:  "git-calendar",
@@ -247,7 +237,7 @@ func (a *apiImpl) AddEvent(eventJson string) error {
 	return err
 }
 
-func (a *apiImpl) UpdateEvent(eventJson string) error {
+func (a *apiImpl) UpdateEvent(event Event) error {
 	// TODO
 
 	// var e Event
@@ -272,30 +262,25 @@ func (a *apiImpl) UpdateEvent(eventJson string) error {
 	return nil
 }
 
-func (a *apiImpl) RemoveEvent(eventJson string) error {
+func (a *apiImpl) RemoveEvent(event Event) error {
 	// TODO
 	return nil
 }
 
-func (a *apiImpl) GetEvent(id int) (string, error) {
+func (a *apiImpl) GetEvent(id int) (Event, error) {
 	// TODO
 
-	// e, ok := a.events[id]
-	// if !ok {
-	// 	return "", fmt.Errorf("event with this id doesnt exist")
-	// }
+	e, ok := a.events[id]
+	if !ok {
+		return Event{}, fmt.Errorf("event with this id doesnt exist")
+	}
 
-	// jsonBytes, err := json.Marshal(e)
-	// if err != nil {
-	// 	return "", fmt.Errorf("failed to marshal event: %w", err)
-	// }
-
-	return "", nil
+	return *e, nil
 }
 
-func (a *apiImpl) GetEvents(from int64, to int64) (string, error) {
+func (a *apiImpl) GetEvents(from int64, to int64) ([]Event, error) {
 	// TODO
-	return "", nil
+	return []Event{}, nil
 }
 
 // helper function to setup the inital "events" folder etc.

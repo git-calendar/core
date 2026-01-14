@@ -9,14 +9,14 @@ import (
 )
 
 func main() {
-	api := core.NewApi()
+	jsonApi := core.NewJsonApi()
 
-	RegisterCallbacks(api)
+	RegisterCallbacks(jsonApi)
 
 	select {} // block infinitely
 }
 
-func RegisterCallbacks(api core.Api) {
+func RegisterCallbacks(api core.JsonApi) {
 	// we wrap each method
 	js.Global().Set("CalendarCore", js.ValueOf(map[string]any{
 		"initialize": js.FuncOf(func(this js.Value, args []js.Value) any {
