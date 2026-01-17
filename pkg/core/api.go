@@ -11,7 +11,9 @@ import (
 
 	"github.com/firu11/git-calendar-core/pkg/filesystem"
 	"github.com/go-git/go-billy/v5"
+	gogitutil "github.com/go-git/go-billy/v5/util"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
@@ -25,8 +27,8 @@ type (
 	Api interface {
 		Initialize() error
 		Clone(repoUrl string) error
-		// AddRemote()
-		// Delete()
+		AddRemote(name string, remoteUrl string) error
+		Delete() error
 		SetCorsProxy(proxyUrl string) error
 
 		AddEvent(event Event) error
@@ -42,7 +44,7 @@ type (
 		events    map[int]*Event
 		repo      *gogit.Repository
 		repoPath  string
-		fs        billy.Filesystem
+		fs        billy.Filesystem // "/" for OPFS, "$HOME" for classic FS
 		proxyUrl  *url.URL
 	}
 )
@@ -66,7 +68,10 @@ func NewApi() Api {
 }
 
 func (a *apiImpl) Initialize() error {
-	// a.fs is OPFS root
+	if a.repo != nil {
+		return nil // already initialized
+	}
+
 	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
@@ -77,12 +82,12 @@ func (a *apiImpl) Initialize() error {
 	}
 
 	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
-		return fmt.Errorf("create .git: %w", err)
+		return fmt.Errorf("create .git dir: %w", err)
 	}
 
 	dotGitFS, err := repoFS.Chroot(".git")
 	if err != nil {
-		return fmt.Errorf("chroot .git: %w", err)
+		return fmt.Errorf("chroot .git dir: %w", err)
 	}
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
@@ -144,6 +149,41 @@ func (a *apiImpl) Clone(repoUrl string) error {
 	}
 
 	return err
+}
+
+func (a *apiImpl) AddRemote(name string, remoteUrl string) error {
+	var validUrl string
+	{
+		// validate URL (git doesnt do that when adding a remote, it fails afterwards with e.g. git fetch)
+		u := strings.TrimSuffix(remoteUrl, "/") // remove trailing "/"
+		if !strings.HasSuffix(u, ".git") {
+			return errors.New("remote url doesn't end with '.git'")
+		}
+		parsedUrl, err := url.Parse(u)
+		if err != nil {
+			return fmt.Errorf("cannot parse remote url: %w", err)
+		}
+		validUrl = parsedUrl.String()
+	}
+
+	_, err := a.repo.CreateRemote(&config.RemoteConfig{
+		Name: name,
+		URLs: []string{validUrl},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create a remote: %w", err)
+	}
+
+	return nil
+}
+
+func (a *apiImpl) Delete() error {
+	a.repo = nil
+	err := gogitutil.RemoveAll(a.fs, a.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to remove repo directory: %w", err)
+	}
+	return nil
 }
 
 func (a *apiImpl) SetCorsProxy(proxyUrl string) error {

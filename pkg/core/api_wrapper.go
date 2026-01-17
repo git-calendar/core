@@ -16,8 +16,8 @@ type (
 	JsonApi interface {
 		Initialize() error
 		Clone(repoUrl string) error
-		// AddRemote()
-		// Delete()
+		AddRemote(name string, remoteUrl string) error
+		Delete() error
 		SetCorsProxy(proxyUrl string) error
 
 		AddEvent(eventJson string) error
@@ -46,6 +46,14 @@ func (a *jsonApiImpl) Initialize() error {
 
 func (a *jsonApiImpl) Clone(repoUrl string) error {
 	return a.inner.Clone(repoUrl)
+}
+
+func (a *jsonApiImpl) AddRemote(name string, remoteUrl string) error {
+	return a.inner.AddRemote(name, remoteUrl)
+}
+
+func (a *jsonApiImpl) Delete() error {
+	return a.inner.Delete()
 }
 
 func (a *jsonApiImpl) SetCorsProxy(proxyUrl string) error {
