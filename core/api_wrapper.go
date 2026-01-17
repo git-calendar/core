@@ -28,10 +28,12 @@ type (
 	}
 
 	jsonApiImpl struct {
+		// might be better to embed the apiImpl here, for the non-json methods to get picked up and we wouldnt need to write explicit wrappers for them
 		inner Api
 	}
 )
 
+// A "constructor" for JsonApi.
 func NewJsonApi() JsonApi {
 	return &jsonApiImpl{
 		inner: NewApi(),

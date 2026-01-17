@@ -47,6 +47,7 @@ type (
 	}
 )
 
+// A "constructor" for Api.
 func NewApi() Api {
 	var api apiImpl
 
