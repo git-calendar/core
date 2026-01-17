@@ -12,7 +12,7 @@ type (
 	//
 	// Let's use JSON everywhere as a REST API would... (or protobuf?)
 	//
-	// * You can return a *Event (pointer to struct), but you cannot recieve it as argument.
+	// * You can return a *Event (pointer to struct), but you cannot receive it as argument.
 	JsonApi interface {
 		Initialize() error
 		Clone(repoUrl string) error

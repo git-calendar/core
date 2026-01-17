@@ -283,7 +283,7 @@ func (a *apiImpl) GetEvents(from int64, to int64) ([]Event, error) {
 	return []Event{}, nil
 }
 
-// helper function to setup the inital "events" folder etc.
+// helper function to setup the initial "events" folder etc.
 func (a *apiImpl) setupInitialRepoStructure() error {
 	// TODO
 
