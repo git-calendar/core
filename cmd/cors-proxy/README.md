@@ -3,10 +3,18 @@
 
 ## Build and run
 ```sh
-go run ./cors-proxy
+go run ./cmd/cors-proxy
 ```
 ```sh
-go build -o ./build/cors-proxy ./cors-proxy
+go build -o ./build/cors-proxy ./cmd/cors-proxy
+```
+
+### Enviroment variables (optional; those values are default)
+```sh
+CORS_PROXY_HOST=0.0.0.0
+CORS_PROXY_PORT=8000
+CORS_PROXY_PRODUCTION=false
+CORS_PROXY_UPSTREAM_TIMEOUT=15s
 ```
 
 ## Usage

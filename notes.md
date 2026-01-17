@@ -1,3 +1,12 @@
+### Repo Structure (prototype)
+```
+.git-calendar-data
+├── events
+│   └── <UUID>.json
+├── index.jsonl
+└── index-rich.jsonl
+```
+
 ### Encryption
 - Why?
 > to hide data when using a public GitHub/GitLab/Gitea/Codeberg instance as a git remote

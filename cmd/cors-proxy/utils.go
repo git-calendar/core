@@ -2,32 +2,47 @@ package main
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 )
 
+// a transport used for destination requests
+var roundTripper http.RoundTripper = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       60 * time.Second,
+	TLSHandshakeTimeout:   5 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+	ResponseHeaderTimeout: 10 * time.Second,
+}
+
 // ------------------- middleware -------------------
 
 func accessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		ww := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(ww, r)
-		duration := time.Since(start)
+		start := time.Now() // start timer
+
+		ww := &responseWriter{ResponseWriter: w, status: http.StatusOK} // wrap the writer into our custom one
+		next.ServeHTTP(ww, r)                                           // execute handler
+
+		duration := time.Since(start) // stop timer
 
 		slog.Info("access",
 			"method", r.Method,
-			// "path", r.URL.Path,
-			// "query", r.URL.RawQuery,
-			// "remote", r.RemoteAddr,
 			"status", ww.status,
 			"duration", duration,
 		)
 	})
 }
 
+// a http.ResponseWriter wrapper, which catches the status code for logging
 type responseWriter struct {
 	http.ResponseWriter
 	status int
@@ -79,23 +94,34 @@ func removeHopByHopHeaders(h http.Header) {
 // ------------------- config -------------------
 
 // External library? https://github.com/caarlos0/env
-// Overkill!
+// Overkill! (for now)
+
+const prefix = "CORS_PROXY_"
+
 type config struct {
-	Host       string
-	Port       string
-	Production bool
+	Host            string
+	Port            string
+	Production      bool
+	UpstreamTimeout time.Duration
 }
 
 func loadConfig() *config {
 	var cfg config
 
-	prodEnv := os.Getenv("PRODUCTION")
+	prodEnv := os.Getenv(prefix + "PRODUCTION")
 	cfg.Production = prodEnv == "true" || prodEnv == "1" || prodEnv == "True" || prodEnv == "TRUE"
 
-	cfg.Host = os.Getenv("HOST")
-	cfg.Port = os.Getenv("PORT")
+	cfg.Host = os.Getenv(prefix + "HOST") // empty is the same as 0.0.0.0
+	cfg.Port = os.Getenv(prefix + "PORT")
 	if cfg.Port == "" {
 		cfg.Port = "8000"
+	}
+
+	duration, err := time.ParseDuration(os.Getenv(prefix + "UPSTREAM_TIMEOUT"))
+	if err != nil {
+		cfg.UpstreamTimeout = 15 * time.Second
+	} else {
+		cfg.UpstreamTimeout = duration
 	}
 
 	return &cfg

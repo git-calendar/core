@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,9 +11,11 @@ import (
 	"time"
 )
 
+var cfg *config
+
 func main() {
 	// load config
-	cfg := loadConfig()
+	cfg = loadConfig()
 
 	// setup logger
 	var logger *slog.Logger
@@ -31,15 +34,14 @@ func main() {
 		Addr:           fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
 		Handler:        accessLog(mux),
 		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		WriteTimeout:   15 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
 	// run the proxy
 	slog.Info("running on " + s.Addr)
 
-	err := s.ListenAndServe()
-	if err != nil {
+	if err := s.ListenAndServe(); err != nil {
 		slog.Error(err.Error())
 		panic(err)
 	}
@@ -51,8 +53,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 
-	if r.Method == http.MethodOptions {
-		// this prevents the 405 from e.g. GitHub
+	if r.Method == http.MethodOptions { // this prevents the 405 from e.g. GitHub
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -60,48 +61,46 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// get the destination url from query
 	destUrlQuery := r.URL.Query().Get("url")
 	if destUrlQuery == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "'url' query param is missing\n")
+		http.Error(w, "'url' query param is missing", http.StatusBadRequest)
 		return
 	}
 	destUrl, err := url.ParseRequestURI(destUrlQuery)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "'url' query param is invalid\n")
+		http.Error(w, "'url' query param is invalid", http.StatusBadRequest)
 		return
 	}
 
 	// prepare the request to destination
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, destUrl.String(), r.Body)
+	req, err := http.NewRequest(r.Method, destUrl.String(), r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "failed to create outbound request", http.StatusInternalServerError)
 		slog.Error(err.Error())
 		return
 	}
 	copyHeaders(r.Header, req.Header)
 	removeHopByHopHeaders(req.Header)
 
+	// add context with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), cfg.UpstreamTimeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+
 	// send the actual request
-	resp, err := http.DefaultTransport.RoundTrip(req)
+	resp, err := roundTripper.RoundTrip(req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		fmt.Fprintf(w, "no such host\n")
+		http.Error(w, fmt.Sprintf("upstream request failed with: %v", err), http.StatusBadGateway)
 		slog.Error(err.Error())
 		return
 	}
+	defer resp.Body.Close()
 
-	// forward the headers and body back to client
+	// forward the headers back to client
 	removeHopByHopHeaders(resp.Header)
 	copyHeaders(resp.Header, w.Header())
 	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		slog.Error(err.Error())
-		return
-	}
-	err = resp.Body.Close()
-	if err != nil {
+	// forward response body back to client
+	if _, err = io.Copy(w, resp.Body); err != nil {
 		slog.Error(err.Error())
 		return
 	}
