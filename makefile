@@ -1,41 +1,43 @@
 BUILD_DIR := ./build
 
+.PHONY: all build_android build_ios build_web prod production_build_android production_build_web create_build_dir clean
+
 # -------------------------------------------------------------------------------------------
-# regular builds
+# Regular builds
 # -------------------------------------------------------------------------------------------
 
 all: build_android build_ios build_web
 
 build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./core
+	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./pkg/core
 
 # requires Xcode installed (mac only)
 build_ios: create_build_dir
- 	gomobile bind -target=ios ./core # TODO
+ 	gomobile bind -target=ios ./pkg/core # TODO
 
 build_web: create_build_dir
-	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm .              # build the wasm
+	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm     # build the wasm
 	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js  # copy wasm_exec.js "glue"
 
 
 
 # -------------------------------------------------------------------------------------------
-# production builds (ldflags make the binary smaller)
+# Production builds (ldflags make the binary smaller)
 # -------------------------------------------------------------------------------------------
 
 prod: production_build_android production_build_web
 
 production_build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./core
+	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./pkg/core
 
 production_build_web: create_build_dir
-	GOOS=js GOARCH=wasm go build -ldflags "-w -s" -o ${BUILD_DIR}/web/core.wasm .  # build the wasm
-	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js       # copy wasm_exec.js "glue"
+	GOOS=js GOARCH=wasm go build -ldflags="-w -s" -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm  # build the wasm
+	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js                # copy wasm_exec.js "glue"
 
 
 
 # -------------------------------------------------------------------------------------------
-# other
+# Other
 # -------------------------------------------------------------------------------------------
 
 create_build_dir:
@@ -46,3 +48,12 @@ create_build_dir:
 clean:
 	rm -rf ${BUILD_DIR}
 	gomobile clean
+
+help:
+	@echo "Available targets:"
+	@echo "  all               - build Android + iOS + Web"
+	@echo "  build_android     - Android AAR"
+	@echo "  build_ios         - iOS XCFramework (works on MacOS only)"
+	@echo "  build_web         - WASM module + wasm_exec.js"
+	@echo "  prod              - production (stripped) builds"
+	@echo "  clean             - remove build artifacts"

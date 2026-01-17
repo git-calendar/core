@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/firu11/git-calendar-core/core"
-	"github.com/firu11/git-calendar-core/filesystem"
+	"github.com/firu11/git-calendar-core/pkg/core"
+	"github.com/firu11/git-calendar-core/pkg/filesystem"
 )
 
 // It is kinda e2e, but not entirely. TODO rethink this.

@@ -5,7 +5,7 @@ package main
 import (
 	"syscall/js"
 
-	"github.com/firu11/git-calendar-core/core"
+	"github.com/firu11/git-calendar-core/pkg/core"
 )
 
 // This is the starting point which gets called from JS.

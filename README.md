@@ -3,7 +3,7 @@
 
 
 Related projects:
-- [CORS proxy](./cors-proxy)
+- [CORS proxy](./cmd/cors-proxy)
 - Web client: [git-calendar-web](https://github.com/firu11/git-calendar-web)
 
 ### Building
