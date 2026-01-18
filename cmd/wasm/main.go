@@ -25,6 +25,21 @@ func RegisterCallbacks(api core.JsonApi) {
 					return nil, api.Initialize()
 				})
 			}),
+			"clone": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.Clone(args[0].String())
+				})
+			}),
+			"delete": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.Delete()
+				})
+			}),
+			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.SetCorsProxy(args[0].String())
+				})
+			}),
 			"addEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.AddEvent(args[0].String())
@@ -38,16 +53,6 @@ func RegisterCallbacks(api core.JsonApi) {
 			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return api.GetEvents(int64(args[0].Int()), int64(args[1].Int()))
-				})
-			}),
-			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.SetCorsProxy(args[0].String())
-				})
-			}),
-			"clone": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.Clone(args[0].String())
 				})
 			}),
 			// TODO others
