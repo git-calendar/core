@@ -1,3 +1,27 @@
+### TODO
+- [ ] core funtionality
+  - [ ] storage format
+  - [ ] indexing
+    - interval-btree?
+- [ ] iCalendar compatibility
+  - [ ] import (periodical & one-time)
+  - [ ] export
+    - to a file
+    - idk about url
+      - github-pages? (cant be encrypted ig)
+      - custom http file server?
+- [ ] encryption
+  - [ ] storing a key (in opfs?)
+  - values-only
+  - deterministic? (same input <=> same output)
+    - +good git diffs
+    - -patterns across files can be found
+- [ ] local notifications (managed by client)
+  - core has some method like "fetch" for polling (15/30 min interval)
+  - -push notifications (almost instant) need a backend
+
+---
+
 ### Repo Structure (prototype)
 ```
 .git-calendar-data
@@ -22,7 +46,7 @@
     "from": "2011-10-05T14:48:00.000Z",
     ...
   }
-            |         - something like AES (GCM mode) or XChaCha20 encryption
+            |         - something like AES-SIV or XChaCha20 encryption
             v         - base64 representation
   {
     "title": "/sNrzDJP/K1mmAI6LkBOk3Rv4+JeQQ==",

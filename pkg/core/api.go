@@ -31,6 +31,15 @@ type (
 		Delete() error
 		SetCorsProxy(proxyUrl string) error
 
+		// TODO
+		// SetEncryptionKey(key string)
+		// EnableEncryption()
+		//
+		// Update(remoteName string)
+		//  fetch
+		//  pull
+		// push(remoteName string)
+
 		AddEvent(event Event) error
 		UpdateEvent(event Event) error
 		RemoveEvent(event Event) error
