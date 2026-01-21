@@ -17,40 +17,46 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/google/uuid"
 	"github.com/rdleal/intervalst/interval"
 )
+
+// Methods which do not need a JSON translation and therefore they can be shared.
+type BaseApi interface {
+	Initialize() error
+	Clone(repoUrl string) error
+	AddRemote(name, remoteUrl string) error
+	Delete() error
+	SetCorsProxy(proxyUrl string) error
+
+	// TODO
+	// SetEncryptionKey(key string)
+	// EnableEncryption()
+	//
+	// Update(remoteName string)
+	//  fetch
+	//  pull
+	// push(remoteName string)
+}
 
 type (
 	// The real API.
 	//
-	// Works with raw Go structs, use JsonApi to work with json.
-	Api interface {
-		Initialize() error
-		Clone(repoUrl string) error
-		AddRemote(name string, remoteUrl string) error
-		Delete() error
-		SetCorsProxy(proxyUrl string) error
-
-		// TODO
-		// SetEncryptionKey(key string)
-		// EnableEncryption()
-		//
-		// Update(remoteName string)
-		//  fetch
-		//  pull
-		// push(remoteName string)
+	// Works with raw Go structs, use wrapper.Api to work with JSON.
+	CoreApi interface {
+		BaseApi // embed all shared methods
 
 		AddEvent(event Event) error
 		UpdateEvent(event Event) error
 		RemoveEvent(event Event) error
-		GetEvent(id int) (Event, error)
-		GetEvents(from int64, to int64) ([]Event, error)
+		GetEvent(id uuid.UUID) (Event, error)
+		GetEvents(from, to time.Time) ([]Event, error)
 	}
 
-	// Private implementation of api.
-	apiImpl struct {
-		eventTree *interval.SearchTree[int, uint32] // int: id; int64: timestamp end and start
-		events    map[int]*Event
+	// Private implementation of CoreApi.
+	coreApiImpl struct {
+		eventTree *interval.SearchTree[uuid.UUID, time.Time]
+		events    map[uuid.UUID]*Event
 		repo      *gogit.Repository
 		repoPath  string
 		fs        billy.Filesystem // "/" for OPFS, "$HOME" for classic FS
@@ -59,12 +65,12 @@ type (
 )
 
 // A "constructor" for Api.
-func NewApi() Api {
-	var api apiImpl
+func NewCoreApi() CoreApi {
+	var api coreApiImpl
 
 	// alloc some vars
-	api.eventTree = interval.NewSearchTree[int](func(x, y uint32) int { return int(x - y) })
-	api.events = make(map[int]*Event)
+	api.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
+	api.events = make(map[uuid.UUID]*Event)
 
 	// get the fs; go tags handle which one (classic/wasm)
 	var err error
@@ -76,7 +82,7 @@ func NewApi() Api {
 	return &api
 }
 
-func (a *apiImpl) Initialize() error {
+func (a *coreApiImpl) Initialize() error {
 	if a.repo != nil {
 		return nil // already initialized
 	}
@@ -116,7 +122,7 @@ func (a *apiImpl) Initialize() error {
 	return a.setupInitialRepoStructure()
 }
 
-func (a *apiImpl) Clone(repoUrl string) error {
+func (a *coreApiImpl) Clone(repoUrl string) error {
 	// make sure that the repo dir is created
 	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
@@ -160,7 +166,7 @@ func (a *apiImpl) Clone(repoUrl string) error {
 	return err
 }
 
-func (a *apiImpl) AddRemote(name string, remoteUrl string) error {
+func (a *coreApiImpl) AddRemote(name, remoteUrl string) error {
 	var validUrl string
 	{
 		// validate URL (git doesnt do that when adding a remote, it fails afterwards with e.g. git fetch)
@@ -186,7 +192,7 @@ func (a *apiImpl) AddRemote(name string, remoteUrl string) error {
 	return nil
 }
 
-func (a *apiImpl) Delete() error {
+func (a *coreApiImpl) Delete() error {
 	a.repo = nil
 	err := gogitutil.RemoveAll(a.fs, a.repoPath)
 	if err != nil {
@@ -195,14 +201,14 @@ func (a *apiImpl) Delete() error {
 	return nil
 }
 
-func (a *apiImpl) SetCorsProxy(proxyUrl string) error {
+func (a *coreApiImpl) SetCorsProxy(proxyUrl string) error {
 	var err error
 	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
 	a.proxyUrl, err = url.Parse(trimmed)
 	return err
 }
 
-func (a *apiImpl) AddEvent(event Event) error {
+func (a *coreApiImpl) AddEvent(event Event) error {
 	// TODO
 	// just a prototype:
 
@@ -227,7 +233,7 @@ func (a *apiImpl) AddEvent(event Event) error {
 		return fmt.Errorf("failed to create events directory: %w", err)
 	}
 
-	filename := fmt.Sprintf("%d.json", event.Id)
+	filename := fmt.Sprintf("%s.json", event.Id)
 	filePath := filepath.Join(a.repoPath, EventsDirName, filename)
 
 	// create a scope for the file operations
@@ -287,7 +293,7 @@ func (a *apiImpl) AddEvent(event Event) error {
 	return err
 }
 
-func (a *apiImpl) UpdateEvent(event Event) error {
+func (a *coreApiImpl) UpdateEvent(event Event) error {
 	// TODO
 
 	// var e Event
@@ -312,12 +318,12 @@ func (a *apiImpl) UpdateEvent(event Event) error {
 	return nil
 }
 
-func (a *apiImpl) RemoveEvent(event Event) error {
+func (a *coreApiImpl) RemoveEvent(event Event) error {
 	// TODO
 	return nil
 }
 
-func (a *apiImpl) GetEvent(id int) (Event, error) {
+func (a *coreApiImpl) GetEvent(id uuid.UUID) (Event, error) {
 	// TODO
 
 	e, ok := a.events[id]
@@ -328,13 +334,30 @@ func (a *apiImpl) GetEvent(id int) (Event, error) {
 	return *e, nil
 }
 
-func (a *apiImpl) GetEvents(from int64, to int64) ([]Event, error) {
+func (a *coreApiImpl) GetEvents(from, to time.Time) ([]Event, error) {
 	// TODO
-	return []Event{}, nil
+
+	now := time.Now()
+	return []Event{
+		{
+			Id:       uuid.Must(uuid.NewV7()),
+			Title:    "Meeting",
+			Location: "Google Meet",
+			From:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location()), // today at 10:00
+			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, now.Location()), // today at 13:00
+		},
+		{
+			Id:       uuid.Must(uuid.NewV7()),
+			Title:    "Lunch with Joe",
+			Location: "Restaurant",
+			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
+			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
+		},
+	}, nil
 }
 
 // helper function to setup the initial "events" folder etc.
-func (a *apiImpl) setupInitialRepoStructure() error {
+func (a *coreApiImpl) setupInitialRepoStructure() error {
 	// TODO
 
 	// eventsDirPath := path.Join(a.repoPath, EventsDirName)

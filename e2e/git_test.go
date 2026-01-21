@@ -7,7 +7,7 @@ import (
 )
 
 func Test_AddRemote_Works(t *testing.T) {
-	a := core.NewApi()
+	a := core.NewCoreApi()
 
 	err := a.Delete()
 	if err != nil {

@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/go-git/go-billy/v5 v5.7.0
 	github.com/go-git/go-git/v5 v5.16.4
+	github.com/google/uuid v1.6.0
 	github.com/rdleal/intervalst v1.5.0
 )
 

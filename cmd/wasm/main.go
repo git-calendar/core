@@ -5,19 +5,19 @@ package main
 import (
 	"syscall/js"
 
-	"github.com/firu11/git-calendar-core/pkg/core"
+	gocore "github.com/firu11/git-calendar-core/pkg/bridge"
 )
 
 // This is the starting point which gets called from JS.
 func main() {
-	jsonApi := core.NewJsonApi()
+	api := gocore.NewApi()
 
-	RegisterCallbacks(jsonApi)
+	RegisterCallbacks(api)
 
 	select {} // block infinitely
 }
 
-func RegisterCallbacks(api core.JsonApi) {
+func RegisterCallbacks(api gocore.Api) {
 	js.Global().Set("CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
 			"initialize": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -47,7 +47,7 @@ func RegisterCallbacks(api core.JsonApi) {
 			}),
 			"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return api.GetEvent(args[0].Int())
+					return api.GetEvent(args[0].String())
 				})
 			}),
 			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
