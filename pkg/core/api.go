@@ -253,18 +253,21 @@ func (a *coreApiImpl) AddEvent(event Event) error {
 	}
 
 	if a.repo == nil {
-		return fmt.Errorf("repo not initialized")
+		a.fs.Remove(filePath)
+		return fmt.Errorf("repo not loaded")
 	}
 
 	// -------- add to git repo --------
 	w, err := a.repo.Worktree()
 	if err != nil {
+		a.fs.Remove(filePath)
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	// stage
 	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename)) // relative to git, not the fs root
 	if _, err := w.Add(gitPath); err != nil {
+		a.fs.Remove(filePath)
 		return fmt.Errorf("failed to stage event file: %w", err)
 	}
 
@@ -287,6 +290,7 @@ func (a *coreApiImpl) AddEvent(event Event) error {
 
 		// TODO idk
 		w.Remove(gitPath)
+		a.fs.Remove(filePath)
 		return fmt.Errorf("failed to commit event: %w", err)
 	}
 

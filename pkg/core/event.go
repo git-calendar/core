@@ -22,7 +22,7 @@ func (e *Event) Validate() error {
 	if e.From.IsZero() || e.To.IsZero() {
 		return errors.New("event timestamps cannot be 0")
 	}
-	if e.From.Compare(e.To) <= 0 {
+	if e.From.Compare(e.To) != -1 {
 		return errors.New("event 'from' timestamp cannot be greater or equal than 'to' (cannot end before it starts)")
 	}
 	return nil
