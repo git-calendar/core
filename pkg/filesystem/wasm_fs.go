@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"math/rand"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall/js"
@@ -48,42 +49,38 @@ func (fs *OPFS) MkdirAll(path string, perm fs.FileMode) error {
 }
 
 func (fs *OPFS) Join(elem ...string) string {
-	var parts []string
-	for _, e := range elem { // filter empty
-		if e != "" {
-			parts = append(parts, e)
-		}
-	}
-	return strings.Join(parts, "/")
+	return path.Join(elem...)
 }
 
 func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.File, error) {
 	create := flag&os.O_CREATE != 0
-	fmt.Println("open:", fullPath, create)
-
 	fullPath = normalizePath(fullPath)
+
+	var err error
+	defer func() { // recover any panic that could happen along the way: Call()
+		if r := recover(); r != nil {
+			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", fullPath, r)
+		}
+	}()
 
 	// check the cache
 	inodeCacheMu.Lock()
 	defer inodeCacheMu.Unlock()
 	if inode, ok := inodeCache[fullPath]; ok && inode != nil {
 		inode.refs++
-		return &OPFSFile{
+		f := &OPFSFile{
 			inode:  inode,
 			offset: 0,
-		}, nil
+		}
+
+		if err := fs.applyFlags(f, flag); err != nil {
+			inode.refs--
+			return nil, err
+		}
+		return f, nil
 	}
 
 	// "cache miss", create the inode
-
-	var handle js.Value
-	var err error
-
-	defer func() { // recover any panic that could happen along the way: Call()
-		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS OpenFile %q failed: %+v", fullPath, r)
-		}
-	}()
 
 	// get direct parent dir handle
 	pathOnly, fileName := filepath.Split(fullPath)
@@ -96,7 +93,7 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 	}
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
-	handle, err = await(dirHandle.Call("getFileHandle", fileName, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
+	handle, err := await(dirHandle.Call("getFileHandle", fileName, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return nil, os.ErrNotExist
@@ -117,49 +114,55 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 		offset: 0,
 	}
 
-	if flag&os.O_TRUNC != 0 {
-		err = f.Truncate(0)
-	}
-
-	if flag&os.O_APPEND != 0 {
-		// prepare the file for appending
-		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
-		f.offset = int64(size)                       // set the offset to the end so that future Write() calls append
+	if err := fs.applyFlags(f, flag); err != nil {
+		return nil, err
 	}
 
 	return f, err
 }
 
 func (fs *OPFS) Remove(path string) error {
-	fmt.Println("remove:", path)
+	if path == "" {
+		return fmt.Errorf("invalid remove path: %q", path)
+	}
+
+	path = normalizePath(path)
+
+	inodeCacheMu.Lock()
+	if inode, ok := inodeCache[path]; ok {
+		tmpFile := &OPFSFile{inode: inode}
+		tmpFile.closeAccess() // ignore error, were removing it anyway
+		delete(inodeCache, path)
+	}
+	inodeCacheMu.Unlock()
 
 	// get direct parent dir handle
-	dirPath, name := filepath.Split(path)
+	dirPath, name := fs.split(path)
 	dirHandle, err := fs.getDirectoryHandle(dirPath, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return os.ErrNotExist
 		}
-		return fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+		return fmt.Errorf("failed to traverse to dir '%s': %w", dirPath, err)
 	}
 
 	// OPFS FileSystemDirectoryHandle provides a native removeEntry method
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/removeEntry
 	// a non-empty directory will not be removed
 	_, err = await(dirHandle.Call("removeEntry", name))
-	if err != nil {
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "NotFoundError") {
-			return os.ErrNotExist
-		}
-		if strings.Contains(errMsg, "NoModificationAllowedError") {
-			// file might be locked or already removed - treat as success
-			// TODO is that ok?
-			fmt.Printf("Warning: Could not remove %s (may already be removed)\n", path)
-			return nil
-		}
+	if err == nil {
+		return nil // removed ok
 	}
-	return err
+
+	errMsg := err.Error()
+	switch {
+	case strings.Contains(errMsg, "NotFoundError"):
+		return os.ErrNotExist
+	case strings.Contains(errMsg, "NoModificationAllowedError"):
+		return os.ErrPermission
+	default:
+		return fmt.Errorf("failed to remove %s: %w", name, err)
+	}
 }
 
 func (fs *OPFS) Rename(oldpath, newpath string) error {
@@ -202,8 +205,6 @@ func (fs *OPFS) Chroot(path string) (billy.Filesystem, error) {
 }
 
 func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
-	fmt.Println("readdir:", path)
-
 	defer func() { // recover any panic that could happen along the way: Get(), Index()
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS ReadDir %q failed: %+v", path, r)
@@ -292,7 +293,7 @@ func (fs *OPFS) Open(name string) (billy.File, error) {
 
 func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 	// get direct parent dir handle
-	path, name := filepath.Split(path)
+	path, name := fs.split(path)
 	parentDirHandle, err := fs.getDirectoryHandle(path, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -307,7 +308,7 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 		}
 	}()
 
-	// Try as file first
+	// try as file first
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
 	handle, err := await(parentDirHandle.Call("getFileHandle", name))
 	if err == nil {
@@ -325,7 +326,7 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 		}, nil
 	}
 
-	// If file failed, try as directory
+	// if file failed, try as directory
 	_, err = await(parentDirHandle.Call("getDirectoryHandle", name))
 	if err == nil {
 		return &OPFSFileInfo{
@@ -352,7 +353,25 @@ func (fs *OPFS) Readlink(link string) (string, error) {
 
 // ---------------------------------------------------------
 
-// A helper function which traverses to the last dir in path.
+// applyFlags handles O_TRUNC and O_APPEND flags for OpenFile
+func (fs *OPFS) applyFlags(f *OPFSFile, flag int) error {
+	if flag&os.O_TRUNC != 0 {
+		// truncate the file and then return it empty
+		if err := f.Truncate(0); err != nil {
+			return fmt.Errorf("failed to truncate file: %w", err)
+		}
+	}
+
+	if flag&os.O_APPEND != 0 {
+		// prepare the file for appending
+		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
+		f.offset = int64(size)                       // set the offset to the end so that future Write() calls append
+	}
+
+	return nil
+}
+
+// A helper method which traverses to the last dir in path.
 func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 	parts := strings.Split(path, "/")
 
@@ -369,6 +388,11 @@ func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 		dir = d
 	}
 	return dir, nil
+}
+
+// helper method to unify the spliting of paths
+func (fs *OPFS) split(fullPath string) (string, string) {
+	return path.Split(fullPath)
 }
 
 // A helper function which makes async calls to JS API synchronous.

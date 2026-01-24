@@ -168,10 +168,20 @@ func (f *OPFSFile) Close() error {
 	inodeCacheMu.Lock()
 	defer inodeCacheMu.Unlock()
 
+	if f.inode == nil {
+		return nil // already closed
+	}
+
 	f.inode.refs--
-	if f.inode.refs == 0 {
+
+	if f.inode.refs <= 0 {
+		// properly flush and close the inode handles
 		err := f.closeAccess()
+
+		// remove from inode cache
+		// (important bcs we cant have a dangling reference to a inode, we wouldnt be able to delete it!)
 		delete(inodeCache, f.inode.path)
+
 		f.inode = nil
 		return err
 	}
@@ -222,12 +232,14 @@ func (f *OPFSFile) closeAccess() error {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS File Close failed: %+v", r)
 			f.inode.access = js.Undefined()
+			f.inode.handle = js.Undefined()
 		}
 	}()
 
 	f.inode.access.Call("flush")
 	f.inode.access.Call("close")
 	f.inode.access = js.Undefined()
+	f.inode.handle = js.Undefined()
 
 	return err
 }
