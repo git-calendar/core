@@ -1,5 +1,6 @@
 // A JSON core API wrapper for multiplatform support.
-// It's not possible to expose any "complex" types (structs*, arrays, channels, maps, etc.), because they do not have bindings to other languages.
+// It's not possible to expose any "complex" data types (structs*, arrays, channels, maps, etc.),
+// because they do not have bindings to other languages.
 // Let's use JSON everywhere as a REST API would... (or protobuf?)
 //
 // (*) You can return a *Event (pointer to struct), but you cannot receive it as argument.

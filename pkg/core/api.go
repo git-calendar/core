@@ -64,7 +64,7 @@ type (
 	}
 )
 
-// A "constructor" for Api.
+// A "constructor" for CoreApi.
 func NewCoreApi() CoreApi {
 	var api coreApiImpl
 
