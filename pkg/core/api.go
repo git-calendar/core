@@ -123,6 +123,10 @@ func (a *coreApiImpl) Initialize() error {
 }
 
 func (a *coreApiImpl) Clone(repoUrl string) error {
+	if a.repo != nil {
+		return errors.New("repo already exists")
+	}
+
 	// make sure that the repo dir is created
 	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
@@ -155,12 +159,14 @@ func (a *coreApiImpl) Clone(repoUrl string) error {
 	} else {
 		finalRepoUrl = repoUrl
 	}
+
+	// clone now
 	a.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: "github",
 		URL:        finalRepoUrl,
 	})
 	if err != nil {
-		return fmt.Errorf("clone repo: %w", err)
+		return fmt.Errorf("git clone failed: %w", err)
 	}
 
 	return err
