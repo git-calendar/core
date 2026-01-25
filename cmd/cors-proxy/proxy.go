@@ -35,7 +35,7 @@ func main() {
 		Handler:        accessLog(mux),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   15 * time.Second,
-		MaxHeaderBytes: 1 << 20,
+		MaxHeaderBytes: 64 << 10, // 1KB
 	}
 
 	// run the proxy
@@ -99,9 +99,21 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	copyHeaders(resp.Header, w.Header())
 	w.WriteHeader(resp.StatusCode)
 
+	// limit response body
+	limitedReader := &io.LimitedReader{
+		R: resp.Body,
+		N: cfg.MaxResponseSize + 1, // to detect overflow
+	}
+
 	// forward response body back to client
-	if _, err = io.Copy(w, resp.Body); err != nil {
+	n, err := io.Copy(w, limitedReader)
+	if err != nil {
 		slog.Error(err.Error())
+		return
+	}
+
+	if n > cfg.MaxResponseSize {
+		http.Error(w, "response too large", http.StatusBadGateway)
 		return
 	}
 }

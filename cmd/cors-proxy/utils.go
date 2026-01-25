@@ -103,6 +103,7 @@ type config struct {
 	Port            string
 	Production      bool
 	UpstreamTimeout time.Duration
+	MaxResponseSize int64
 }
 
 func loadConfig() *config {
@@ -122,6 +123,11 @@ func loadConfig() *config {
 		cfg.UpstreamTimeout = 15 * time.Second
 	} else {
 		cfg.UpstreamTimeout = duration
+	}
+
+	cfg.MaxResponseSize, err = strconv.ParseInt(os.Getenv(prefix+"MAX_RESPONSE_SIZE"), 10, 64)
+	if err != nil || cfg.MaxResponseSize == 0 {
+		cfg.MaxResponseSize = 1 << 20 // 1MB
 	}
 
 	return &cfg
