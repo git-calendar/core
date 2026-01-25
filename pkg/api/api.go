@@ -61,18 +61,18 @@ func (a *Api) RemoveEvent(eventJson string) error {
 func (a *Api) GetEvent(id string) (string, error) {
 	parsedId, err := uuid.Parse(id)
 	if err != nil {
-		return "", fmt.Errorf("invalid event id: %w", err)
+		return emptyJson, fmt.Errorf("invalid event id: %w", err)
 	}
 	// pass the id to inner api
 	event, err := a.inner.GetEvent(parsedId)
 	if err != nil {
-		return "", err
+		return emptyJson, err
 	}
 
 	// marshal to json
 	jsonBytes, err := json.Marshal(event)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal event to json: %w", err)
+		return emptyJson, fmt.Errorf("failed to marshal event to json: %w", err)
 	}
 
 	return string(jsonBytes), nil
@@ -83,19 +83,19 @@ func (a *Api) GetEvents(from, to string) (string, error) {
 	f, err1 := time.Parse(time.RFC3339, from)
 	t, err2 := time.Parse(time.RFC3339, to)
 	if err := errors.Join(err1, err2); err != nil {
-		return "", fmt.Errorf("invalid from/to parameter: %w", err)
+		return emptyJsonArr, fmt.Errorf("invalid from/to parameter: %w", err)
 	}
 
 	// pass the args to inner api
 	events, err := a.inner.GetEvents(f, t)
 	if err != nil {
-		return "", err
+		return emptyJsonArr, err
 	}
 
 	// marshal to json
 	jsonBytes, err := json.Marshal(events)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal events to json: %w", err)
+		return emptyJsonArr, fmt.Errorf("failed to marshal events to json: %w", err)
 	}
 
 	return string(jsonBytes), nil
