@@ -16,6 +16,14 @@ type Event struct {
 }
 
 func (e *Event) Validate() error {
+	if e.Id != uuid.Nil { // if id is set
+		if e.Id.Version() != 4 { // enforce version
+			return errors.New("unsupported UUID version")
+		}
+	} else { // if id is unset
+		e.Id = uuid.New() // create one if not specified
+	}
+
 	if e.Title == "" {
 		return errors.New("event title cannot be empty")
 	}

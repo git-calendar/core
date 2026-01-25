@@ -17,7 +17,7 @@ import (
 // It is kinda e2e, but not entirely. TODO rethink this.
 
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
-	a := core.NewCoreApi()
+	a := core.NewCore()
 
 	err := a.Initialize()
 	if err != nil {
@@ -32,7 +32,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		To:    time.Now().Add(2 * time.Hour),
 	}
 
-	err = a.AddEvent(eventIn)
+	_, err = a.CreateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
@@ -65,7 +65,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 }
 
 func Test_AddEventAndGetEvent_Works(t *testing.T) {
-	a := core.NewCoreApi()
+	a := core.NewCore()
 
 	err := a.Initialize()
 	if err != nil {
@@ -80,7 +80,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 		To:    time.Now().Add(2 * time.Hour), // two hours from now
 	}
 
-	err = a.AddEvent(eventIn)
+	_, err = a.CreateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}

@@ -5,19 +5,19 @@ package main
 import (
 	"syscall/js"
 
-	gocore "github.com/firu11/git-calendar-core/pkg/bridge"
+	"github.com/firu11/git-calendar-core/pkg/api"
 )
 
 // This is the starting point which gets called from JS.
 func main() {
-	api := gocore.NewApi()
+	api := api.NewApi()
 
 	RegisterCallbacks(api)
 
 	select {} // block infinitely
 }
 
-func RegisterCallbacks(api gocore.Api) {
+func RegisterCallbacks(api *api.Api) {
 	js.Global().Set("CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
 			"initialize": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -40,9 +40,9 @@ func RegisterCallbacks(api gocore.Api) {
 					return nil, api.SetCorsProxy(args[0].String())
 				})
 			}),
-			"addEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.AddEvent(args[0].String())
+					return api.CreateEvent(args[0].String())
 				})
 			}),
 			"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -52,7 +52,7 @@ func RegisterCallbacks(api gocore.Api) {
 			}),
 			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return api.GetEvents(int64(args[0].Int()), int64(args[1].Int()))
+					return api.GetEvents(args[0].String(), args[1].String())
 				})
 			}),
 			// TODO others

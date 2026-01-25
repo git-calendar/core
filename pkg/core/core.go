@@ -21,77 +21,46 @@ import (
 	"github.com/rdleal/intervalst/interval"
 )
 
-// Methods which do not need a JSON translation and therefore they can be shared.
-type BaseApi interface {
-	Initialize() error
-	Clone(repoUrl string) error
-	AddRemote(name, remoteUrl string) error
-	Delete() error
-	SetCorsProxy(proxyUrl string) error
-
-	// TODO
-	// SetEncryptionKey(key string)
-	// EnableEncryption()
-	//
-	// Update(remoteName string)
-	//  fetch
-	//  pull
-	// push(remoteName string)
+// The real API.
+//
+// Works with raw Go structs, use api.Api to work with JSON.
+type Core struct {
+	eventTree *interval.SearchTree[uuid.UUID, time.Time]
+	events    map[uuid.UUID]*Event
+	repo      *gogit.Repository
+	repoPath  string
+	fs        billy.Filesystem // "/" for OPFS, "$HOME" for classic FS
+	proxyUrl  *url.URL
 }
 
-type (
-	// The real API.
-	//
-	// Works with raw Go structs, use wrapper.Api to work with JSON.
-	CoreApi interface {
-		BaseApi // embed all shared methods
-
-		AddEvent(event Event) error
-		UpdateEvent(event Event) error
-		RemoveEvent(event Event) error
-		GetEvent(id uuid.UUID) (Event, error)
-		GetEvents(from, to time.Time) ([]Event, error)
-	}
-
-	// Private implementation of CoreApi.
-	coreApiImpl struct {
-		eventTree *interval.SearchTree[uuid.UUID, time.Time]
-		events    map[uuid.UUID]*Event
-		repo      *gogit.Repository
-		repoPath  string
-		fs        billy.Filesystem // "/" for OPFS, "$HOME" for classic FS
-		proxyUrl  *url.URL
-	}
-)
-
 // A "constructor" for CoreApi.
-func NewCoreApi() CoreApi {
-	var api coreApiImpl
+func NewCore() *Core {
+	var c Core
 
 	// alloc some vars
-	api.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
-	api.events = make(map[uuid.UUID]*Event)
+	c.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
+	c.events = make(map[uuid.UUID]*Event)
 
 	// get the fs; go tags handle which one (classic/wasm)
 	var err error
-	api.fs, api.repoPath, err = filesystem.GetRepoFS()
+	c.fs, c.repoPath, err = filesystem.GetRepoFS()
 	if err != nil {
 		panic(err)
 	}
 
-	return &api
+	return &c
 }
 
-func (a *coreApiImpl) Initialize() error {
-	if a.repo != nil {
+func (c *Core) Initialize() error {
+	if c.repo != nil {
 		return nil // already initialized
 	}
 
-	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
+	if err := c.fs.MkdirAll(c.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
 
-	repoFS, err := a.fs.Chroot(a.repoPath)
+	repoFS, err := c.fs.Chroot(c.repoPath)
 	if err != nil {
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
@@ -117,21 +86,21 @@ func (a *coreApiImpl) Initialize() error {
 		return err
 	}
 
-	a.repo = repo
+	c.repo = repo
 
-	return a.setupInitialRepoStructure()
+	return c.setupInitialRepoStructure()
 }
 
-func (a *coreApiImpl) Clone(repoUrl string) error {
-	if a.repo != nil {
+func (c *Core) Clone(repoUrl string) error {
+	if c.repo != nil {
 		return errors.New("repo already exists")
 	}
 
 	// make sure that the repo dir is created
-	if err := a.fs.MkdirAll(a.repoPath, 0o755); err != nil {
+	if err := c.fs.MkdirAll(c.repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
-	repoFS, err := a.fs.Chroot(a.repoPath)
+	repoFS, err := c.fs.Chroot(c.repoPath)
 	if err != nil {
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
@@ -150,8 +119,8 @@ func (a *coreApiImpl) Clone(repoUrl string) error {
 	// add proxy if specified (only needed for the browser)
 	// like so: http://cors-proxy.abc/?url=https://github.com/firu11/git-calendar-core
 	var finalRepoUrl string
-	if a.proxyUrl != nil {
-		final := *a.proxyUrl          // copy
+	if c.proxyUrl != nil {
+		final := *c.proxyUrl          // copy
 		q := final.Query()            // get parsed query (a copy)
 		q.Set("url", repoUrl)         // add the param
 		final.RawQuery = q.Encode()   // put it back
@@ -161,7 +130,7 @@ func (a *coreApiImpl) Clone(repoUrl string) error {
 	}
 
 	// clone now
-	a.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+	c.repo, err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: "github",
 		URL:        finalRepoUrl,
 	})
@@ -172,7 +141,7 @@ func (a *coreApiImpl) Clone(repoUrl string) error {
 	return err
 }
 
-func (a *coreApiImpl) AddRemote(name, remoteUrl string) error {
+func (c *Core) AddRemote(name, remoteUrl string) error {
 	var validUrl string
 	{
 		// validate URL (git doesnt do that when adding a remote, it fails afterwards with e.g. git fetch)
@@ -187,7 +156,7 @@ func (a *coreApiImpl) AddRemote(name, remoteUrl string) error {
 		validUrl = parsedUrl.String()
 	}
 
-	_, err := a.repo.CreateRemote(&config.RemoteConfig{
+	_, err := c.repo.CreateRemote(&config.RemoteConfig{
 		Name: name,
 		URLs: []string{validUrl},
 	})
@@ -198,83 +167,83 @@ func (a *coreApiImpl) AddRemote(name, remoteUrl string) error {
 	return nil
 }
 
-func (a *coreApiImpl) Delete() error {
-	a.repo = nil
-	err := gogitutil.RemoveAll(a.fs, a.repoPath)
+func (c *Core) Delete() error {
+	c.repo = nil
+	err := gogitutil.RemoveAll(c.fs, c.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
 	}
 	return nil
 }
 
-func (a *coreApiImpl) SetCorsProxy(proxyUrl string) error {
+func (c *Core) SetCorsProxy(proxyUrl string) error {
 	var err error
 	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
-	a.proxyUrl, err = url.Parse(trimmed)
+	c.proxyUrl, err = url.Parse(trimmed)
 	return err
 }
 
-func (a *coreApiImpl) AddEvent(event Event) error {
+func (c *Core) CreateEvent(event Event) (*Event, error) {
 	// TODO
 	// just a prototype:
 
 	// add to all events
-	a.events[event.Id] = &event
+	c.events[event.Id] = &event
 
 	// -------- insert into tree --------
-	err := a.eventTree.Insert(event.From, event.To, event.Id)
+	err := c.eventTree.Insert(event.From, event.To, event.Id)
 	if err != nil {
-		return fmt.Errorf("failed to insert into index tree: %w", err)
+		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
 	// -------- create json file --------
 	data, err := json.MarshalIndent(event, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal event to JSON: %w", err)
+		return nil, fmt.Errorf("failed to marshal event to JSON: %w", err)
 	}
 
-	dirPath := filepath.Join(a.repoPath, EventsDirName)
-	err = a.fs.MkdirAll(dirPath, 0o755) // ensure the "events" folder exists
+	dirPath := filepath.Join(c.repoPath, EventsDirName)
+	err = c.fs.MkdirAll(dirPath, 0o755) // ensure the "events" folder exists
 	if err != nil {
-		return fmt.Errorf("failed to create events directory: %w", err)
+		return nil, fmt.Errorf("failed to create events directory: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s.json", event.Id)
-	filePath := filepath.Join(a.repoPath, EventsDirName, filename)
+	filePath := filepath.Join(c.repoPath, EventsDirName, filename)
 
 	// create a scope for the file operations
 	{
-		file, err := a.fs.Create(filePath)
+		file, err := c.fs.Create(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to create event file: %w", err)
+			return nil, fmt.Errorf("failed to create event file: %w", err)
 		}
 		if _, err := file.Write(data); err != nil {
 			file.Close()
-			return fmt.Errorf("failed to write event file: %w", err)
+			return nil, fmt.Errorf("failed to write event file: %w", err)
 		}
 		// close the file BEFORE git operations
 		if err := file.Close(); err != nil {
-			return fmt.Errorf("failed to close event file: %w", err)
+			return nil, fmt.Errorf("failed to close event file: %w", err)
 		}
 	}
 
-	if a.repo == nil {
-		a.fs.Remove(filePath)
-		return fmt.Errorf("repo not loaded")
+	if c.repo == nil {
+		c.fs.Remove(filePath)
+		return nil, fmt.Errorf("repo not loaded")
 	}
 
 	// -------- add to git repo --------
-	w, err := a.repo.Worktree()
+	w, err := c.repo.Worktree()
 	if err != nil {
-		a.fs.Remove(filePath)
-		return fmt.Errorf("failed to get worktree: %w", err)
+		c.fs.Remove(filePath)
+		return nil, fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	// stage
 	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename)) // relative to git, not the fs root
 	if _, err := w.Add(gitPath); err != nil {
-		a.fs.Remove(filePath)
-		return fmt.Errorf("failed to stage event file: %w", err)
+		c.fs.Remove(filePath)
+		return nil, fmt.Errorf("failed to stage event file: %w", err)
 	}
 
 	// commit
@@ -291,19 +260,19 @@ func (a *coreApiImpl) AddEvent(event Event) error {
 	if err != nil {
 		if errors.Is(err, gogit.ErrEmptyCommit) {
 			// nothing has changed
-			return nil
+			return &event, nil
 		}
 
 		// TODO idk
 		w.Remove(gitPath)
-		a.fs.Remove(filePath)
-		return fmt.Errorf("failed to commit event: %w", err)
+		c.fs.Remove(filePath)
+		return nil, fmt.Errorf("failed to commit event: %w", err)
 	}
 
-	return err
+	return &event, nil
 }
 
-func (a *coreApiImpl) UpdateEvent(event Event) error {
+func (c *Core) UpdateEvent(event Event) (*Event, error) {
 	// TODO
 
 	// var e Event
@@ -325,26 +294,26 @@ func (a *coreApiImpl) UpdateEvent(event Event) error {
 	// // replace the pointer
 	// a.events[e.Id] = &e
 
-	return nil
+	return nil, nil
 }
 
-func (a *coreApiImpl) RemoveEvent(event Event) error {
+func (c *Core) RemoveEvent(event Event) error {
 	// TODO
 	return nil
 }
 
-func (a *coreApiImpl) GetEvent(id uuid.UUID) (Event, error) {
+func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	// TODO
 
-	e, ok := a.events[id]
+	e, ok := c.events[id]
 	if !ok {
-		return Event{}, fmt.Errorf("event with this id doesnt exist")
+		return nil, fmt.Errorf("event with this id doesnt exist")
 	}
 
-	return *e, nil
+	return e, nil
 }
 
-func (a *coreApiImpl) GetEvents(from, to time.Time) ([]Event, error) {
+func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 	// TODO
 
 	now := time.Now()
@@ -366,8 +335,10 @@ func (a *coreApiImpl) GetEvents(from, to time.Time) ([]Event, error) {
 	}, nil
 }
 
-// helper function to setup the initial "events" folder etc.
-func (a *coreApiImpl) setupInitialRepoStructure() error {
+// ------------------------------------------------ Helpers -------------------------------------------------
+
+// Helper function to setup the initial "events" folder etc.
+func (c *Core) setupInitialRepoStructure() error {
 	// TODO
 
 	// eventsDirPath := path.Join(a.repoPath, EventsDirName)
