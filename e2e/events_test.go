@@ -90,7 +90,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 		t.Errorf("failed to get an event by id: %v", err)
 	}
 
-	if !reflect.DeepEqual(eventIn, eventOut) {
+	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
 	}
 }
