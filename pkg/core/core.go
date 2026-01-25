@@ -173,6 +173,10 @@ func (c *Core) Delete() error {
 	if err != nil {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
 	}
+
+	c.events = make(map[uuid.UUID]*Event)
+	c.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
+
 	return nil
 }
 
