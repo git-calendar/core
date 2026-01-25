@@ -9,7 +9,7 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # has to be older
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -28,12 +28,13 @@ jobs:
       - name: Install wasmbrowsertest
         run: |
           go install github.com/agnivade/wasmbrowsertest@latest
-          # Rename for automatic discovery as per your guide
           mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
 
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@latest
+
       - name: Run WASM Tests
-        # ensure Chrome/Chromium is available (included in ubuntu-latest)
-        run: GOOS=js GOARCH=wasm go test -v ./...
+        run: GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm # no e2e cuz they wont work (no opfsRootHandle exists etc.)
 
   build-and-release:
     needs: tests # only release if security AND all tests pass
