@@ -27,7 +27,7 @@ go install github.com/agnivade/wasmbrowsertest@latest
 ```
 Run tests like so:
 ```sh
-GOOS=js GOARCH=wasm go test -exec $(go env GOPATH)/bin/wasmbrowsertest ./...
+GOOS=js GOARCH=wasm go test -exec $(go env GOPATH)/bin/wasmbrowsertest ./pkg/... ./cmd/wasm
 ```
 Or, if you don't wanna specify the `-exec`:
 1. Rename the exacutable so that `go test` finds it automatically:
@@ -36,5 +36,5 @@ mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
 ```
 2. And then run tests like you normally would:
 ```sh
-GOOS=js GOARCH=wasm go test ./...
+GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm
 ```
