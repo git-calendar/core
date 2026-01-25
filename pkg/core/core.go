@@ -317,7 +317,7 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 	// TODO
 
 	now := time.Now()
-	return []Event{
+	sampleEvents := []Event{
 		{
 			Id:       uuid.Must(uuid.NewV7()),
 			Title:    "Meeting",
@@ -332,7 +332,13 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
 			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
 		},
-	}, nil
+	}
+
+	for _, v := range c.events {
+		sampleEvents = append(sampleEvents, *v)
+	}
+
+	return sampleEvents, nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
