@@ -1,0 +1,62 @@
+name: Go Pipeline
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      # standard go tests
+      - name: Run Standard Tests
+        run: go test -v ./...
+
+      # wasm tests
+      - name: Install wasmbrowsertest
+        run: |
+          go install github.com/agnivade/wasmbrowsertest@latest
+          # Rename for automatic discovery as per your guide
+          mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
+
+      - name: Run WASM Tests
+        # ensure Chrome/Chromium is available (included in ubuntu-latest)
+        run: GOOS=js GOARCH=wasm go test -v ./...
+
+  build-and-release:
+    needs: tests # only release if security AND all tests pass
+    if: startsWith(github.ref, 'refs/tags/') # only with tag push (vX.X.X)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      - name: Build
+        run: make build_web # just web for now
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/web/core.wasm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
