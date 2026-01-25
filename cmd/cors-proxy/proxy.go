@@ -70,6 +70,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// reject unknown hosts
+	if !isAllowedHost(destUrl) {
+		http.Error(w, "forbidden upstream host", http.StatusForbidden)
+		return
+	}
+
 	// prepare the request to destination
 	req, err := http.NewRequest(r.Method, destUrl.String(), r.Body)
 	if err != nil {

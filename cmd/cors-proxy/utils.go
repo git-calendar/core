@@ -23,6 +23,24 @@ var roundTripper http.RoundTripper = &http.Transport{
 	ResponseHeaderTimeout: 10 * time.Second,
 }
 
+// TODO separate into a text file
+var allowedHosts = map[string]bool{
+	"github.com":                true,
+	"raw.githubusercontent.com": true,
+	"gitlab.com":                true,
+	"codeberg.org":              true,
+}
+
+func isAllowedHost(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+
+	host := strings.ToLower(u.Hostname())
+	_, ok := allowedHosts[host]
+	return ok
+}
+
 // ------------------- middleware -------------------
 
 func accessLog(next http.Handler) http.Handler {
