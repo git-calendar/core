@@ -49,12 +49,15 @@ func main() {
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// add cors headers to allow any browser to use this endpoint
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-	w.Header().Set("Access-Control-Allow-Headers", "*")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // TODO add real https://git-calendar.firu.dev or whatever
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Git-Protocol")
 
-	if r.Method == http.MethodOptions { // this prevents the 405 from e.g. GitHub
-		w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodOptions {
+		// this prevents the 405 from e.g. GitHub
+		// the browser only needs to get the CORS headers and OK for OPTIONS request,
+		// so that it knows its safe to send the real request
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
