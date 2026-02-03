@@ -13,6 +13,7 @@ type Event struct {
 	Location string    `json:"location"`
 	From     time.Time `json:"from"`
 	To       time.Time `json:"to"`
+	Notes    string    `json:"notes"`
 }
 
 func (e *Event) Validate() error {

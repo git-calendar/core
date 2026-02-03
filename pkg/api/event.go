@@ -9,4 +9,5 @@ type Event struct {
 	Location string `json:"location"`
 	From     string `json:"from"` // RFC3339 format e.g. 2009-11-10T23:00:00Z (the default format for json.Marshal() when it comes to time.Time)
 	To       string `json:"to"`   // RFC3339 format e.g. 2009-11-10T23:00:00Z (the default format for json.Marshal() when it comes to time.Time)
+	Notes    string `json:"notes"`
 }

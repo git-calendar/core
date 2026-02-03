@@ -318,10 +318,10 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 }
 
 func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
-	// TODO
-
+	var ids []uuid.UUID
+	ids, _ = c.eventTree.AllIntersections(from, to)
 	now := time.Now()
-	sampleEvents := []Event{
+	allEvents := []Event{
 		{
 			Id:       uuid.Must(uuid.NewV7()),
 			Title:    "Meeting",
@@ -337,12 +337,10 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
 		},
 	}
-
-	for _, v := range c.events {
-		sampleEvents = append(sampleEvents, *v)
+	for _, id := range ids {
+		allEvents = append(allEvents, *c.events[id])
 	}
-
-	return sampleEvents, nil
+	return allEvents, nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
