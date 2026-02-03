@@ -12,8 +12,8 @@ build_android: create_build_dir
 	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./pkg/bridge
 
 # requires Xcode installed (mac only)
-build_ios: create_build_dir
- 	gomobile bind -target=ios ./pkg/bridge # TODO
+#build_ios: create_build_dir
+# 	gomobile bind -target=ios ./pkg/bridge # TODO
 
 build_web: create_build_dir
 	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm     # build the wasm

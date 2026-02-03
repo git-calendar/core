@@ -25,7 +25,7 @@ import (
 //
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
-	eventTree *interval.SearchTree[uuid.UUID, time.Time]
+	eventTree *interval.SearchTree[*[]uuid.UUID, time.Time]
 	events    map[uuid.UUID]*Event
 	repo      *gogit.Repository
 	repoPath  string
@@ -38,7 +38,7 @@ func NewCore() *Core {
 	var c Core
 
 	// alloc some vars
-	c.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
+	c.eventTree = interval.NewSearchTree[*[]uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
 	c.events = make(map[uuid.UUID]*Event)
 
 	// get the fs; go tags handle which one (classic/wasm)
@@ -175,7 +175,7 @@ func (c *Core) Delete() error {
 	}
 
 	c.events = make(map[uuid.UUID]*Event)
-	c.eventTree = interval.NewSearchTree[uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
+	c.eventTree = interval.NewSearchTree[*[]uuid.UUID](func(x, y time.Time) int { return x.Compare(y) })
 
 	return nil
 }
@@ -188,16 +188,22 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 }
 
 func (c *Core) CreateEvent(event Event) (*Event, error) {
-	// TODO
-	// just a prototype:
-
 	// add to all events
 	c.events[event.Id] = &event
 
 	// -------- insert into tree --------
-	err := c.eventTree.Insert(event.From, event.To, event.Id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+	// check if interval exists
+	listPtr, exists := c.eventTree.Find(event.From, event.To)
+	if exists /* append to the array*/ {
+		s := *listPtr
+		s = append(s, event.Id)
+		*listPtr = s
+	} else /* create new array */ {
+		newSlice := []uuid.UUID{event.Id}
+		err := c.eventTree.Insert(event.From, event.To, &newSlice)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+		}
 	}
 
 	// -------- create json file --------
@@ -318,10 +324,11 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 }
 
 func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
-	var ids []uuid.UUID
-	ids, _ = c.eventTree.AllIntersections(from, to)
+	var listIdPtrs []*[]uuid.UUID
+	listIdPtrs, _ = c.eventTree.AllIntersections(from, to)
 	now := time.Now()
 	allEvents := []Event{
+		// sample events
 		{
 			Id:       uuid.Must(uuid.NewV7()),
 			Title:    "Meeting",
@@ -337,8 +344,11 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
 		},
 	}
-	for _, id := range ids {
-		allEvents = append(allEvents, *c.events[id])
+	for _, listPtr := range listIdPtrs {
+		l := *listPtr
+		for _, e := range l {
+			allEvents = append(allEvents, *c.events[e])
+		}
 	}
 	return allEvents, nil
 }
