@@ -3,6 +3,9 @@
   - [ ] storage format
   - [ ] indexing
     - interval-btree?
+  - [ ] repeating events
+    - infinite shadow (ghost events)
+  - [ ] consider lazy loading the events
 - [ ] iCalendar compatibility
   - [ ] import (periodical & one-time)
   - [ ] export
