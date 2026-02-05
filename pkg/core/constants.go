@@ -7,3 +7,14 @@ const (
 	EventsDirName string = "events"
 	// GroupsDirName string = "groups"
 )
+
+type TimeUnit int
+
+const (
+	None TimeUnit = iota
+	Day
+	Week
+	TwoWeeks
+	Month
+	Year
+)

@@ -8,12 +8,14 @@ import (
 )
 
 type Event struct {
-	Id       uuid.UUID `json:"id"` // shouldn't change (different id = different event)
-	Title    string    `json:"title"`
-	Location string    `json:"location"`
-	From     time.Time `json:"from"`
-	To       time.Time `json:"to"`
-	Notes    string    `json:"notes"`
+	Id         uuid.UUID     `json:"id"` // shouldn't change (different id = different event)
+	Title      string        `json:"title"`
+	Location   string        `json:"location"`
+	From       time.Time     `json:"from"`
+	To         time.Time     `json:"to"`
+	Duration   time.Duration `json:"duration"`
+	Notes      string        `json:"notes"`
+	Repetition TimeUnit      `json:"repetition"`
 }
 
 func (e *Event) Validate() error {
