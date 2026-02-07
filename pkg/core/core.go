@@ -315,20 +315,16 @@ func (c *Core) RemoveEvent(event Event) error {
 }
 
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
-	// TODO
-
 	e, ok := c.events[id]
 	if !ok {
 		return nil, fmt.Errorf("event with this id doesnt exist")
 	}
-
 	return e, nil
 }
 
 func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 	intervalsMatched, _ := c.eventTree.AllIntersections(from, to)
-
-	now := time.Now()
+	/*now := time.Now()
 	allEvents := []Event{
 		// sample events
 		{
@@ -345,10 +341,34 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
 			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
 		},
-	}
-	for _, interval := range intervalsMatched {
-		for _, e := range interval {
-			allEvents = append(allEvents, *c.events[e])
+	}*/
+	allEvents := make([]Event, 0, len(intervalsMatched))
+	for _, intersection := range intervalsMatched {
+		for _, eId := range intersection {
+			curEvent := c.events[eId]
+			if curEvent.Repetition == 0 {
+				allEvents = append(allEvents, *c.events[eId])
+				continue
+			}
+			tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repetition)
+			for tmpEventTime.Before(to) /* while generated event fits in the wanted interval */ {
+				if !tmpEventTime.Before(from) {
+					generatedEvent := Event{
+						Id:               uuid.Must(uuid.NewV7()),
+						Title:            curEvent.Title,
+						Location:         curEvent.Location,
+						From:             tmpEventTime,
+						To:               tmpEventTime.Add(curEvent.Duration),
+						Duration:         curEvent.Duration,
+						Notes:            curEvent.Notes,
+						Repetition:       -1,
+						RepeatExceptions: nil,
+						ParentId:         curEvent.Id,
+					}
+					allEvents = append(allEvents, generatedEvent)
+				}
+				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repetition)
+			}
 		}
 	}
 	return allEvents, nil
