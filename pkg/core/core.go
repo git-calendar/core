@@ -200,10 +200,14 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 	c.events[event.Id] = &event
 
 	// -------- insert into tree --------
-	ids, _ := c.eventTree.Find(event.From, event.To) // find existing interval
+	eventEnd := event.To
+	if event.Repeat != nil {
+		eventEnd = event.Repeat.Until // if repeating, insert interval [From, Repetition.Until]
+	}
+	ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
 	updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
 
-	err := c.eventTree.Insert(event.From, event.To, updated)
+	err := c.eventTree.Insert(event.From, eventEnd, updated)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
@@ -323,55 +327,50 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 }
 
 func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
-	intervalsMatched, _ := c.eventTree.AllIntersections(from, to)
-	/*now := time.Now()
-	allEvents := []Event{
-		// sample events
-		{
-			Id:       uuid.Must(uuid.NewV7()),
-			Title:    "Meeting",
-			Location: "Google Meet",
-			From:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location()), // today at 10:00
-			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, now.Location()), // today at 13:00
-		},
-		{
-			Id:       uuid.Must(uuid.NewV7()),
-			Title:    "Lunch with Joe",
-			Location: "Restaurant",
-			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
-			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
-		},
-	}*/
-	allEvents := make([]Event, 0, len(intervalsMatched))
+	// query the interval tree
+	intervalsMatched, found := c.eventTree.AllIntersections(from, to)
+	if !found {
+		return []Event{}, nil
+	}
+
+	result := make([]Event, 0, len(intervalsMatched))
+
 	for _, intersection := range intervalsMatched {
 		for _, eId := range intersection {
 			curEvent := c.events[eId]
-			if curEvent.Repetition == 0 {
-				allEvents = append(allEvents, *c.events[eId])
+
+			// if it doesnt repeat, just plain append to result
+			if curEvent.Repeat == nil || curEvent.Repeat.Frequency == None { // TODO idk if we Frequency needs None option now with *Repeat
+				result = append(result, *c.events[eId])
 				continue
 			}
-			tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repetition)
+
+			duration := curEvent.To.Sub(curEvent.From)
+			tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repeat.Frequency)
 			for tmpEventTime.Before(to) /* while generated event fits in the wanted interval */ {
-				if !tmpEventTime.Before(from) {
-					generatedEvent := Event{
-						Id:               uuid.Must(uuid.NewV7()),
-						Title:            curEvent.Title,
-						Location:         curEvent.Location,
-						From:             tmpEventTime,
-						To:               tmpEventTime.Add(curEvent.Duration),
-						Duration:         curEvent.Duration,
-						Notes:            curEvent.Notes,
-						Repetition:       -1,
-						RepeatExceptions: nil,
-						ParentId:         curEvent.Id,
-					}
-					allEvents = append(allEvents, generatedEvent)
+				if tmpEventTime.Add(duration).Before(from) { // if the generated event ends before our wanted interval -> skip
+					tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurance
+					continue
 				}
-				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repetition)
+
+				generatedEvent := Event{
+					Id:          uuid.New(),
+					Title:       curEvent.Title,
+					Location:    curEvent.Location,
+					Description: curEvent.Description,
+					From:        tmpEventTime,
+					To:          tmpEventTime.Add(duration),
+					MasterId:    curEvent.Id,
+					Repeat:      nil,
+				}
+				result = append(result, generatedEvent)
+
+				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurance
 			}
 		}
 	}
-	return allEvents, nil
+
+	return result, nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
@@ -387,4 +386,25 @@ func (c *Core) setupInitialRepoStructure() error {
 	// }
 
 	return nil
+}
+
+// TODO remove
+func sampleEvents() []Event {
+	now := time.Now()
+	return []Event{
+		{
+			Id:       uuid.New(),
+			Title:    "Meeting",
+			Location: "Google Meet",
+			From:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location()), // today at 10:00
+			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, now.Location()), // today at 13:00
+		},
+		{
+			Id:       uuid.New(),
+			Title:    "Lunch with Joe",
+			Location: "Restaurant",
+			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
+			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
+		},
+	}
 }

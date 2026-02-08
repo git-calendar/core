@@ -25,7 +25,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.New()
 	eventIn := core.Event{
 		Id:    id,
 		Title: "Foo Event",
@@ -73,7 +73,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.New()
 	eventIn := core.Event{
 		Id:    id,
 		Title: "Foo Event",
@@ -103,19 +103,19 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
+
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	numEvents := 5
-	for i := 0; i < numEvents; i++ {
-		id := uuid.Must(uuid.NewV7())
+	for i := range numEvents {
+		id := uuid.New()
 		from := date.AddDate(0, 0, i)
 		to := date.AddDate(0, 0, i).Add(time.Hour)
 		eventIn := core.Event{
-			Id:         id,
-			Title:      "Evet" + strconv.Itoa(i),
-			From:       from,
-			To:         to,
-			Duration:   time.Hour,
-			Repetition: core.None,
+			Id:     id,
+			Title:  "Event" + strconv.Itoa(i),
+			From:   from,
+			To:     to,
+			Repeat: nil,
 		}
 		_, err = a.CreateEvent(eventIn)
 		if err != nil {
@@ -140,14 +140,18 @@ func Test_AddRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.New()
+	startTime := time.Now()
 	eventIn := core.Event{
-		Id:         id,
-		Title:      "Repeating Event",
-		From:       time.Now(),
-		To:         time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
-		Duration:   time.Hour * 8,
-		Repetition: core.Week,
+		Id:    id,
+		Title: "Repeating Event",
+		From:  startTime,
+		To:    startTime.Add(time.Hour * 4),
+		Repeat: &core.Repetition{
+			Frequency: core.Week,
+			Interval:  1,
+			Until:     time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
+		},
 	}
 	_, err = a.CreateEvent(eventIn)
 	if err != nil {
@@ -162,12 +166,14 @@ func Test_AddRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
 	}
 
-	eventsOut, err := a.GetEvents(time.Now().AddDate(0, 0, 7), time.Now().AddDate(0, 1, 7))
+	queryFrom := time.Now().AddDate(0, 0, 6)
+	queryTo := queryFrom.AddDate(0, 1, 0)
+	eventsOut, err := a.GetEvents(queryFrom, queryTo)
 	if err != nil {
 		t.Errorf("failed to get an events by interval: %v", err)
 	}
 	if len(eventsOut) != 4 {
 		t.Errorf("not all events were generated: %v", err)
-		t.Errorf("eventsOut: %v", eventsOut)
+		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
 }
