@@ -14,7 +14,6 @@ const (
 	None TimeUnit = iota
 	Day
 	Week
-	TwoWeeks
 	Month
 	Year
 )
