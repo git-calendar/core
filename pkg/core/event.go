@@ -20,10 +20,10 @@ type Event struct {
 }
 
 type Repetition struct {
-	Frequency TimeUnit  `json:"frequency"` // Daily, Weekly, ... (None if master)
-	Interval  uint      `json:"interval"`  // 1..N (freq:Weekly + interval:2 => every other week)
-	Until     time.Time `json:"until"`     // the end of repetition by timestamp
-	// Count      uint        `json:"count"`      // or by number of occurances TODO
+	Frequency  TimeUnit    `json:"frequency"`  // Daily, Weekly, ... (None if master)
+	Interval   int         `json:"interval"`   // 1..N (freq:Weekly + interval:2 => every other week)
+	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
+	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
 	Exceptions []time.Time `json:"exceptions"` // an array of slaves "From" timestamps
 }
 
@@ -52,6 +52,21 @@ func (e *Event) Validate() error {
 }
 
 func (e *Repetition) Validate() error {
-	// TODO
+	if e == nil {
+		return nil
+	}
+	if !e.Frequency.IsValid() {
+		return errors.New("repetition frequency is invalid")
+	}
+	if e.Interval < 1 {
+		return errors.New("repetition interval is invalid")
+	}
+	if e.Until.IsZero() && e.Count < 1 {
+		return errors.New("repetition combination of Until & Count is invalid")
+	}
+	if !e.Until.IsZero() && e.Count >= 0 {
+		return errors.New("repetition when Until date set Count must be negative")
+	}
+
 	return nil
 }

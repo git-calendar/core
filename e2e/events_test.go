@@ -132,7 +132,7 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 	}
 }
 
-func Test_AddRepeatingEventAndGetEvents_Works(t *testing.T) {
+func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	a := core.NewCore()
 
 	err := a.Initialize()
@@ -150,6 +150,7 @@ func Test_AddRepeatingEventAndGetEvents_Works(t *testing.T) {
 		Repeat: &core.Repetition{
 			Frequency: core.Week,
 			Interval:  1,
+			Count:     -1,
 			Until:     time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
 		},
 	}
@@ -173,6 +174,54 @@ func Test_AddRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("failed to get an events by interval: %v", err)
 	}
 	if len(eventsOut) != 4 {
+		t.Errorf("not all events were generated: %v", err)
+		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+	}
+}
+
+func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.Initialize()
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	const COUNT = 6
+	id := uuid.New()
+	startTime := time.Now()
+	eventIn := core.Event{
+		Id:    id,
+		Title: "Repeating Event",
+		From:  startTime,
+		To:    startTime.Add(time.Hour * 4),
+		Repeat: &core.Repetition{
+			Frequency: core.Week,
+			Interval:  1,
+			Count:     COUNT,
+			Until:     time.Time{},
+		},
+	}
+	_, err = a.CreateEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to create an event: %v", err)
+	}
+
+	eventOut, err := a.GetEvent(id)
+	if err != nil {
+		t.Errorf("failed to get an event by id: %v", err)
+	}
+	if !reflect.DeepEqual(eventIn, *eventOut) {
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+	}
+
+	queryFrom := time.Now().AddDate(0, 0, 6)
+	queryTo := queryFrom.AddDate(0, 2, 0)
+	eventsOut, err := a.GetEvents(queryFrom, queryTo)
+	if err != nil {
+		t.Errorf("failed to get an events by interval: %v", err)
+	}
+	if len(eventsOut) != COUNT {
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}

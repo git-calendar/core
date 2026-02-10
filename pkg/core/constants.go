@@ -11,9 +11,12 @@ const (
 type TimeUnit int
 
 const (
-	None TimeUnit = iota
-	Day
+	Day TimeUnit = iota
 	Week
 	Month
 	Year
 )
+
+func (t TimeUnit) IsValid() bool {
+	return t >= Day && t <= Year
+}

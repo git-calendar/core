@@ -196,13 +196,20 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 }
 
 func (c *Core) CreateEvent(event Event) (*Event, error) {
+	if err := event.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid event: %w", err)
+	}
 	// add to all events
 	c.events[event.Id] = &event
 
 	// -------- insert into tree --------
+
 	eventEnd := event.To
 	if event.Repeat != nil {
 		eventEnd = event.Repeat.Until // if repeating, insert interval [From, Repetition.Until]
+		if event.Repeat.Count >= 1 /* if repeating on count basis */ {
+			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+		}
 	}
 	ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
 	updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
@@ -289,6 +296,9 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 }
 
 func (c *Core) UpdateEvent(event Event) (*Event, error) {
+	if err := event.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid event: %w", err)
+	}
 	// TODO
 
 	// var e Event
@@ -314,6 +324,9 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 }
 
 func (c *Core) RemoveEvent(event Event) error {
+	if err := event.Validate(); err != nil {
+		return fmt.Errorf("invalid event: %w", err)
+	}
 	// TODO
 	return nil
 }
@@ -339,20 +352,30 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 		for _, eId := range intersection {
 			curEvent := c.events[eId]
 
-			// if it doesnt repeat, just plain append to result
-			if curEvent.Repeat == nil || curEvent.Repeat.Frequency == None { // TODO idk if we Frequency needs None option now with *Repeat
+			// if it doesn't repeat, just plain append to result
+			if curEvent.Repeat == nil {
 				result = append(result, *c.events[eId])
 				continue
 			}
 
 			duration := curEvent.To.Sub(curEvent.From)
-			tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repeat.Frequency)
+			//tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repeat.Frequency)
+			tmpEventTime, index := getFirstCandidate2(from, curEvent)
+
 			for tmpEventTime.Before(to) /* while generated event fits in the wanted interval */ {
 				if tmpEventTime.Add(duration).Before(from) { // if the generated event ends before our wanted interval -> skip
-					tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurance
+					tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
 					continue
 				}
-
+				// logic when repeating until
+				if curEvent.Repeat.Count == -1 && tmpEventTime.After(curEvent.Repeat.Until) {
+					break // new event exceeded the repetition end (Until)
+				}
+				// logic for repeating only N times (count)
+				if curEvent.Repeat.Count != -1 && index >= curEvent.Repeat.Count {
+					break // new event exceeded the max count of generated events
+				}
+				index++
 				generatedEvent := Event{
 					Id:          uuid.New(),
 					Title:       curEvent.Title,

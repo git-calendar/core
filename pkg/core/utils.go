@@ -17,20 +17,20 @@ func addUnit(t time.Time, value int, unit TimeUnit) time.Time {
 	}
 }
 
-func getFirstCandidate2(searchStart time.Time, event *Event) time.Time {
+func getFirstCandidate2(searchStart time.Time, event *Event) (time.Time, int) {
 	switch event.Repeat.Frequency {
 	case Day:
 		diffHours := searchStart.Sub(event.From).Hours()
 		cycleHours := 24.0 * float64(event.Repeat.Interval)
-		cyclesPassed := int(diffHours / cycleHours)
-		days := cyclesPassed * int(event.Repeat.Interval)
-		return addUnit(event.From, days, Day)
+		cycles := int(diffHours / cycleHours)
+		days := cycles * int(event.Repeat.Interval)
+		return addUnit(event.From, days, Day), cycles
 	case Week:
 		diffHours := searchStart.Sub(event.From).Hours()
 		cycleHours := 24.0 * 7 * float64(event.Repeat.Interval)
-		cyclesPassed := int(diffHours / cycleHours)
-		weeks := cyclesPassed * int(event.Repeat.Interval)
-		return addUnit(event.From, weeks, Week)
+		cycles := int(diffHours / cycleHours)
+		weeks := cycles * int(event.Repeat.Interval)
+		return addUnit(event.From, weeks, Week), cycles
 	case Month:
 		diffMonths := (searchStart.Year()-event.From.Year())*12 + int(searchStart.Month()-event.From.Month())
 		cycles := diffMonths / int(event.Repeat.Interval)
@@ -38,8 +38,9 @@ func getFirstCandidate2(searchStart time.Time, event *Event) time.Time {
 		candidate := addUnit(event.From, months, Month)
 		if candidate.Before(searchStart) {
 			candidate = addUnit(event.From, int(event.Repeat.Interval), Month)
+			cycles++
 		}
-		return candidate
+		return candidate, cycles
 	case Year:
 		diffYears := searchStart.Year() - event.From.Year()
 		cycles := diffYears / int(event.Repeat.Interval)
@@ -47,10 +48,11 @@ func getFirstCandidate2(searchStart time.Time, event *Event) time.Time {
 		candidate := addUnit(event.From, years, Year)
 		if candidate.Before(searchStart) {
 			candidate = addUnit(event.From, int(event.Repeat.Interval), Year)
+			cycles++
 		}
-		return candidate
+		return candidate, cycles
 	default:
-		return event.From
+		return event.From, -1
 	}
 }
 
