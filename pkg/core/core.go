@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -327,7 +328,55 @@ func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
 	}
-	// TODO
+
+	// real event, must be deleted entirely
+	if event.MasterId == uuid.Nil {
+		delete(c.events, event.Id)
+
+		eventEnd := event.To
+		if event.Repeat != nil {
+			eventEnd = event.Repeat.Until
+			if event.Repeat.Count >= 1 {
+				eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+			}
+		}
+		ids, found := c.eventTree.Find(event.From, eventEnd)
+		if !found {
+			return fmt.Errorf("event not found")
+		}
+		index := slices.Index(ids, event.Id)
+		if index != -1 {
+			updated := slices.Delete(ids, index, index+1)
+			if len(updated) == 0 {
+				if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
+					return fmt.Errorf("failed to delete tree node: %w", err)
+				}
+			} else {
+				if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+					return fmt.Errorf("failed to reinsert node into tree: %w", err)
+				}
+			}
+			return fmt.Errorf("event not found")
+		}
+		return nil
+	}
+
+	// generated repeating event, must be added to repeat exceptions
+	if event.Repeat == nil && event.MasterId != uuid.Nil {
+		masterEvent := c.events[event.MasterId]
+		if masterEvent == nil || masterEvent.Repeat == nil {
+			return fmt.Errorf("master event not found")
+		}
+		// add date to exceptions
+		if !slices.Contains(masterEvent.Repeat.Exceptions, event.From) {
+			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, event.From)
+			// TODO safe to disk
+		}
+		if c.events[event.Id] != nil {
+			delete(c.events, event.Id)
+		}
+		return nil
+	}
 	return nil
 }
 

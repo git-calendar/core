@@ -226,3 +226,96 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
 }
+
+func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.Initialize()
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	numEvents := 5
+	events := make([]core.Event, numEvents)
+	for i := range numEvents {
+		id := uuid.New()
+		from := date.AddDate(0, 0, i)
+		to := date.AddDate(0, 0, i).Add(time.Hour)
+		eventIn := core.Event{
+			Id:     id,
+			Title:  "Event" + strconv.Itoa(i),
+			From:   from,
+			To:     to,
+			Repeat: nil,
+		}
+		events[i] = eventIn
+		_, err = a.CreateEvent(eventIn)
+		if err != nil {
+			t.Errorf("failed to create an event: %v", err)
+		}
+	}
+	eventsOut, err := a.GetEvents(date, date.AddDate(0, 1, 0))
+	if err != nil {
+		t.Errorf("failed to get events: %v", err)
+	}
+
+	if len(eventsOut) != numEvents {
+		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
+		t.Errorf("eventsOut: %v", eventsOut)
+	}
+
+	a.RemoveEvent(events[0])
+	eventsOut, err = a.GetEvents(date, date.AddDate(0, 1, 0))
+	if err != nil {
+		t.Errorf("failed to get events: %v", err)
+	}
+
+	if len(eventsOut) != numEvents-1 {
+		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
+		t.Errorf("eventsOut: %v", eventsOut)
+	}
+}
+
+func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.Initialize()
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	numEvents := 5
+	events := make([]core.Event, numEvents)
+	for i := range numEvents {
+		id := uuid.New()
+		from := date.AddDate(0, 0, 1)
+		to := date.AddDate(0, 0, 1).Add(time.Hour)
+		eventIn := core.Event{
+			Id:     id,
+			Title:  "Event" + strconv.Itoa(i),
+			From:   from,
+			To:     to,
+			Repeat: nil,
+		}
+		events[i] = eventIn
+		_, err = a.CreateEvent(eventIn)
+		if err != nil {
+			t.Errorf("failed to create an event: %v", err)
+		}
+	}
+
+	for i := range events {
+		a.RemoveEvent(events[i])
+	}
+	eventsOut, err := a.GetEvents(date, date.AddDate(0, 1, 0))
+	if err != nil {
+		t.Errorf("failed to get events: %v", err)
+	}
+
+	if len(eventsOut) != 0 {
+		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), 0)
+		t.Errorf("eventsOut: %v", eventsOut)
+	}
+}
