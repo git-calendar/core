@@ -9,7 +9,7 @@ import (
 )
 
 type Event struct {
-	Id          uuid.UUID   `json:"id"` // shouldn't change (different id = different event)
+	Id          uuid.UUID   `json:"id"` // use UUIDv4; shouldn't change (different id = different event)
 	Title       string      `json:"title"`
 	Location    string      `json:"location"`
 	Description string      `json:"description"`
@@ -28,6 +28,9 @@ type Repetition struct {
 }
 
 func (e *Event) Validate() error {
+	if e == nil {
+		return nil
+	}
 	if e.Id != uuid.Nil { // if id is set
 		if e.Id.Version() != 4 { // enforce version
 			return errors.New("unsupported UUID version")
@@ -35,7 +38,6 @@ func (e *Event) Validate() error {
 	} else { // if id is unset
 		e.Id = uuid.New() // create one if not specified
 	}
-
 	if e.Title == "" {
 		return errors.New("event title cannot be empty")
 	}
