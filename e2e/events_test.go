@@ -385,3 +385,54 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	}
 	t.Logf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 }
+
+func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.Initialize()
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+	from := time.Now()
+	to := from.Add(1 * time.Hour)
+	id := uuid.New()
+	eventIn := core.Event{
+		Id:    id,
+		Title: "Event To Delete",
+		From:  from,
+		To:    to,
+	}
+
+	_, err = a.CreateEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to create an event: %v", err)
+	}
+
+	out, err := a.GetEvent(id)
+	if err != nil || out == nil {
+		t.Errorf("failed to get an event by id: %v", err)
+	}
+	if out.Id != id {
+		t.Errorf("id should be %s, got %s", id, out.Id)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	filePath := path.Join(home, filesystem.RepoDirName, core.EventsDirName, fmt.Sprintf("%s.json", id))
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("file should exist before deletion")
+	}
+
+	err = a.RemoveEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to remove event: %v", err)
+	}
+
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Errorf("file was not deleted: %s", filePath)
+	}
+}
