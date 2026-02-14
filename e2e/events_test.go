@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -318,4 +319,69 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), 0)
 		t.Errorf("eventsOut: %v", eventsOut)
 	}
+}
+
+func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.Initialize()
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	const COUNT = 6
+	id := uuid.New()
+	startTime := time.Now()
+	eventIn := core.Event{
+		Id:    id,
+		Title: "Repeating Event",
+		From:  startTime,
+		To:    startTime.Add(time.Hour * 4),
+		Repeat: &core.Repetition{
+			Frequency: core.Week,
+			Interval:  1,
+			Count:     COUNT,
+			Until:     time.Time{},
+		},
+	}
+	_, err = a.CreateEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to create an event: %v", err)
+	}
+
+	eventOut, err := a.GetEvent(id)
+	if err != nil {
+		t.Errorf("failed to get an event by id: %v", err)
+	}
+	if !reflect.DeepEqual(eventIn, *eventOut) {
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+	}
+
+	queryFrom := time.Now().AddDate(0, 0, 6)
+	queryTo := queryFrom.AddDate(0, 2, 0)
+	eventsOut, err := a.GetEvents(queryFrom, queryTo)
+	if err != nil {
+		t.Errorf("failed to get an events by interval: %v", err)
+	}
+
+	if len(eventsOut) != COUNT {
+		t.Errorf("not all events were generated: %v", err)
+		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+	}
+	eventToRemove := eventsOut[0]
+	err = a.RemoveEvent(eventToRemove)
+	if err != nil {
+		t.Errorf("failed to remove event: %v", err)
+	}
+
+	eventsOut, err = a.GetEvents(queryFrom, queryTo)
+	if err != nil {
+		t.Errorf("failed to get an events by interval: %v", err)
+	}
+
+	if len(eventsOut) != COUNT-1 && slices.Contains(eventsOut, eventToRemove) {
+		t.Errorf("event wasn't removed correctly %v", err)
+		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+	}
+	t.Logf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 }

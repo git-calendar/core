@@ -370,7 +370,7 @@ func (c *Core) RemoveEvent(event Event) error {
 		// add date to exceptions
 		if !slices.Contains(masterEvent.Repeat.Exceptions, event.From) {
 			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, event.From)
-			// TODO safe to disk
+			// TODO save to disk
 		}
 		if c.events[event.Id] != nil {
 			delete(c.events, event.Id)
