@@ -3,25 +3,25 @@
 - [ ] core funtionality
   - [ ] storage format
   - [x] indexing
-      - interval-btree?
+    - interval-btree?
   - [x] repeating events
-      - infinite shadow (ghost events)
+    - infinite shadow (ghost events)
   - [ ] config file
-      - tags
+    - tags
   - [ ] better tests
 - [ ] iCalendar compatibility
   - [ ] import (periodical & one-time)
   - [ ] export
-      - to a file
-      - idk about url
-          - github-pages?
-          - custom http file server?
+    - to a file
+    - idk about url
+      - github-pages?
+      - custom http file server?
 - [ ] encryption
   - [ ] storing a key (in opfs?)
   - values-only
   - deterministic? (same input <=> same output)
-      - +good git diffs
-      - -patterns across files can be found
+    - +good git diffs
+    - -patterns across files can be found
 - [ ] local notifications (managed by client)
   - core has some method like "fetch" for polling (15/30 min interval)
   - -push notifications (almost instant) need a backend
@@ -66,6 +66,7 @@
     ```
 
 #### Workflow:
+
 1. pull changes to disk (FileSystem) (should work all right with this approach)
 2. decrypt data (using a key stored somewhere) to a separate folder on disk
 3. make changes
