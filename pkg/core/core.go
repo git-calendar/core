@@ -34,7 +34,7 @@ type Core struct {
 	proxyUrl  *url.URL
 }
 
-// A "constructor" for CoreApi.
+// A "constructor" for Core.
 func NewCore() *Core {
 	var c Core
 
@@ -265,6 +265,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	if event.MasterId == uuid.Nil {
 		delete(c.events, event.Id)
 
+		// find last slave and its To
 		eventEnd := event.To
 		if event.Repeat != nil {
 			eventEnd = event.Repeat.Until
@@ -272,36 +273,51 @@ func (c *Core) RemoveEvent(event Event) error {
 				eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
 			}
 		}
+
+		// get the full interval
 		ids, found := c.eventTree.Find(event.From, eventEnd)
 		if !found {
 			return fmt.Errorf("event not found in search tree")
 		}
+
+		// find index of our event
 		index := slices.Index(ids, event.Id)
-		if index != -1 {
-			updated := slices.Delete(ids, index, index+1)
-			if len(updated) == 0 {
-				if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
-					return fmt.Errorf("failed to delete tree node: %w", err)
-				}
-			} else {
-				if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
-					return fmt.Errorf("failed to reinsert node into tree: %w", err)
-				}
+		if index == -1 {
+			return errors.New("")
+		}
+
+		// delete event from interval
+		updated := slices.Delete(ids, index, index+1)
+
+		if len(updated) == 0 { // interval now empty -> delete from tree
+			if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
+				return fmt.Errorf("failed to delete tree node: %w", err)
 			}
-			err := c.deleteEventFromRepo(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
-			if err != nil {
-				return fmt.Errorf("failed to delete event: %w", err)
+		} else { // not empty -> overwrite
+			if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+				return fmt.Errorf("failed to reinsert node into tree: %w", err)
 			}
 		}
+
+		// delete file from disk + git
+		err := c.deleteEventFromRepo(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
+		if err != nil {
+			return fmt.Errorf("failed to delete event: %w", err)
+		}
+
 		return nil
 	}
 
 	// generated repeating event, must be added to repeat exceptions
 	if event.Repeat == nil && event.MasterId != uuid.Nil {
+		delete(c.events, event.Id)
+
+		// get master event
 		masterEvent := c.events[event.MasterId]
 		if masterEvent == nil || masterEvent.Repeat == nil {
 			return fmt.Errorf("master event not found")
 		}
+
 		// add date to exceptions
 		if !slices.Contains(masterEvent.Repeat.Exceptions, event.From) {
 			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, event.From)
@@ -310,12 +326,11 @@ func (c *Core) RemoveEvent(event Event) error {
 				return fmt.Errorf("failed to save event to repo: %w", err)
 			}
 		}
-		if c.events[event.Id] != nil {
-			delete(c.events, event.Id)
-		}
+
 		return nil
 	}
-	return nil
+
+	return errors.New("something went wrong, event was not removed")
 }
 
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
@@ -346,10 +361,9 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 			}
 
 			duration := curEvent.To.Sub(curEvent.From)
-			//tmpEventTime := getFirstCandidate(curEvent.From, from, curEvent.Repeat.Frequency)
-			tmpEventTime, index := getFirstCandidate2(from, curEvent)
+			tmpEventTime, index := getFirstCandidate(from, curEvent)
 
-			for tmpEventTime.Before(to) /* while generated event fits in the wanted interval */ {
+			for tmpEventTime.Before(to) { // while generated event fits in the wanted interval
 				if tmpEventTime.Add(duration).Before(from) { // if the generated event ends before our wanted interval -> skip
 					tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
 					continue
@@ -517,7 +531,6 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 			When:  time.Now(),
 		},
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to git commit: %w", err)
 	}

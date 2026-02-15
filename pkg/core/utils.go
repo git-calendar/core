@@ -19,7 +19,7 @@ func addUnit(t time.Time, value int, unit TimeUnit) time.Time {
 	}
 }
 
-func getFirstCandidate2(searchStart time.Time, event *Event) (time.Time, int) {
+func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
 	switch event.Repeat.Frequency {
 	case Day:
 		diffHours := searchStart.Sub(event.From).Hours()
