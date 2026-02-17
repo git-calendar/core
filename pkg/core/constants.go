@@ -20,3 +20,15 @@ const (
 func (t TimeUnit) IsValid() bool {
 	return t >= Day && t <= Year
 }
+
+type UpdateOption int
+
+const (
+	Current UpdateOption = iota
+	Following
+	All
+)
+
+func (opt UpdateOption) IsValid() bool {
+	return opt >= Current && opt <= All
+}

@@ -149,7 +149,7 @@ func (c *Core) Clone(repoUrl string) error {
 func (c *Core) AddRemote(name, remoteUrl string) error {
 	var validUrl string
 	{
-		// validate URL (git doesnt do that when adding a remote, it fails afterwards with e.g. git fetch)
+		// validate URL (git doesn't do that when adding a remote, it fails afterwards with e.g. git fetch)
 		u := strings.TrimSuffix(remoteUrl, "/") // remove trailing "/"
 		if !strings.HasSuffix(u, ".git") {
 			return errors.New("remote url doesn't end with '.git'")
@@ -228,30 +228,13 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 	return &event, nil
 }
 
-func (c *Core) UpdateEvent(event Event) (*Event, error) {
+func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
-	// TODO
+	// TODO update normal event
 
-	// var e Event
-	// err := json.Unmarshal([]byte(eventJson), &e)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to parse event json: %w", err)
-	// }
-
-	// if err := e.Validate(); err != nil {
-	// 	return fmt.Errorf("invalid event data: %w", err)
-	// }
-
-	// // check if it exists
-	// _, ok := a.events[e.Id]
-	// if !ok {
-	// 	return fmt.Errorf("event with this id doesnt exist")
-	// }
-
-	// // replace the pointer
-	// a.events[e.Id] = &e
+	// TODO update repeating event
 
 	return nil, nil
 }
@@ -389,7 +372,7 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 				}
 				result = append(result, generatedEvent)
 
-				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurance
+				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
 			}
 		}
 	}

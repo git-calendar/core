@@ -1,11 +1,13 @@
 ### TODO
 
-- [ ] core funtionality
+- [ ] core functionality
   - [ ] storage format
   - [x] indexing
     - interval-btree?
   - [x] repeating events
     - infinite shadow (ghost events)
+  - [ ] connect repeating event exceptions
+    - exception needs to have uuid and time 
   - [ ] config file
     - tags
   - [ ] better tests
