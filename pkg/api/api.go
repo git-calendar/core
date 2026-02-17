@@ -46,7 +46,17 @@ func (a *Api) CreateEvent(eventJson string) (string, error) {
 }
 
 func (a *Api) UpdateEvent(eventJson string) (string, error) {
-	return returnJsonEventAndError(eventJson, a.inner.UpdateEvent)
+	wrapper := func(e core.Event) (*core.Event, error) {
+		return a.inner.UpdateEvent(e)
+	}
+	return returnJsonEventAndError(eventJson, wrapper)
+}
+
+func (a *Api) UpdateEventWithStrategy(eventJson string, strategy string) (string, error) {
+	wrapper := func(e core.Event) (*core.Event, error) {
+		return a.inner.UpdateEvent(e, core.ParseUpdateOption(strategy))
+	}
+	return returnJsonEventAndError(eventJson, wrapper)
 }
 
 func (a *Api) RemoveEvent(eventJson string) error {
