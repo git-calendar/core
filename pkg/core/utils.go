@@ -2,6 +2,8 @@ package core
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func addUnit(t time.Time, value int, unit TimeUnit) time.Time {
@@ -56,4 +58,26 @@ func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
 	default:
 		return event.From, -1
 	}
+}
+
+func containsId(array []Exception, id uuid.UUID) bool {
+	for _, element := range array {
+		if element.Id == id {
+			return true
+		}
+	}
+	return false
+}
+
+func containsTime(array []Exception, t time.Time) bool {
+	for _, element := range array {
+		if element.Time == t {
+			return true
+		}
+	}
+	return false
+}
+
+func isGeneratedEvent(event Event) bool {
+	return event.MasterId == uuid.Nil
 }

@@ -15,9 +15,14 @@ type Event struct {
 }
 
 type Repetition struct {
-	Frequency  int    `json:"frequency"`
-	Interval   int    `json:"interval"`
-	Until      string `json:"until"`
-	Count      int    `json:"count"`
-	Exceptions string `json:"exceptions"`
+	Frequency  int        `json:"frequency"`
+	Interval   int        `json:"interval"`
+	Until      string     `json:"until"`
+	Count      int        `json:"count"`
+	Exceptions *Exception `json:"exceptions"`
+}
+
+type Exception struct {
+	Id   string `json:"id"`
+	Time string `json:"time"`
 }

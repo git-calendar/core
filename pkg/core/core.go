@@ -232,11 +232,23 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
-	// TODO update normal event
-
-	// TODO update repeating event
-
-	return nil, nil
+	originalEvent, exists := c.events[event.Id]
+	if !exists || isGeneratedEvent(event) { // generated instance of repeating event
+		if len(opts) != 1 || !opts[0].IsValid() {
+			return nil, fmt.Errorf("invalid update event: incorrect options provided")
+		}
+		// TODO add logic for updating generated events
+	} else if exists {
+		if originalEvent.MasterId != uuid.Nil { // event exists and it is child of repeating one
+			// TODO add logic for repeating events
+		}
+		c.events[event.Id] = &event
+		if err := c.saveEventToRepo(&event, fmt.Sprintf("Updated event %s", event.Title)); err != nil {
+			return nil, err
+		}
+		return &event, nil
+	}
+	return nil, fmt.Errorf("no event found with id '%s'", event.Id)
 }
 
 func (c *Core) RemoveEvent(event Event) error {
@@ -302,8 +314,9 @@ func (c *Core) RemoveEvent(event Event) error {
 		}
 
 		// add date to exceptions
-		if !slices.Contains(masterEvent.Repeat.Exceptions, event.From) {
-			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, event.From)
+		if !containsTime(masterEvent.Repeat.Exceptions, event.From) {
+			exception := Exception{event.Id, event.From}
+			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, exception)
 			err := c.saveEventToRepo(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
 			if err != nil {
 				return fmt.Errorf("failed to save event to repo: %w", err)
@@ -359,6 +372,7 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 				if curEvent.Repeat.Count != -1 && index >= curEvent.Repeat.Count {
 					break // new event exceeded the max count of generated events
 				}
+
 				index++
 				generatedEvent := Event{
 					Id:          uuid.New(),
@@ -370,8 +384,10 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 					MasterId:    curEvent.Id,
 					Repeat:      nil,
 				}
-				result = append(result, generatedEvent)
-
+				// ignore exceptions
+				if !containsTime(curEvent.Repeat.Exceptions, tmpEventTime) {
+					result = append(result, generatedEvent)
+				}
 				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
 			}
 		}

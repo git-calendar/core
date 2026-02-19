@@ -24,7 +24,12 @@ type Repetition struct {
 	Interval   int         `json:"interval"`   // 1..N (freq:Weekly + interval:2 => every other week)
 	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
 	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
-	Exceptions []time.Time `json:"exceptions"` // an array of slaves "From" timestamps
+	Exceptions []Exception `json:"exceptions"` // an array of slaves "From" timestamps
+}
+
+type Exception struct {
+	Id   uuid.UUID `json:"id"`
+	Time time.Time `json:"time"`
 }
 
 func (e *Event) Validate() error {
