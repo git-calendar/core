@@ -9,11 +9,11 @@ BUILD_DIR := ./build
 all: build_android build_ios build_web
 
 build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./pkg/bridge
+	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./pkg/api
 
 # requires Xcode installed (mac only)
 #build_ios: create_build_dir
-# 	gomobile bind -target=ios ./pkg/bridge # TODO
+# 	gomobile bind -target=ios ./pkg/api # TODO
 
 build_web: create_build_dir
 	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm     # build the wasm
@@ -28,7 +28,7 @@ build_web: create_build_dir
 prod: production_build_android production_build_web
 
 production_build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./pkg/bridge
+	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./pkg/api
 
 production_build_web: create_build_dir
 	GOOS=js GOARCH=wasm go build -ldflags="-w -s" -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm  # build the wasm
