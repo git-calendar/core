@@ -71,7 +71,7 @@ func containsId(array []Exception, id uuid.UUID) bool {
 
 func containsTime(array []Exception, t time.Time) bool {
 	for _, element := range array {
-		if element.Time == t {
+		if element.Time.Equal(t) {
 			return true
 		}
 	}
@@ -79,5 +79,5 @@ func containsTime(array []Exception, t time.Time) bool {
 }
 
 func isGeneratedEvent(event Event) bool {
-	return event.MasterId == uuid.Nil
+	return event.MasterId != uuid.Nil
 }
