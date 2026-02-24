@@ -174,7 +174,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to get an events by interval: %v", err)
 	}
-	if len(eventsOut) != 4 {
+	if !(len(eventsOut) == 4 || len(eventsOut) == 5) { // can fit 5 weeks
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}

@@ -35,11 +35,19 @@
 ### Repo Structure (prototype)
 
 ```
-.git-calendar-data
-├── events
-│   └── <UUID>.json
-├── index.jsonl
-└── index-rich.jsonl
+.git-calendar-data/
+├── main/
+│   ├── .git/ 
+│   ├── events/
+│   │   └── <UUID>.json
+│   ├── index.jsonl
+│   └── index-rich.jsonl
+└── shared/
+    ├── .git/
+    ├── events/
+    │   └── <UUID>.json
+    ├── index.jsonl
+    └── index-rich.jsonl
 ```
 
 ### Encryption
