@@ -96,6 +96,18 @@ func (c *Core) Initialize() error {
 	return c.setupInitialRepoStructure()
 }
 
+func (c *Core) CreateCalendar(name string) error {
+	// TODO init variables
+	// TODO create folder with git
+	return nil
+}
+
+func (c *Core) LoadCalendars() error {
+	// TODO init variables
+	// TODO load calendar one by one
+	return nil
+}
+
 func (c *Core) Clone(repoUrl string) error {
 	if c.repo != nil {
 		return errors.New("repo already exists")
@@ -237,10 +249,31 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 		if len(opts) != 1 || !opts[0].IsValid() {
 			return nil, fmt.Errorf("invalid update event: incorrect options provided")
 		}
-		// TODO add logic for updating generated events
-	} else if exists {
+		switch opts[0] {
+		case Current:
+			master := c.events[event.MasterId]
+			if master == nil || master.Repeat == nil {
+				return nil, fmt.Errorf("invalid update event: no valid master found")
+			}
+			exception := Exception{event.Id, event.From}
+			master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
+			c.events[event.Id] = &event
+			return &event, nil
+		case All:
+			master := c.events[event.MasterId]
+			if master == nil || master.Repeat == nil {
+				return nil, fmt.Errorf("invalid update event: no valid master found")
+			}
+			// TODO update the master somehow (problem is when updating the repetition)
+			return nil, fmt.Errorf("not implemented")
+		case Following:
+			// TODO update only following (create new repeating event with new properties)
+			return nil, fmt.Errorf("not implemented")
+		}
+	} else {
 		if originalEvent.MasterId != uuid.Nil { // event exists and it is child of repeating one
 			// TODO add logic for repeating events
+			// TODO if time/from changed change shift exceptions
 		}
 		c.events[event.Id] = &event
 		if err := c.saveEventToRepo(&event, fmt.Sprintf("Updated event %s", event.Title)); err != nil {
@@ -382,7 +415,7 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 					From:        tmpEventTime,
 					To:          tmpEventTime.Add(duration),
 					MasterId:    curEvent.Id,
-					Repeat:      nil,
+					Repeat:      nil, // TODO send the repeat struct
 				}
 				// ignore exceptions
 				if !containsTime(curEvent.Repeat.Exceptions, tmpEventTime) {
