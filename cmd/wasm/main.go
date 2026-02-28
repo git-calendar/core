@@ -20,19 +20,24 @@ func main() {
 func RegisterCallbacks(api *api.Api) {
 	js.Global().Set("CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
-			"initialize": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"createCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.Initialize()
+					return nil, api.CreateCalendar(args[0].String())
 				})
 			}),
-			"clone": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"cloneCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.Clone(args[0].String())
+					return nil, api.CloneCalendar(args[0].String(), args[1].String())
 				})
 			}),
-			"delete": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"removeCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.Delete()
+					return nil, api.RemoveCalendar(args[0].String())
+				})
+			}),
+			"listCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.ListCalendars()
 				})
 			}),
 			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {

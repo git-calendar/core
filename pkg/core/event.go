@@ -15,6 +15,7 @@ type Event struct {
 	Description string      `json:"description"`
 	From        time.Time   `json:"from"`
 	To          time.Time   `json:"to"`
+	Calendar    string      `json:"calendar"`
 	Tag         string      `json:"tag"`
 	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if master
 	Repeat      *Repetition `json:"repeat"`    // nil if slave

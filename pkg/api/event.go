@@ -10,6 +10,7 @@ type Event struct {
 	Description string      `json:"description"`
 	From        string      `json:"from"` // RFC3339 format e.g. 2009-11-10T23:00:00Z (the default format for json.Marshal() when it comes to time.Time)
 	To          string      `json:"to"`   // RFC3339 format e.g. 2009-11-10T23:00:00Z (the default format for json.Marshal() when it comes to time.Time)
+	Calendar    string      `json:"calendar"`
 	Tag         string      `json:"tag"`
 	MasterId    string      `json:"masterId"`
 	Repeat      *Repetition `json:"repeat"`

@@ -34,13 +34,23 @@ func NewApi() *Api {
 }
 
 // -------------------------- Boring methods that do not need any json parsing etc. -------------------------
-func (a *Api) Initialize() error                      { return a.inner.Initialize() }
-func (a *Api) Clone(repoUrl string) error             { return a.inner.Clone(repoUrl) }
-func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
-func (a *Api) Delete() error                          { return a.inner.Delete() }
-func (a *Api) SetCorsProxy(proxyUrl string) error     { return a.inner.SetCorsProxy(proxyUrl) }
+// func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
+func (a *Api) CloneCalendar(name, repoUrl string) error { return a.inner.CloneCalendar(name, repoUrl) }
+func (a *Api) CreateCalendar(name string) error         { return a.inner.CreateCalendar(name) }
+func (a *Api) RemoveCalendar(name string) error         { return a.inner.RemoveCalendar(name) }
+func (a *Api) SetCorsProxy(proxyUrl string) error       { return a.inner.SetCorsProxy(proxyUrl) }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
+
+func (a *Api) ListCalendars() (string, error) {
+	arr := a.inner.ListCalendars()
+	data, err := json.Marshal(arr)
+	if err != nil {
+		return emptyJsonArr, fmt.Errorf("failed to marshal names to json: %w", err)
+	}
+	return string(data), nil
+}
+
 func (a *Api) CreateEvent(eventJson string) (string, error) {
 	return returnJsonEventAndError(eventJson, a.inner.CreateEvent)
 }
@@ -64,7 +74,6 @@ func (a *Api) RemoveEvent(eventJson string) error {
 	if err != nil {
 		return err
 	}
-
 	return a.inner.RemoveEvent(event)
 }
 

@@ -19,17 +19,17 @@ import (
 	"github.com/go-git/go-billy/v5/helper/chroot"
 )
 
-const RepoDirName = "git-calendar-data"
+const DirName = "git-calendar-data"
 
-func GetRepoFS() (billy.Filesystem, string, error) {
+func GetFS() (billy.Filesystem, error) {
 	rootHandle := js.Global().Get("opfsRootHandle")
 	if rootHandle.IsUndefined() {
-		return nil, "", errors.New("opfsRootHandle not initialized")
+		return nil, errors.New("opfsRootHandle not initialized")
 	}
 
 	return &OPFS{
 		root: rootHandle,
-	}, RepoDirName, nil
+	}, nil
 }
 
 // Origin private file system
