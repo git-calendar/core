@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -18,20 +19,53 @@ import (
 
 // It is kinda e2e, but not entirely. TODO rethink this.
 
+const TestCalendarName = "test"
+
+func Test_CreateCalendar_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.CreateCalendar(TestCalendarName)
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	dirs, err := os.ReadDir(filepath.Join(home, filesystem.DirName))
+	if err != nil {
+		t.Errorf("failed to read event json file: %v", err)
+	}
+
+	var found bool
+	for _, d := range dirs {
+		if d.Name() == TestCalendarName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("directory not found")
+	}
+}
+
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Foo Event",
-		From:  time.Now(),
-		To:    time.Now().Add(2 * time.Hour),
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Foo Event",
+		From:     time.Now(),
+		To:       time.Now().Add(2 * time.Hour),
 	}
 
 	_, err = a.CreateEvent(eventIn)
@@ -44,7 +78,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(path.Join(home, filesystem.RepoDirName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
+	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
 	}
@@ -69,17 +103,18 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 func Test_AddEventAndGetEvent_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Foo Event",
-		From:  time.Now(),                    // right now
-		To:    time.Now().Add(2 * time.Hour), // two hours from now
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Foo Event",
+		From:     time.Now(),                    // right now
+		To:       time.Now().Add(2 * time.Hour), // two hours from now
 	}
 
 	_, err = a.CreateEvent(eventIn)
@@ -100,7 +135,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -112,11 +147,12 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 		from := date.AddDate(0, 0, i)
 		to := date.AddDate(0, 0, i).Add(time.Hour)
 		eventIn := core.Event{
-			Id:     id,
-			Title:  "Event" + strconv.Itoa(i),
-			From:   from,
-			To:     to,
-			Repeat: nil,
+			Id:       id,
+			Calendar: TestCalendarName,
+			Title:    "Event" + strconv.Itoa(i),
+			From:     from,
+			To:       to,
+			Repeat:   nil,
 		}
 		_, err = a.CreateEvent(eventIn)
 		if err != nil {
@@ -136,7 +172,7 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -144,10 +180,11 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	id := uuid.New()
 	startTime := time.Now()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Repeating Event",
-		From:  startTime,
-		To:    startTime.Add(time.Hour * 4),
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Repeating Event",
+		From:     startTime,
+		To:       startTime.Add(time.Hour * 4),
 		Repeat: &core.Repetition{
 			Frequency: core.Week,
 			Interval:  1,
@@ -183,7 +220,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -192,10 +229,11 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 	id := uuid.New()
 	startTime := time.Now()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Repeating Event",
-		From:  startTime,
-		To:    startTime.Add(time.Hour * 4),
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Repeating Event",
+		From:     startTime,
+		To:       startTime.Add(time.Hour * 4),
 		Repeat: &core.Repetition{
 			Frequency: core.Week,
 			Interval:  1,
@@ -231,7 +269,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -244,11 +282,12 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 		from := date.AddDate(0, 0, i)
 		to := date.AddDate(0, 0, i).Add(time.Hour)
 		eventIn := core.Event{
-			Id:     id,
-			Title:  "Event" + strconv.Itoa(i),
-			From:   from,
-			To:     to,
-			Repeat: nil,
+			Id:       id,
+			Calendar: TestCalendarName,
+			Title:    "Event" + strconv.Itoa(i),
+			From:     from,
+			To:       to,
+			Repeat:   nil,
 		}
 		events[i] = eventIn
 		_, err = a.CreateEvent(eventIn)
@@ -281,7 +320,7 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -294,11 +333,12 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 		from := date.AddDate(0, 0, 1)
 		to := date.AddDate(0, 0, 1).Add(time.Hour)
 		eventIn := core.Event{
-			Id:     id,
-			Title:  "Event" + strconv.Itoa(i),
-			From:   from,
-			To:     to,
-			Repeat: nil,
+			Id:       id,
+			Calendar: TestCalendarName,
+			Title:    "Event" + strconv.Itoa(i),
+			From:     from,
+			To:       to,
+			Repeat:   nil,
 		}
 		events[i] = eventIn
 		_, err = a.CreateEvent(eventIn)
@@ -324,7 +364,7 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
@@ -333,10 +373,11 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	id := uuid.New()
 	startTime := time.Now()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Repeating Event",
-		From:  startTime,
-		To:    startTime.Add(time.Hour * 4),
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Repeating Event",
+		From:     startTime,
+		To:       startTime.Add(time.Hour * 4),
 		Repeat: &core.Repetition{
 			Frequency: core.Week,
 			Interval:  1,
@@ -389,18 +430,20 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 	a := core.NewCore()
 
-	err := a.Initialize()
+	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}
+
 	from := time.Now()
 	to := from.Add(1 * time.Hour)
 	id := uuid.New()
 	eventIn := core.Event{
-		Id:    id,
-		Title: "Event To Delete",
-		From:  from,
-		To:    to,
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Event To Delete",
+		From:     from,
+		To:       to,
 	}
 
 	_, err = a.CreateEvent(eventIn)
@@ -421,10 +464,14 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	filePath := path.Join(home, filesystem.RepoDirName, core.EventsDirName, fmt.Sprintf("%s.json", id))
+	filePath := path.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id))
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		t.Errorf("file should exist before deletion")
+	if _, err := os.Stat(filePath); err != nil {
+		if os.IsNotExist(err) {
+			t.Errorf("file should exist before deletion")
+		} else {
+			t.Error(err)
+		}
 	}
 
 	err = a.RemoveEvent(eventIn)
