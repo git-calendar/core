@@ -2,17 +2,17 @@
 
 - [ ] core functionality
   - [ ] storage format
-  - [x] indexing
-    - interval-btree?
+  - [ ] indexing
+    - [x] interval-btree?
+    - [ ] smart indexing (index file)
   - [x] repeating events
     - infinite shadow (ghost events)
   - [x] connect repeating event exceptions
     - exception needs to have uuid and time
-  - [ ] config file
+  - [ ] config file per repo
     - tags
   - [ ] better tests
-  - [ ] smart indexing (index file)
-  - [ ] load repository
+  - [ ] load repositories
 - [ ] iCalendar compatibility
   - [ ] import (periodical & one-time)
   - [ ] export

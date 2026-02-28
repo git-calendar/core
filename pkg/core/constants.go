@@ -7,19 +7,18 @@ const (
 	RichIndexFileName string = "index-rich.json"
 
 	EventsDirName string = "events"
-	// GroupsDirName string = "groups"
 )
 
-type TimeUnit int
+type Freq int
 
 const (
-	Day TimeUnit = iota
+	Day Freq = iota
 	Week
 	Month
 	Year
 )
 
-func (t TimeUnit) IsValid() bool {
+func (t Freq) IsValid() bool {
 	return t >= Day && t <= Year
 }
 

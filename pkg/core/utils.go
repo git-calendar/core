@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func addUnit(t time.Time, value int, unit TimeUnit) time.Time {
+func addUnit(t time.Time, value int, unit Freq) time.Time {
 	switch unit {
 	case Day:
 		return t.AddDate(0, 0, value)
@@ -60,18 +60,18 @@ func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
 	}
 }
 
-func containsId(array []Exception, id uuid.UUID) bool {
-	for _, element := range array {
-		if element.Id == id {
+func containsId(exceptions []Exception, id uuid.UUID) bool {
+	for _, ex := range exceptions {
+		if ex.Id == id {
 			return true
 		}
 	}
 	return false
 }
 
-func containsTime(array []Exception, t time.Time) bool {
-	for _, element := range array {
-		if element.Time.Equal(t) {
+func containsTime(exceptions []Exception, t time.Time) bool {
+	for _, ex := range exceptions {
+		if ex.Time.Equal(t) {
 			return true
 		}
 	}

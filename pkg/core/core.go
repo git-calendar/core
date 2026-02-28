@@ -27,7 +27,7 @@ import (
 //
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
-	eventTree *interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events ([time.Time, time.Time] -> []uuid.UUID)
+	eventTree *interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events ({time.Time, time.Time} -> []uuid.UUID)
 	events    map[uuid.UUID]*Event
 	repos     map[string]*gogit.Repository
 	// tags      map[string][]string // might not be needed to "cache" it like this
@@ -124,7 +124,7 @@ func (c *Core) CloneCalendar(name, repoUrl string) error {
 
 	// clone now
 	c.repos[name], err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
-		RemoteName: "github",
+		RemoteName: "origin",
 		URL:        finalRepoUrl,
 	})
 	if err != nil {
@@ -338,16 +338,23 @@ func (c *Core) RemoveEvent(event Event) error {
 			return fmt.Errorf("master event not found")
 		}
 
-		// add date to exceptions
+		// if exception doesn't exist yet
 		if !containsTime(masterEvent.Repeat.Exceptions, event.From) {
-			exception := Exception{event.Id, event.From}
-			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, exception)
+			// add date to master exceptions
+			newException := Exception{
+				event.Id,
+				event.From,
+			}
+			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
+
+			// update/overwrite the file in repo
 			err := c.saveEventToRepo(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
 			if err != nil {
 				return fmt.Errorf("failed to save event to repo: %w", err)
 			}
 		}
-		delete(c.events, event.Id)
+
+		delete(c.events, event.Id) // TODO is this needed? It's no-op, but can there be a generated event in events?
 		return nil
 	}
 
@@ -421,16 +428,35 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 	return result, nil
 }
 
-func (c *Core) Sync() error {
-	// TODO
+func (c *Core) PushAll() error {
+	// TODO idk if it works
 
 	var err error
 	for _, repo := range c.repos {
-		errx := repo.Push(
-			&gogit.PushOptions{},
-		)
+		errx := repo.Push(&gogit.PushOptions{})
 		if errx == gogit.NoErrAlreadyUpToDate {
-			continue // ok
+			continue // this is ok
+		}
+		if errx != nil {
+			err = errors.Join(errx)
+		}
+	}
+	return err
+}
+
+func (c *Core) PullAll() error {
+	// TODO idk if it works
+
+	var err error
+	for _, repo := range c.repos {
+		wt, errx := repo.Worktree()
+		if errx != nil || wt == nil { // only fails if repo is bare which should not happen ever haha
+			continue
+		}
+
+		errx = wt.Pull(&gogit.PullOptions{})
+		if errx == gogit.NoErrAlreadyUpToDate {
+			continue // this is ok
 		}
 		if errx != nil {
 			err = errors.Join(errx)
@@ -474,7 +500,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 		return nil, err
 	}
 
-	err = c.setupInitialRepoStructure()
+	err = c.setupInitialDirStructure()
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup initial repo structure: %w", err)
 	}
@@ -483,7 +509,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 }
 
 // Helper function to setup the initial "events" folder etc.
-func (c *Core) setupInitialRepoStructure() error {
+func (c *Core) setupInitialDirStructure() error {
 	// TODO
 
 	// eventsDirPath := filepath.Join(a.repoPath, EventsDirName)

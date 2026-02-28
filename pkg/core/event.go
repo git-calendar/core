@@ -22,7 +22,7 @@ type Event struct {
 }
 
 type Repetition struct {
-	Frequency  TimeUnit    `json:"frequency"`  // Daily, Weekly, ... (None if master)
+	Frequency  Freq        `json:"frequency"`  // Daily, Weekly, ... (None if master)
 	Interval   int         `json:"interval"`   // 1..N (freq:Weekly + interval:2 => every other week)
 	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
 	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
