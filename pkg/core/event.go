@@ -60,22 +60,37 @@ func (e *Event) Validate() error {
 	return nil
 }
 
-func (e *Repetition) Validate() error {
-	if e == nil {
+func (r *Repetition) Validate() error {
+	if r == nil {
 		return nil
 	}
-	if !e.Frequency.IsValid() {
+	if !r.Frequency.IsValid() {
 		return errors.New("repetition frequency is invalid")
 	}
-	if e.Interval < 1 {
+	for _, ex := range r.Exceptions {
+		if ex.Validate() == nil {
+			return errors.New("repetition exceptions are not valid")
+		}
+	}
+	if r.Interval < 1 {
 		return errors.New("repetition interval is invalid")
 	}
-	if e.Until.IsZero() && e.Count < 1 {
+	if r.Until.IsZero() && r.Count < 1 {
 		return errors.New("repetition combination of Until & Count is invalid")
 	}
-	if !e.Until.IsZero() && e.Count >= 0 {
+	if !r.Until.IsZero() && r.Count >= 0 {
 		return errors.New("repetition when Until date set Count must be negative")
 	}
 
+	return nil
+}
+
+func (e *Exception) Validate() error {
+	if e == nil {
+		return nil
+	}
+	if e.Time.IsZero() {
+		return errors.New("exception time cannot be empty")
+	}
 	return nil
 }
