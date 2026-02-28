@@ -37,7 +37,7 @@
 ```
 .git-calendar-data/
 ├── main/
-│   ├── .git/ 
+│   ├── .git/
 │   ├── events/
 │   │   └── <UUID>.json
 │   ├── index.jsonl
@@ -48,6 +48,17 @@
     │   └── <UUID>.json
     ├── index.jsonl
     └── index-rich.jsonl
+```
+
+with encryption maybe:
+```
+.git-calendar-data/
+├── plain/
+│   ├── main/
+│   └── shared/
+└── encrypted/
+    ├── main/
+    └── shared/
 ```
 
 ### Encryption
