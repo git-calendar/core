@@ -252,15 +252,44 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 			}
 			exception := Exception{event.Id, event.From}
 			master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
+			event.Repeat = nil
 			c.events[event.Id] = &event
+			// -------- insert into tree --------
+			eventEnd := event.To
+			ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
+			updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
+			err := c.eventTree.Insert(event.From, eventEnd, updated)
+			if err != nil {
+				return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+			}
 			return &event, nil
 		case All:
 			master := c.events[event.MasterId]
 			if master == nil || master.Repeat == nil {
 				return nil, fmt.Errorf("invalid update event: no valid master found")
 			}
-			// TODO update the master somehow (problem is when updating the repetition)
-			return nil, fmt.Errorf("not implemented")
+			fromChanged := event.From != master.From
+			toChanged := event.To != master.To
+			repeatChanged := event.Repeat != master.Repeat
+			if fromChanged { // shift all exceptions by the time.From difference
+				distance := event.From.Sub(master.From)
+				for _, ex := range master.Repeat.Exceptions {
+					ex.Time.Add(distance)
+				}
+			}
+			if fromChanged || toChanged || repeatChanged {
+				err := c.rebuildTreeForEvent(master, &event) // edit the tree
+				if err != nil {
+					return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
+				}
+			}
+			master = &event
+			master.MasterId = uuid.Nil
+			err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
+			if err != nil {
+				return nil, fmt.Errorf("failed to save event to repo: %w", err)
+			}
+			return master, nil
 		case Following:
 			// TODO update only following (create new repeating event with new properties)
 			return nil, fmt.Errorf("not implemented")
@@ -331,7 +360,8 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	// generated repeating event, must be added to repeat exceptions
-	if event.Repeat == nil && event.MasterId != uuid.Nil {
+	//if event.Repeat == nil && event.MasterId != uuid.Nil {
+	if event.MasterId != uuid.Nil {
 		// get master event
 		masterEvent := c.events[event.MasterId]
 		if masterEvent == nil || masterEvent.Repeat == nil {
@@ -414,7 +444,7 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 					From:        tmpEventTime,
 					To:          tmpEventTime.Add(duration),
 					MasterId:    curEvent.Id,
-					Repeat:      nil, // TODO send the repeat struct
+					Repeat:      curEvent.Repeat, // TODO send the repeat struct
 				}
 				// ignore exceptions
 				if !containsTime(curEvent.Repeat.Exceptions, tmpEventTime) {
@@ -645,5 +675,43 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 		return fmt.Errorf("failed to git commit: %w", err)
 	}
 
+	return nil
+}
+
+func (c *Core) rebuildTreeForEvent(master, updated *Event) error {
+	oldEnd := master.To
+	if master.Repeat != nil {
+		oldEnd = master.Repeat.Until
+		if master.Repeat.Count >= 1 {
+			oldEnd = addUnit(master.To, master.Repeat.Interval*master.Repeat.Count, master.Repeat.Frequency)
+		}
+	}
+
+	ids, found := c.eventTree.Find(master.From, oldEnd)
+	if found {
+		index := slices.Index(ids, master.Id)
+		if index != -1 {
+			ids = slices.Delete(ids, index, index+1)
+			if len(ids) == 0 {
+				_ = c.eventTree.Delete(master.From, oldEnd)
+			} else {
+				_ = c.eventTree.Insert(master.From, oldEnd, ids)
+			}
+		}
+	}
+
+	newEnd := updated.To
+	if updated.Repeat != nil {
+		newEnd = updated.Repeat.Until
+		if updated.Repeat.Count >= 1 {
+			newEnd = addUnit(updated.To, updated.Repeat.Interval*updated.Repeat.Count, updated.Repeat.Frequency)
+		}
+	}
+
+	newIds, _ := c.eventTree.Find(updated.From, newEnd)
+	newIds = append(newIds, master.Id) // add the master id
+	if err := c.eventTree.Insert(updated.From, newEnd, newIds); err != nil {
+		return fmt.Errorf("failed to reinsert event into tree: %w", err)
+	}
 	return nil
 }
