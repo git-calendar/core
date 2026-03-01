@@ -9,16 +9,17 @@ import (
 )
 
 type Event struct {
-	Id          uuid.UUID   `json:"id"` // use UUIDv4; shouldn't change (different id = different event)
-	Title       string      `json:"title"`
-	Location    string      `json:"location"`
-	Description string      `json:"description"`
-	From        time.Time   `json:"from"`
-	To          time.Time   `json:"to"`
-	Calendar    string      `json:"calendar"`
-	Tag         string      `json:"tag"`
-	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if master
-	Repeat      *Repetition `json:"repeat"`    // nil if slave
+	Id           uuid.UUID   `json:"id"` // use UUIDv4; shouldn't change (different id = different event)
+	Title        string      `json:"title"`
+	Location     string      `json:"location"`
+	Description  string      `json:"description"`
+	From         time.Time   `json:"from"`
+	OriginalFrom time.Time   `json:"original_from,omitempty"`
+	To           time.Time   `json:"to"`
+	Calendar     string      `json:"calendar"`
+	Tag          string      `json:"tag"`
+	MasterId     uuid.UUID   `json:"master_id"` // uuid.Nil if master
+	Repeat       *Repetition `json:"repeat"`    // nil if slave
 }
 
 type Repetition struct {

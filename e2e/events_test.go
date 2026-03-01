@@ -424,7 +424,6 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 		t.Errorf("event wasn't removed correctly %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
-	t.Logf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 }
 
 func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
@@ -481,5 +480,210 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 
 	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
 		t.Errorf("file was not deleted: %s", filePath)
+	}
+}
+
+func Test_UpdateStandardEvent_Works(t *testing.T) {
+	a := core.NewCore()
+
+	err := a.CreateCalendar(TestCalendarName)
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
+
+	id := uuid.New()
+	startTime := time.Now()
+	eventIn := core.Event{
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "Original Title",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+	}
+
+	_, err = a.CreateEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to create an event: %v", err)
+	}
+
+	eventIn.Title = "Updated Title"
+	eventIn.To = startTime.Add(2 * time.Hour)
+
+	updatedEvent, err := a.UpdateEvent(eventIn)
+	if err != nil {
+		t.Errorf("failed to update event: %v", err)
+	}
+
+	eventOut, err := a.GetEvent(id)
+	if err != nil {
+		t.Errorf("failed to get updated event: %v", err)
+	}
+
+	if eventOut.Title != "Updated Title" {
+		t.Errorf("title was not updated, got: %s", eventOut.Title)
+	}
+	if !eventOut.To.Equal(updatedEvent.To) {
+		t.Errorf("time was not updated, got: %s", eventOut.To)
+	}
+}
+
+func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
+	a := core.NewCore()
+	_ = a.CreateCalendar(TestCalendarName)
+
+	masterId := uuid.New()
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	masterEvent := core.Event{
+		Id:       masterId,
+		Calendar: TestCalendarName,
+		Title:    "Daily event",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+		Repeat: &core.Repetition{
+			Frequency: core.Day,
+			Interval:  1,
+			Count:     5,
+		},
+	}
+	_, _ = a.CreateEvent(masterEvent)
+
+	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 0, 5))
+	if len(eventsOut) != 5 {
+		t.Fatalf("expected generated events, got %d", len(eventsOut))
+	}
+
+	targetEvent := eventsOut[2]
+	originalFrom := targetEvent.From
+
+	targetEvent.Title = "Daily event - update"
+	targetEvent.From = startTime.Add(time.Hour)
+	targetEvent.To = startTime.Add(time.Hour * 2)
+	targetEvent.OriginalFrom = originalFrom
+
+	_, err := a.UpdateEvent(targetEvent, core.Current)
+	if err != nil {
+		t.Errorf("failed to update generated event (Current): %v", err)
+	}
+
+	masterOut, _ := a.GetEvent(masterId)
+	foundException := false
+	for _, ex := range masterOut.Repeat.Exceptions {
+		if ex.Time.Equal(originalFrom) {
+			foundException = true
+			break
+		}
+	}
+	if !foundException {
+		t.Errorf("master event did not receive the exception for time: %s", originalFrom)
+	}
+
+	isolatedOut, err := a.GetEvent(targetEvent.Id)
+	if err != nil {
+		t.Errorf("isolated event was not created: %v", err)
+	}
+	if isolatedOut.Repeat != nil {
+		t.Errorf("isolated event should not have a repeat struct")
+	}
+}
+
+func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
+	a := core.NewCore()
+	_ = a.CreateCalendar(TestCalendarName)
+
+	masterId := uuid.New()
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	masterEvent := core.Event{
+		Id:       masterId,
+		Calendar: TestCalendarName,
+		Title:    "Daily Meeting",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+		Repeat: &core.Repetition{
+			Frequency: core.Day,
+			Interval:  1,
+			Until:     startTime.AddDate(0, 1, 0),
+			Count:     -1,
+		},
+	}
+	_, _ = a.CreateEvent(masterEvent)
+
+	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 0, 21))
+	targetEvent := eventsOut[2]
+	originalFrom := targetEvent.From
+	targetEvent.Title = "Weekly Meeting - New Phase"
+	targetEvent.Repeat = &core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Until:     startTime.AddDate(0, 1, 0),
+		Count:     -1,
+	}
+	_, err := a.UpdateEvent(targetEvent, core.Following)
+	if err != nil {
+		t.Errorf("failed to update generated event (Following): %v", err)
+	}
+
+	masterOut, _ := a.GetEvent(masterId)
+	if !masterOut.Repeat.Until.Equal(originalFrom) {
+		t.Errorf("master event Until was not capped correctly. Expected %s, got %s", originalFrom, masterOut.Repeat.Until)
+	}
+	if masterOut.Repeat.Count != -1 {
+		t.Errorf("master event Count should be overridden to -1, got %d", masterOut.Repeat.Count)
+	}
+
+	newMasterOut, _ := a.GetEvent(targetEvent.Id)
+	if newMasterOut.MasterId != uuid.Nil {
+		t.Errorf("new event should be a master, but MasterId is %s", newMasterOut.MasterId)
+	}
+	if newMasterOut.Title != "Weekly Meeting - New Phase" {
+		t.Errorf("title not updated on new master")
+	}
+}
+
+func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
+	a := core.NewCore()
+	_ = a.CreateCalendar(TestCalendarName)
+
+	masterId := uuid.New()
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	masterEvent := core.Event{
+		Id:       masterId,
+		Calendar: TestCalendarName,
+		Title:    "Monthly Review",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+		Repeat: &core.Repetition{
+			Frequency: core.Month,
+			Interval:  1,
+			Count:     5,
+		},
+	}
+
+	_, _ = a.CreateEvent(masterEvent)
+
+	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 6, 0))
+	targetEvent := eventsOut[0]
+
+	shift := 2 * time.Hour
+	targetEvent.From = targetEvent.From.Add(shift)
+	targetEvent.To = targetEvent.To.Add(shift)
+	targetEvent.Title = "Monthly Review - Shifted"
+	targetEvent.Repeat = &core.Repetition{
+		Frequency: core.Month,
+		Interval:  1,
+		Count:     5,
+	}
+
+	_, err := a.UpdateEvent(targetEvent, core.All)
+	if err != nil {
+		t.Errorf("failed to update generated event (All): %v", err)
+	}
+
+	masterOut, _ := a.GetEvent(masterId)
+	expectedNewFrom := startTime.Add(shift)
+	if !masterOut.From.Equal(expectedNewFrom) {
+		t.Errorf("master event From was not shifted. Expected %s, got %s", expectedNewFrom, masterOut.From)
+	}
+	if masterOut.Title != "Monthly Review - Shifted" {
+		t.Errorf("master event Title was not updated")
 	}
 }
