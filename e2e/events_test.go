@@ -557,7 +557,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 
 	targetEvent.Title = "Daily event - update"
 	targetEvent.From = startTime.Add(time.Hour)
-	targetEvent.To = startTime.Add(time.Hour * 2)
+	targetEvent.To = startTime.Add(2 * time.Hour)
 	targetEvent.OriginalFrom = originalFrom
 
 	_, err := a.UpdateEvent(targetEvent, core.Current)
@@ -580,6 +580,12 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	isolatedOut, err := a.GetEvent(targetEvent.Id)
 	if err != nil {
 		t.Errorf("isolated event was not created: %v", err)
+	}
+	if !isolatedOut.From.Equal(startTime.Add(time.Hour)) {
+		t.Errorf("isolated event doesnt have the right From")
+	}
+	if !isolatedOut.To.Equal(startTime.Add(2 * time.Hour)) {
+		t.Errorf("isolated event doesnt have the right To")
 	}
 	if isolatedOut.Repeat != nil {
 		t.Errorf("isolated event should not have a repeat struct")

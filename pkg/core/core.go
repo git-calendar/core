@@ -238,137 +238,149 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
-	originalEvent, exists := c.events[event.Id]
-	if !exists { // generated event
-		if !isGeneratedEvent(event) {
-			return nil, fmt.Errorf("no event found with id '%s'", event.Id)
-		}
-		if len(opts) != 1 || !opts[0].IsValid() {
-			return nil, fmt.Errorf("invalid update event: incorrect options provided")
-		}
-		master, ok := c.events[event.MasterId]
-		if !ok || master == nil || master.Repeat == nil {
-			return nil, fmt.Errorf("invalid update event: no valid master found")
-		}
-		switch opts[0] {
-		case Current:
-			exceptionTime := event.OriginalFrom
-			if exceptionTime.IsZero() {
-				exceptionTime = event.From
-			}
-			exception := Exception{Id: event.Id, Time: exceptionTime}
-			master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
-			if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
-				return nil, fmt.Errorf("failed to save master event: %w", err)
-			}
-			event.Repeat = nil
-			c.events[event.Id] = &event
-			ids, _ := c.eventTree.Find(event.From, event.To)
-			updated := append(ids, event.Id)
-			if err := c.eventTree.Insert(event.From, event.To, updated); err != nil {
-				return nil, fmt.Errorf("failed to insert into index tree: %w", err)
-			}
-			if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Saved exception event '%s'", event.Title)); err != nil {
-				return nil, err
-			}
-			return &event, nil
-		case Following:
-			master.Repeat.Until = event.From // cap master at start of change
-			master.Repeat.Count = -1         // enforce 'Until' logic over 'Count'
-			if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
-				return nil, fmt.Errorf("failed to cap master event: %w", err)
-			}
-			// make the incoming event new Master event
-			event.MasterId = uuid.Nil
-			c.events[event.Id] = &event
-			// calculate the end of the new series for the tree
-			eventEnd := event.To
-			if event.Repeat != nil {
-				eventEnd = event.Repeat.Until
-				if event.Repeat.Count >= 1 {
-					eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-				}
-			}
-			// insert the new master into the tree
-			ids, _ := c.eventTree.Find(event.From, eventEnd)
-			updated := append(ids, event.Id)
-			if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
-				return nil, fmt.Errorf("failed to insert into index tree: %w", err)
-			}
-			if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
-				return nil, err
-			}
-			return &event, nil
-		case All:
-			fromChanged := event.From != master.From
-			toChanged := event.To != master.To
-			repeatChanged := event.Repeat != master.Repeat
-			if fromChanged { // shift all exceptions by the time difference
-				distance := event.From.Sub(master.From)
-				for i := range master.Repeat.Exceptions {
-					master.Repeat.Exceptions[i].Time = master.Repeat.Exceptions[i].Time.Add(distance)
-				}
-			}
-			if fromChanged || toChanged || repeatChanged {
-				err := c.rebuildTreeForEvent(master, &event)
-				if err != nil {
-					return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
-				}
-			}
-			master.Title = event.Title
-			master.Location = event.Location
-			master.Description = event.Description
-			master.From = event.From
-			master.To = event.To
-			master.Tag = event.Tag
-			master.Repeat = event.Repeat
 
-			if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
-				return nil, fmt.Errorf("failed to save event to repo: %w", err)
-			}
-			return master, nil
+	if isGeneratedEvent(event) { // generated event
+		return c.updateGenerated(event, opts...)
+	}
+
+	// ------- normal event or normal exception event -------
+	originalEvent, exists := c.events[event.Id]
+	if !exists {
+		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
+	}
+
+	oldEnd := originalEvent.To
+	if originalEvent.Repeat != nil { // use repeat
+		oldEnd = originalEvent.Repeat.Until
+		if originalEvent.Repeat.Count >= 1 {
+			oldEnd = addUnit(originalEvent.To, originalEvent.Repeat.Interval*originalEvent.Repeat.Count, originalEvent.Repeat.Frequency)
 		}
-	} else { // normal event, exception event
-		oldEnd := originalEvent.To
-		if originalEvent.Repeat != nil {
-			oldEnd = originalEvent.Repeat.Until
-			if originalEvent.Repeat.Count >= 1 {
-				oldEnd = addUnit(originalEvent.To, originalEvent.Repeat.Interval*originalEvent.Repeat.Count, originalEvent.Repeat.Frequency)
-			}
+	}
+	newEnd := event.To
+	if event.Repeat != nil {
+		newEnd = event.Repeat.Until
+		if event.Repeat.Count >= 1 {
+			newEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
 		}
-		newEnd := event.To
-		if event.Repeat != nil {
-			newEnd = event.Repeat.Until
-			if event.Repeat.Count >= 1 {
-				newEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-			}
-		}
-		if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
-			ids, found := c.eventTree.Find(originalEvent.From, oldEnd)
-			if found {
-				index := slices.Index(ids, originalEvent.Id)
-				if index != -1 {
-					updated := slices.Delete(ids, index, index+1)
-					if len(updated) == 0 {
-						_ = c.eventTree.Delete(originalEvent.From, oldEnd)
-					} else {
-						_ = c.eventTree.Insert(originalEvent.From, oldEnd, updated)
-					}
+	}
+	if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
+		ids, found := c.eventTree.Find(originalEvent.From, oldEnd)
+		if found {
+			index := slices.Index(ids, originalEvent.Id)
+			if index != -1 {
+				updated := slices.Delete(ids, index, index+1)
+				if len(updated) == 0 {
+					_ = c.eventTree.Delete(originalEvent.From, oldEnd)
+				} else {
+					_ = c.eventTree.Insert(originalEvent.From, oldEnd, updated)
 				}
 			}
-			newIds, _ := c.eventTree.Find(event.From, newEnd)
-			newIds = append(newIds, event.Id)
-			if err := c.eventTree.Insert(event.From, newEnd, newIds); err != nil {
-				return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
-			}
 		}
+		newIds, _ := c.eventTree.Find(event.From, newEnd)
+		newIds = append(newIds, event.Id)
+		if err := c.eventTree.Insert(event.From, newEnd, newIds); err != nil {
+			return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
+		}
+	}
+
+	c.events[event.Id] = &event
+	if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+
+// Updates generated event. Assumes that input event is already validated.
+func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error) {
+	if len(opts) != 1 || !opts[0].IsValid() {
+		return nil, fmt.Errorf("invalid update event: incorrect options provided")
+	}
+	master, ok := c.events[event.MasterId]
+	if !ok || master == nil || master.Repeat == nil {
+		return nil, fmt.Errorf("invalid update event: no valid master found")
+	}
+
+	switch opts[0] {
+	case Current:
+		exceptionTime := event.OriginalFrom
+		if exceptionTime.IsZero() {
+			exceptionTime = event.From
+		}
+		exception := Exception{Id: event.Id, Time: exceptionTime}
+		master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
+		if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
+			return nil, fmt.Errorf("failed to save master event: %w", err)
+		}
+		event.Repeat = nil
 		c.events[event.Id] = &event
-		if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
+		ids, _ := c.eventTree.Find(event.From, event.To)
+		updated := append(ids, event.Id)
+		if err := c.eventTree.Insert(event.From, event.To, updated); err != nil {
+			return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+		}
+		if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Saved exception event '%s'", event.Title)); err != nil {
 			return nil, err
 		}
 		return &event, nil
+	case Following:
+		master.Repeat.Until = event.From // cap master at start of change
+		master.Repeat.Count = -1         // enforce 'Until' logic over 'Count'
+		if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
+			return nil, fmt.Errorf("failed to cap master event: %w", err)
+		}
+		// make the incoming event new Master event
+		event.MasterId = uuid.Nil
+		c.events[event.Id] = &event
+		// calculate the end of the new series for the tree
+		eventEnd := event.To
+		if event.Repeat != nil {
+			eventEnd = event.Repeat.Until
+			if event.Repeat.Count >= 1 {
+				eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+			}
+		}
+		// insert the new master into the tree
+		ids, _ := c.eventTree.Find(event.From, eventEnd)
+		updated := append(ids, event.Id)
+		if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+			return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+		}
+		if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
+			return nil, err
+		}
+		return &event, nil
+	case All:
+		fromChanged := event.From != master.From
+		toChanged := event.To != master.To
+		repeatChanged := event.Repeat != master.Repeat
+		if fromChanged { // shift all exceptions by the time difference
+			distance := event.From.Sub(master.From)
+			for i := range master.Repeat.Exceptions {
+				master.Repeat.Exceptions[i].Time = master.Repeat.Exceptions[i].Time.Add(distance)
+			}
+		}
+		if fromChanged || toChanged || repeatChanged {
+			err := c.rebuildTreeForEvent(master, &event)
+			if err != nil {
+				return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
+			}
+		}
+		master.Title = event.Title
+		master.Location = event.Location
+		master.Description = event.Description
+		master.From = event.From
+		master.To = event.To
+		master.Tag = event.Tag
+		master.Repeat = event.Repeat
+
+		if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
+			return nil, fmt.Errorf("failed to save event to repo: %w", err)
+		}
+		return master, nil
+
+	default:
+		return nil, fmt.Errorf("update option %d isn't implemented", opts[0])
 	}
-	return nil, fmt.Errorf("something went wrong, event was not updated")
 }
 
 func (c *Core) RemoveEvent(event Event) error {
@@ -423,7 +435,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	// generated repeating event, must be added to repeat exceptions
-	//if event.Repeat == nil && event.MasterId != uuid.Nil {
+	// if event.Repeat == nil && event.MasterId != uuid.Nil {
 	if event.MasterId != uuid.Nil {
 		// get master event
 		masterEvent := c.events[event.MasterId]
