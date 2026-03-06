@@ -4,7 +4,7 @@
 
 Related projects:
 - [CORS proxy](./cmd/cors-proxy)
-- Web client: [git-calendar-web](https://github.com/firu11/git-calendar-web)
+- Web client: [git-calendar/web-client](https://github.com/git-calendar/web-client)
 
 ### Building
 For Android and IOS bindings, make sure to install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile):
