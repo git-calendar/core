@@ -53,7 +53,7 @@ jobs:
           cache: true
 
       - name: Build
-        run: make build_web # just web for now
+        run: make production_build_web # just web for now
 
       - name: Release
         uses: softprops/action-gh-release@v2
