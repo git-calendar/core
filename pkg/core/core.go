@@ -149,7 +149,7 @@ func (c *Core) CloneCalendar(name, repoUrl string) error {
 	}
 
 	// make sure that the repo dir is created
-	repoPath := filepath.Join(filesystem.DirName, name)
+	repoPath := c.fs.Join(filesystem.DirName, name)
 	if err := c.fs.MkdirAll(repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
@@ -200,7 +200,7 @@ func (c *Core) RemoveCalendar(name string) error {
 	delete(c.repos, name)
 
 	// remove from filesystem
-	err := gogitutil.RemoveAll(c.fs, name)
+	err := gogitutil.RemoveAll(c.fs, c.fs.Join(filesystem.DirName, name))
 	if err != nil {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
 	}
@@ -645,7 +645,7 @@ func (c *Core) eraseAndAlloc() {
 
 // Loads, if exists, or creates new repository with the given name.
 func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
-	repoPath := filepath.Join(filesystem.DirName, name)
+	repoPath := c.fs.Join(filesystem.DirName, name)
 
 	if err := c.fs.MkdirAll(repoPath, 0o755); err != nil {
 		return nil, fmt.Errorf("create repo dir: %w", err)
@@ -689,7 +689,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 func (c *Core) setupInitialDirStructure() error {
 	// TODO
 
-	// eventsDirPath := filepath.Join(a.repoPath, EventsDirName)
+	// eventsDirPath := c.fs.Join(a.repoPath, EventsDirName)
 	// err := a.fs.MkdirAll(eventsDirPath, 0o755)
 	// if err != nil {
 	// 	return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)
@@ -707,13 +707,13 @@ func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
 	}
 
 	// ensure events directory exists
-	dirPath := filepath.Join(filesystem.DirName, event.Calendar, EventsDirName)
+	dirPath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName)
 	if err := c.fs.MkdirAll(dirPath, 0o755); err != nil {
 		return fmt.Errorf("failed mkdir events: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s.json", event.Id)
-	filePath := filepath.Join(dirPath, filename)
+	filePath := c.fs.Join(dirPath, filename)
 
 	// create truncates/overwrites the file if it exists
 	file, err := c.fs.Create(filePath)
@@ -741,7 +741,7 @@ func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
 	}
 
 	// stage
-	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename))
+	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
 	if _, err := w.Add(gitPath); err != nil {
 		return fmt.Errorf("git add: %w", err)
 	}
@@ -770,7 +770,7 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 	filename := fmt.Sprintf("%s.json", eventId)
 
 	// -------- remove from filesystem --------
-	filePath := filepath.Join(filesystem.DirName, event.Calendar, EventsDirName, filename)
+	filePath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName, filename)
 	if err := c.fs.Remove(filePath); err != nil {
 		// TODO maybe continue, to clean the git from this file
 		return fmt.Errorf("failed to remove file from disk: %w", err)
@@ -787,7 +787,7 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	gitPath := filepath.ToSlash(filepath.Join(EventsDirName, filename))
+	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
 
 	if _, err := w.Remove(gitPath); err != nil {
 		return fmt.Errorf("git remove: %w", err)
