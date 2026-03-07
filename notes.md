@@ -50,17 +50,6 @@
     └── index-rich.jsonl
 ```
 
-with encryption maybe:
-```
-.git-calendar-data/
-├── plain/
-│   ├── main/
-│   └── shared/
-└── encrypted/
-    ├── main/
-    └── shared/
-```
-
 ### Encryption
 
 - Why?
@@ -90,8 +79,8 @@ with encryption maybe:
 
 #### Workflow:
 
-1. pull changes to disk (FileSystem) (should work all right with this approach)
-2. decrypt data (using a key stored somewhere) to a separate folder on disk
+1. pull changes to disk/fs
+2. decrypt file (using a key stored somewhere) to memory
 3. make changes
-4. encrypt repository
+4. encrypt again and save to disk/fs
 5. push to remote
