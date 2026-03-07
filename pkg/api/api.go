@@ -107,10 +107,7 @@ func (a *Api) GetEvents(from, to string) (string, error) {
 	}
 
 	// pass the args to inner api
-	events, err := a.inner.GetEvents(f, t)
-	if err != nil {
-		return emptyJsonArr, err
-	}
+	events := a.inner.GetEvents(f, t)
 
 	// marshal to json
 	jsonBytes, err := json.Marshal(events)

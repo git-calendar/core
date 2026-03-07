@@ -55,6 +55,7 @@ func NewCore() *Core {
 	return &c
 }
 
+// Creates a new calendar.
 func (c *Core) CreateCalendar(name string) error {
 	repo, err := c.initCalendarRepo(name)
 	if err != nil {
@@ -64,11 +65,13 @@ func (c *Core) CreateCalendar(name string) error {
 	return nil
 }
 
+// Returns a list of calendar names loaded.
 func (c *Core) ListCalendars() []string {
 	// TODO list tags too
 	return slices.Collect(maps.Keys(c.repos))
 }
 
+// Tries to load every directory/repo/calendar in the fs root.
 func (c *Core) LoadCalendars() error {
 	c.eraseAndAlloc()
 
@@ -134,6 +137,7 @@ func (c *Core) LoadCalendars() error {
 	return nil
 }
 
+// Clones a repository/calendar from url, using CORS proxy, if specified.
 func (c *Core) CloneCalendar(name, repoUrl string) error {
 	if _, ok := c.repos[name]; ok {
 		return errors.New("calendar with this name already exists")
@@ -185,6 +189,7 @@ func (c *Core) CloneCalendar(name, repoUrl string) error {
 	return err
 }
 
+// Removes and deletes the whole calendar.
 func (c *Core) RemoveCalendar(name string) error {
 	// remove from map
 	delete(c.repos, name)
@@ -246,6 +251,7 @@ func (c *Core) addRemote(calendar, remoteName, remoteUrl string) error {
 	return nil
 }
 
+// Sets a url for CORS proxy. This is only needed inside a browser.
 func (c *Core) SetCorsProxy(proxyUrl string) error {
 	var err error
 	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
@@ -253,6 +259,7 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
+// Creates a new event.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
@@ -285,6 +292,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 	return &event, nil
 }
 
+// Updates an event based on its id. You can specify an UpdateOption to control the behaviour for updating a repeating event,
 func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
@@ -422,6 +430,8 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	return nil, fmt.Errorf("something went wrong, event was not updated")
 }
 
+// Removes an event from the calendar it belongs to.
+// TODO update options?
 func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
@@ -474,7 +484,6 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	// generated repeating event, must be added to repeat exceptions
-	//if event.Repeat == nil && event.MasterId != uuid.Nil {
 	if event.MasterId != uuid.Nil {
 		// get master event
 		masterEvent := c.events[event.MasterId]
@@ -505,6 +514,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	return errors.New("something went wrong, event was not removed")
 }
 
+// Returns event by id, or an error if it doesn't exist.
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, ok := c.events[id]
 	if !ok {
@@ -513,11 +523,12 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	return e, nil
 }
 
-func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
+// Returns an array of events which fall into the specified interval.
+func (c *Core) GetEvents(from, to time.Time) []Event {
 	// query the interval tree
 	intervalsMatched, found := c.eventTree.AllIntersections(from, to)
 	if !found {
-		return []Event{}, nil
+		return []Event{}
 	}
 
 	result := make([]Event, 0, len(intervalsMatched))
@@ -572,9 +583,10 @@ func (c *Core) GetEvents(from, to time.Time) ([]Event, error) {
 		}
 	}
 
-	return result, nil
+	return result
 }
 
+// Update all repotes for all repositories.
 func (c *Core) PushAll() error {
 	// TODO idk if it works
 
@@ -591,6 +603,7 @@ func (c *Core) PushAll() error {
 	return err
 }
 
+// Update all repositories from remotes.
 func (c *Core) PullAll() error {
 	// TODO idk if it works
 
@@ -680,27 +693,7 @@ func (c *Core) setupInitialDirStructure() error {
 	return nil
 }
 
-// TODO remove
-func sampleEvents() []Event {
-	now := time.Now()
-	return []Event{
-		{
-			Id:       uuid.New(),
-			Title:    "Meeting",
-			Location: "Google Meet",
-			From:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, now.Location()), // today at 10:00
-			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 0, 0, 0, now.Location()), // today at 13:00
-		},
-		{
-			Id:       uuid.New(),
-			Title:    "Lunch with Joe",
-			Location: "Restaurant",
-			From:     time.Date(now.Year(), now.Month(), now.Day(), 11, 30, 0, 0, now.Location()), // today at 11:30
-			To:       time.Date(now.Year(), now.Month(), now.Day(), 13, 30, 0, 0, now.Location()), // today at 13:30
-		},
-	}
-}
-
+// Serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
 	// marshal event
 	data, err := json.MarshalIndent(event, "", "  ")
@@ -763,6 +756,7 @@ func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
 	return nil
 }
 
+// Removes event from filesystem and commits the change.
 func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 	event, ok := c.events[eventId]
 	if !ok {
@@ -778,11 +772,12 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 	}
 
 	// -------- remove from git --------
-	if _, ok := c.repos[event.Calendar]; !ok {
+	repo, ok := c.repos[event.Calendar]
+	if !ok {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	w, err := c.repos[event.Calendar].Worktree()
+	w, err := repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
@@ -807,6 +802,7 @@ func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
 	return nil
 }
 
+// TODO comment what id does
 func (c *Core) rebuildTreeForEvent(master, updated *Event) error {
 	oldEnd := master.To
 	if master.Repeat != nil {

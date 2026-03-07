@@ -159,10 +159,8 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 			t.Errorf("failed to create an event: %v", err)
 		}
 	}
-	eventsOut, err := a.GetEvents(date, date.AddDate(0, 1, 0))
-	if err != nil {
-		t.Errorf("failed to get events: %v", err)
-	}
+
+	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -207,10 +205,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	queryFrom := time.Now().AddDate(0, 0, 6)
 	queryTo := queryFrom.AddDate(0, 1, 0)
-	eventsOut, err := a.GetEvents(queryFrom, queryTo)
-	if err != nil {
-		t.Errorf("failed to get an events by interval: %v", err)
-	}
+	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if !(len(eventsOut) == 4 || len(eventsOut) == 5) { // can fit 5 weeks
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
@@ -256,10 +251,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	queryFrom := time.Now().AddDate(0, 0, 6)
 	queryTo := queryFrom.AddDate(0, 2, 0)
-	eventsOut, err := a.GetEvents(queryFrom, queryTo)
-	if err != nil {
-		t.Errorf("failed to get an events by interval: %v", err)
-	}
+	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT {
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
@@ -295,22 +287,15 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 			t.Errorf("failed to create an event: %v", err)
 		}
 	}
-	eventsOut, err := a.GetEvents(date, date.AddDate(0, 1, 0))
-	if err != nil {
-		t.Errorf("failed to get events: %v", err)
-	}
 
+	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
 	}
 
 	a.RemoveEvent(events[0])
-	eventsOut, err = a.GetEvents(date, date.AddDate(0, 1, 0))
-	if err != nil {
-		t.Errorf("failed to get events: %v", err)
-	}
-
+	eventsOut = a.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents-1 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -350,11 +335,8 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 	for i := range events {
 		a.RemoveEvent(events[i])
 	}
-	eventsOut, err := a.GetEvents(date, date.AddDate(0, 1, 0))
-	if err != nil {
-		t.Errorf("failed to get events: %v", err)
-	}
 
+	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != 0 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), 0)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -400,11 +382,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 
 	queryFrom := time.Now().AddDate(0, 0, 6)
 	queryTo := queryFrom.AddDate(0, 2, 0)
-	eventsOut, err := a.GetEvents(queryFrom, queryTo)
-	if err != nil {
-		t.Errorf("failed to get an events by interval: %v", err)
-	}
-
+	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT {
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
@@ -415,11 +393,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 		t.Errorf("failed to remove event: %v", err)
 	}
 
-	eventsOut, err = a.GetEvents(queryFrom, queryTo)
-	if err != nil {
-		t.Errorf("failed to get an events by interval: %v", err)
-	}
-
+	eventsOut = a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT-1 && slices.Contains(eventsOut, eventToRemove) {
 		t.Errorf("event wasn't removed correctly %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
@@ -547,7 +521,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	}
 	_, _ = a.CreateEvent(masterEvent)
 
-	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 0, 5))
+	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 0, 5))
 	if len(eventsOut) != 5 {
 		t.Fatalf("expected generated events, got %d", len(eventsOut))
 	}
@@ -607,7 +581,7 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 	}
 	_, _ = a.CreateEvent(masterEvent)
 
-	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 0, 21))
+	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 0, 21))
 	targetEvent := eventsOut[2]
 	originalFrom := targetEvent.From
 	targetEvent.Title = "Weekly Meeting - New Phase"
@@ -660,7 +634,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 
 	_, _ = a.CreateEvent(masterEvent)
 
-	eventsOut, _ := a.GetEvents(startTime, startTime.AddDate(0, 6, 0))
+	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 6, 0))
 	targetEvent := eventsOut[0]
 
 	shift := 2 * time.Hour
