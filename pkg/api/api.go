@@ -39,6 +39,7 @@ func (a *Api) CloneCalendar(name, repoUrl string) error { return a.inner.CloneCa
 func (a *Api) CreateCalendar(name string) error         { return a.inner.CreateCalendar(name) }
 func (a *Api) RemoveCalendar(name string) error         { return a.inner.RemoveCalendar(name) }
 func (a *Api) SetCorsProxy(proxyUrl string) error       { return a.inner.SetCorsProxy(proxyUrl) }
+func (a *Api) LoadCalendars() error                     { return a.inner.LoadCalendars() }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 

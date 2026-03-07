@@ -30,23 +30,15 @@ type Core struct {
 	eventTree *interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events ({time.Time, time.Time} -> []uuid.UUID)
 	events    map[uuid.UUID]*Event
 	repos     map[string]*gogit.Repository
+	fs        billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
+	proxyUrl  *url.URL
 	// tags      map[string][]string // might not be needed to "cache" it like this
-	fs       billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl *url.URL
 }
 
 // A "constructor" for Core.
 func NewCore() *Core {
 	var c Core
-
-	// alloc some vars
-	c.eventTree = interval.NewSearchTree[[]uuid.UUID](
-		func(x, y time.Time) int {
-			return x.Compare(y)
-		},
-	)
-	c.events = make(map[uuid.UUID]*Event)
-	c.repos = make(map[string]*gogit.Repository)
+	c.eraseAndAlloc()
 
 	// get the fs; go tags handle which one (classic/wasm)
 	var err error
@@ -78,8 +70,67 @@ func (c *Core) ListCalendars() []string {
 }
 
 func (c *Core) LoadCalendars() error {
-	// TODO init variables
-	// TODO load calendar one by one
+	c.eraseAndAlloc()
+
+	// load repositories
+	entries, err := c.fs.ReadDir(filesystem.DirName)
+	if err != nil {
+		return fmt.Errorf("failed to list all directories in root: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		repo, err := c.initCalendarRepo(entry.Name())
+		if err != nil {
+			fmt.Printf("failed to init/load '%s' repository: %v", entry.Name(), err)
+			continue
+		}
+		c.repos[entry.Name()] = repo
+	}
+
+	// load tree + events
+	// TODO do not load files, but build tree from index.json
+	for _, repo := range c.repos {
+		wt, _ := repo.Worktree()
+		entries, _ := wt.Filesystem.ReadDir(EventsDirName)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
+			file, err := wt.Filesystem.Open(fileName)
+
+			var event Event
+			err = json.NewDecoder(file).Decode(&event)
+			if err != nil {
+				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
+				continue
+			}
+
+			c.events[event.Id] = &event
+
+			eventEnd := event.To
+			if event.Repeat != nil {
+				eventEnd = event.Repeat.Until // if repeating, insert interval [From, Repetition.Until]
+				if event.Repeat.Count >= 1 /* if repeating on count basis */ {
+					eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+				}
+			}
+			ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
+			updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
+
+			err = c.eventTree.Insert(event.From, eventEnd, updated)
+			if err != nil {
+				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
+				continue
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -563,6 +614,18 @@ func (c *Core) PullAll() error {
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
+// Resets the Core internal variables and reallocates them.
+func (c *Core) eraseAndAlloc() {
+	c.eventTree = interval.NewSearchTree[[]uuid.UUID](
+		func(x, y time.Time) int {
+			return x.Compare(y)
+		},
+	)
+	c.events = make(map[uuid.UUID]*Event)
+	c.repos = make(map[string]*gogit.Repository)
+}
+
+// Loads, if exists, or creates new repository with the given name.
 func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 	repoPath := filepath.Join(filesystem.DirName, name)
 
