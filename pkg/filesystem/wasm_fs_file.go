@@ -231,15 +231,13 @@ func (f *OPFSFile) closeAccess() error {
 	defer func() { // recover a panic from Call("flush"/"close")
 		if r := recover(); r != nil {
 			err = fmt.Errorf("OPFS File Close failed: %+v", r)
-			f.inode.access = js.Undefined()
-			f.inode.handle = js.Undefined()
 		}
+		f.inode.access = js.Undefined()
+		f.inode.handle = js.Undefined()
 	}()
 
 	f.inode.access.Call("flush")
 	f.inode.access.Call("close")
-	f.inode.access = js.Undefined()
-	f.inode.handle = js.Undefined()
 
 	return err
 }
