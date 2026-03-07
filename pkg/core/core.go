@@ -106,6 +106,11 @@ func (c *Core) LoadCalendars() error {
 
 			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
 			file, err := wt.Filesystem.Open(fileName)
+			if err != nil {
+				fmt.Printf("failed to open file '%s': %v", fileName, err)
+				continue
+			}
+			defer file.Close()
 
 			var event Event
 			err = json.NewDecoder(file).Decode(&event)
