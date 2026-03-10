@@ -514,7 +514,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	if event.MasterId == uuid.Nil {
 		// real event, must be deleted entirely
 		return c.removeReal(event)
-	} else if event.From == event.To {
+	} else if event.MasterId != uuid.Nil {
 		// generated repeating event, must be added to repeat exceptions
 		// if event.Repeat == nil && event.MasterId != uuid.Nil {
 		return c.removeGenerated(event)
