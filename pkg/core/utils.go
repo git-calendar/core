@@ -1,8 +1,11 @@
 package core
 
 import (
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
 )
 
@@ -80,4 +83,37 @@ func containsTime(exceptions []Exception, t time.Time) bool {
 
 func isGeneratedEvent(event Event) bool {
 	return event.MasterId != uuid.Nil
+}
+
+func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
+	// create the query parameter
+	q := proxyUrl.Query()
+	q.Set("url", originalUrl.String())
+
+	// create the result with query param (e.g. https://cors-proxy.abc/?url=https://github.com/...)
+	result := proxyUrl
+	result.RawQuery = q.Encode()
+
+	return result
+}
+
+// Extracts BasicAuth credentials from an URL.
+func authFromUrl(u url.URL) *http.BasicAuth {
+	credentials := u.User
+	pass, _ := credentials.Password()
+
+	return &http.BasicAuth{
+		Username: credentials.Username(),
+		Password: pass,
+	}
+}
+
+func calendarNameFromUrl(u url.URL) string {
+	segments := strings.Split(u.Path, "/")
+	if len(segments) == 0 {
+		return ""
+	}
+	name := segments[len(segments)-1]
+	name = strings.TrimSuffix(name, ".git")
+	return name
 }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/firu11/git-calendar-core/pkg/core"
@@ -35,13 +36,22 @@ func NewApi() *Api {
 
 // -------------------------- Boring methods that do not need any json parsing etc. -------------------------
 // func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
-func (a *Api) CloneCalendar(name, repoUrl string) error { return a.inner.CloneCalendar(name, repoUrl) }
-func (a *Api) CreateCalendar(name string) error         { return a.inner.CreateCalendar(name) }
-func (a *Api) RemoveCalendar(name string) error         { return a.inner.RemoveCalendar(name) }
-func (a *Api) SetCorsProxy(proxyUrl string) error       { return a.inner.SetCorsProxy(proxyUrl) }
-func (a *Api) LoadCalendars() error                     { return a.inner.LoadCalendars() }
+func (a *Api) CreateCalendar(name string) error   { return a.inner.CreateCalendar(name) }
+func (a *Api) RemoveCalendar(name string) error   { return a.inner.RemoveCalendar(name) }
+func (a *Api) SetCorsProxy(proxyUrl string) error { return a.inner.SetCorsProxy(proxyUrl) }
+func (a *Api) LoadCalendars() error               { return a.inner.LoadCalendars() }
+func (a *Api) PullAll() error                     { return a.inner.PullAll() }
+func (a *Api) PushAll() error                     { return a.inner.PushAll() }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
+
+func (a *Api) CloneCalendar(repoUrl string) error {
+	parsedUrl, err := url.Parse(repoUrl)
+	if err != nil {
+		return fmt.Errorf("repoUrl is invalid: %w", err)
+	}
+	return a.inner.CloneCalendar(*parsedUrl)
+}
 
 func (a *Api) ListCalendars() (string, error) {
 	arr := a.inner.ListCalendars()
