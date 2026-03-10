@@ -68,7 +68,9 @@ func (c *Core) CreateCalendar(name string) error {
 // Returns a list of calendar names loaded.
 func (c *Core) ListCalendars() []string {
 	// TODO list tags too
-	return slices.Collect(maps.Keys(c.repos))
+	calendars := slices.Collect(maps.Keys(c.repos))
+	slices.Sort(calendars)
+	return calendars
 }
 
 // Tries to load every directory/repo/calendar in the fs root.
@@ -652,25 +654,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 		return nil, err
 	}
 
-	err = c.setupInitialDirStructure()
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup initial repo structure: %w", err)
-	}
-
 	return repo, nil
-}
-
-// Helper function to setup the initial "events" folder etc.
-func (c *Core) setupInitialDirStructure() error {
-	// TODO
-
-	// eventsDirPath := c.fs.Join(a.repoPath, EventsDirName)
-	// err := a.fs.MkdirAll(eventsDirPath, 0o755)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to create folder '%s': %w", eventsDirPath, err)
-	// }
-
-	return nil
 }
 
 // Serializes event to JSON, saves to file, stages and commits with given message.
