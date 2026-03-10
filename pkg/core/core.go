@@ -394,86 +394,90 @@ func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error
 	}
 }
 
+func (c *Core) removeReal(event Event) error {
+	// find last slave and its To
+	eventEnd := event.To
+	if event.Repeat != nil {
+		eventEnd = event.Repeat.Until
+		if event.Repeat.Count >= 1 {
+			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+		}
+	}
+
+	// get the full interval
+	ids, found := c.eventTree.Find(event.From, eventEnd)
+	if !found {
+		return fmt.Errorf("event not found in search tree")
+	}
+
+	// find index of our event
+	index := slices.Index(ids, event.Id)
+	if index == -1 {
+		return errors.New("")
+	}
+
+	// delete event from interval
+	updated := slices.Delete(ids, index, index+1)
+
+	if len(updated) == 0 { // interval now empty -> delete from tree
+		if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
+			return fmt.Errorf("failed to delete tree node: %w", err)
+		}
+	} else { // not empty -> overwrite
+		if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+			return fmt.Errorf("failed to reinsert node into tree: %w", err)
+		}
+	}
+
+	// delete file from disk + git
+	err := c.deleteEventFromRepo(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
+	if err != nil {
+		return fmt.Errorf("failed to delete event: %w", err)
+	}
+
+	delete(c.events, event.Id)
+	return nil
+}
+
+func (c *Core) removeGenerated(event Event) error {
+	masterEvent := c.events[event.MasterId]
+	if masterEvent == nil || masterEvent.Repeat == nil {
+		return fmt.Errorf("master event not found")
+	}
+
+	// if exception doesn't exist yet
+	if !containsTime(masterEvent.Repeat.Exceptions, event.From) {
+		// add date to master exceptions
+		newException := Exception{
+			event.Id,
+			event.From,
+		}
+		masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
+
+		// update/overwrite the file in repo
+		err := c.saveEventToRepo(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
+		if err != nil {
+			return fmt.Errorf("failed to save event to repo: %w", err)
+		}
+	}
+
+	delete(c.events, event.Id) // TODO is this needed? It's no-op, but can there be a generated event in events?
+	return nil
+}
+
 func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
 	}
 
-	// real event, must be deleted entirely
 	if event.MasterId == uuid.Nil {
-		// find last slave and its To
-		eventEnd := event.To
-		if event.Repeat != nil {
-			eventEnd = event.Repeat.Until
-			if event.Repeat.Count >= 1 {
-				eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-			}
-		}
-
-		// get the full interval
-		ids, found := c.eventTree.Find(event.From, eventEnd)
-		if !found {
-			return fmt.Errorf("event not found in search tree")
-		}
-
-		// find index of our event
-		index := slices.Index(ids, event.Id)
-		if index == -1 {
-			return errors.New("")
-		}
-
-		// delete event from interval
-		updated := slices.Delete(ids, index, index+1)
-
-		if len(updated) == 0 { // interval now empty -> delete from tree
-			if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
-				return fmt.Errorf("failed to delete tree node: %w", err)
-			}
-		} else { // not empty -> overwrite
-			if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
-				return fmt.Errorf("failed to reinsert node into tree: %w", err)
-			}
-		}
-
-		// delete file from disk + git
-		err := c.deleteEventFromRepo(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
-		if err != nil {
-			return fmt.Errorf("failed to delete event: %w", err)
-		}
-
-		delete(c.events, event.Id)
-		return nil
+		// real event, must be deleted entirely
+		return c.removeReal(event)
+	} else if event.From == event.To {
+		// generated repeating event, must be added to repeat exceptions
+		// if event.Repeat == nil && event.MasterId != uuid.Nil {
+		return c.removeGenerated(event)
 	}
-
-	// generated repeating event, must be added to repeat exceptions
-	// if event.Repeat == nil && event.MasterId != uuid.Nil {
-	if event.MasterId != uuid.Nil {
-		// get master event
-		masterEvent := c.events[event.MasterId]
-		if masterEvent == nil || masterEvent.Repeat == nil {
-			return fmt.Errorf("master event not found")
-		}
-
-		// if exception doesn't exist yet
-		if !containsTime(masterEvent.Repeat.Exceptions, event.From) {
-			// add date to master exceptions
-			newException := Exception{
-				event.Id,
-				event.From,
-			}
-			masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
-
-			// update/overwrite the file in repo
-			err := c.saveEventToRepo(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
-			if err != nil {
-				return fmt.Errorf("failed to save event to repo: %w", err)
-			}
-		}
-
-		delete(c.events, event.Id) // TODO is this needed? It's no-op, but can there be a generated event in events?
-		return nil
-	}
-
 	return errors.New("something went wrong, event was not removed")
 }
 
