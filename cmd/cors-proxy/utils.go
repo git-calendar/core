@@ -128,6 +128,7 @@ type config struct {
 
 func loadConfig() *config {
 	var cfg config
+	var err error
 
 	prodEnv := os.Getenv(prefix + "PRODUCTION")
 	cfg.Production = prodEnv == "true" || prodEnv == "1" || prodEnv == "True" || prodEnv == "TRUE"
@@ -135,14 +136,12 @@ func loadConfig() *config {
 	cfg.Host = os.Getenv(prefix + "HOST") // empty is the same as 0.0.0.0
 	cfg.Port = os.Getenv(prefix + "PORT")
 	if cfg.Port == "" {
-		cfg.Port = "8000"
+		cfg.Port = "8080"
 	}
 
-	duration, err := time.ParseDuration(os.Getenv(prefix + "UPSTREAM_TIMEOUT"))
-	if err != nil {
+	cfg.UpstreamTimeout, err = time.ParseDuration(os.Getenv(prefix + "UPSTREAM_TIMEOUT"))
+	if err != nil || cfg.MaxResponseSize == 0 {
 		cfg.UpstreamTimeout = 15 * time.Second
-	} else {
-		cfg.UpstreamTimeout = duration
 	}
 
 	cfg.MaxResponseSize, err = strconv.ParseInt(os.Getenv(prefix+"MAX_RESPONSE_SIZE"), 10, 64)

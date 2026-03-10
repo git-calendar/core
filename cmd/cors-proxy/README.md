@@ -1,8 +1,12 @@
-# Git Calendar Cors Proxy
+# Git Calendar CORS Proxy
 A simple proxy that adds the [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS) headers to every request.\
 It’s used as a workaround for browser security restrictions when accessing third-party services like GitHub, GitLab, Codeberg, etc., which we don’t control.
 
+> [!IMPORTANT]
+> This proxy is not needed when running `git-calendar/core` outside of a browser.
+
 ## Build and run
+### Bare metal
 ```sh
 go run ./cmd/cors-proxy
 ```
@@ -10,18 +14,30 @@ go run ./cmd/cors-proxy
 go build -o ./build/cors-proxy ./cmd/cors-proxy
 ```
 
+### Podman/Docker
+```sh
+podman build -t cors-proxy -f cmd/cors-proxy/Dockerfile .
+```
+```sh
+podman run -d --rm \
+  --name cors-proxy \
+  -p 8080:8080 \
+  cors-proxy
+```
+
 ### Enviroment variables (optional; those values are default)
 ```sh
 CORS_PROXY_HOST=0.0.0.0
-CORS_PROXY_PORT=8000
+CORS_PROXY_PORT=8080
 CORS_PROXY_PRODUCTION=false
 CORS_PROXY_UPSTREAM_TIMEOUT=15s
+CORS_PROXY_MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
 ```
 
 ## Usage
 Normal HTTP request from the browser:
 ```js
-const response = await fetch("https://example.com");
+const response = await fetch("https://github.com");
 const html = await response.text();
 console.log(html);
 ```
@@ -35,7 +51,7 @@ Access to fetch at 'https://example.com' from origin 'https://...' has been bloc
 HTTP request through this proxy:
 
 ```js
-const response = await fetch("http://localhost:8000/?url=https://example.com");
+const response = await fetch("http://localhost:8080/?url=https://github.com");
 const html = await response.text();
 console.log(html);
 ```
@@ -99,5 +115,5 @@ your-repo-domain.com {
 }
 ```
 
-### TODO 
+## TODO 
 - rate-limiter (redis? for multi instance deployment)
