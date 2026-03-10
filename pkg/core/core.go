@@ -143,13 +143,15 @@ func (c *Core) LoadCalendars() error {
 }
 
 // Clones a repository/calendar from url, using CORS proxy, if specified.
-func (c *Core) CloneCalendar(name, repoUrl string) error {
-	if _, ok := c.repos[name]; ok {
+func (c *Core) CloneCalendar(repoUrl url.URL) error {
+	calendarName := calendarNameFromUrl(repoUrl)
+
+	if _, ok := c.repos[calendarName]; ok {
 		return errors.New("calendar with this name already exists")
 	}
 
 	// make sure that the repo dir is created
-	repoPath := c.fs.Join(filesystem.DirName, name)
+	repoPath := c.fs.Join(filesystem.DirName, calendarName)
 	if err := c.fs.MkdirAll(repoPath, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
@@ -169,27 +171,31 @@ func (c *Core) CloneCalendar(name, repoUrl string) error {
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 
+	// get auth from original url
+	auth := authFromUrl(repoUrl)
+
+	finalUrl := repoUrl // copy
+	finalUrl.User = nil // delete credentials from url, we will use http header via gogit.CloneOptions
+
 	// add proxy if specified (only needed for the browser)
-	// like so: http://cors-proxy.abc/?url=https://github.com/firu11/git-calendar-core
-	var finalRepoUrl string
 	if c.proxyUrl != nil {
-		final := *c.proxyUrl          // copy
-		q := final.Query()            // get parsed query (a copy)
-		q.Set("url", repoUrl)         // add the param
-		final.RawQuery = q.Encode()   // put it back
-		finalRepoUrl = final.String() // get the final string
-	} else {
-		finalRepoUrl = repoUrl
+		finalUrl = useCorsProxy(finalUrl, *c.proxyUrl)
 	}
 
 	// clone now
-	c.repos[name], err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+	c.repos[calendarName], err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: "origin",
-		URL:        finalRepoUrl,
+		URL:        finalUrl.String(),
+		Auth:       auth,
 	})
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
+
+	err = c.repos[calendarName].DeleteRemote("origin")
+	c.addRemote(calendarName, "origin", repoUrl.String())
+
+	fmt.Println(c.repos[calendarName].Remotes())
 
 	return err
 }
@@ -615,7 +621,7 @@ func (c *Core) PullAll() error {
 	var err error
 	for _, repo := range c.repos {
 		wt, errx := repo.Worktree()
-		if errx != nil || wt == nil { // only fails if repo is bare which should not happen ever haha
+		if errx != nil || wt == nil { // only fails if repo is bare (aka. only .git/ folder exists, no files) which should not happen ever haha
 			continue
 		}
 

@@ -14,7 +14,7 @@ type Event struct {
 	Location     string      `json:"location"`
 	Description  string      `json:"description"`
 	From         time.Time   `json:"from"`
-	OriginalFrom time.Time   `json:"original_from,omitempty"`
+	OriginalFrom time.Time   `json:"original_from,omitzero"`
 	To           time.Time   `json:"to"`
 	Calendar     string      `json:"calendar"`
 	Tag          string      `json:"tag"`

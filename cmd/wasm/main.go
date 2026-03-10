@@ -27,7 +27,7 @@ func RegisterCallbacks(api *api.Api) {
 			}),
 			"cloneCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.CloneCalendar(args[0].String(), args[1].String())
+					return nil, api.CloneCalendar(args[0].String())
 				})
 			}),
 			"removeCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -43,6 +43,16 @@ func RegisterCallbacks(api *api.Api) {
 			"loadCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.LoadCalendars()
+				})
+			}),
+			"pullAll": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.PullAll()
+				})
+			}),
+			"pushAll": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.PushAll()
 				})
 			}),
 			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
