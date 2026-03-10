@@ -2,6 +2,7 @@ package core
 
 import (
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -123,11 +124,6 @@ func authFromUrl(u url.URL) *http.BasicAuth {
 }
 
 func calendarNameFromUrl(u url.URL) string {
-	segments := strings.Split(u.Path, "/")
-	if len(segments) == 0 {
-		return ""
-	}
-	name := segments[len(segments)-1]
-	name = strings.TrimSuffix(name, ".git")
-	return name
+	name := path.Base(u.Path)
+	return strings.TrimSuffix(name, ".git")
 }
