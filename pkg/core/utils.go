@@ -85,6 +85,20 @@ func isGeneratedEvent(event Event) bool {
 	return event.MasterId != uuid.Nil
 }
 
+// Extracts the auth (http://USER:PASS@example.com/...) from repoUrl and returns a new url using proxyUrl if present.
+func prepareRepoUrl(repoUrl url.URL, proxyUrl *url.URL) (url.URL, *http.BasicAuth) {
+	// parse auth from url and delete the credentials
+	auth := authFromUrl(repoUrl)
+	repoUrl.User = nil
+
+	// add proxy if specified
+	if proxyUrl != nil {
+		repoUrl = useCorsProxy(repoUrl, *proxyUrl)
+	}
+
+	return repoUrl, auth
+}
+
 func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
 	// create the query parameter
 	q := proxyUrl.Query()

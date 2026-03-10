@@ -31,7 +31,7 @@ type Core struct {
 	events    map[uuid.UUID]*Event
 	repos     map[string]*gogit.Repository
 	fs        billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl  *url.URL
+	proxyUrl  *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 	// tags      map[string][]string // might not be needed to "cache" it like this
 }
 
@@ -145,7 +145,6 @@ func (c *Core) LoadCalendars() error {
 // Clones a repository/calendar from url, using CORS proxy, if specified.
 func (c *Core) CloneCalendar(repoUrl url.URL) error {
 	calendarName := calendarNameFromUrl(repoUrl)
-
 	if _, ok := c.repos[calendarName]; ok {
 		return errors.New("calendar with this name already exists")
 	}
@@ -170,18 +169,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 	}
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
-
-	// get auth from original url
-	auth := authFromUrl(repoUrl)
-
-	finalUrl := repoUrl // copy
-	finalUrl.User = nil // delete credentials from url, we will use http header via gogit.CloneOptions
-
-	// add proxy if specified (only needed for the browser)
-	if c.proxyUrl != nil {
-		finalUrl = useCorsProxy(finalUrl, *c.proxyUrl)
-	}
-
+	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
 	// clone now
 	c.repos[calendarName], err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: "origin",
@@ -192,10 +180,9 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
+	// repair the remote url (set the pure url with auth, without proxy)
 	err = c.repos[calendarName].DeleteRemote("origin")
 	c.addRemote(calendarName, "origin", repoUrl.String())
-
-	fmt.Println(c.repos[calendarName].Remotes())
 
 	return err
 }
@@ -211,29 +198,11 @@ func (c *Core) RemoveCalendar(name string) error {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
 	}
 
-	// delete all events from this calendar
-	// var toDelete []uuid.UUID
-	// for _, event := range c.events {
-	// 	if event.Calendar == "name" {
-	// 		toDelete = append(toDelete, event.Id)
-	// 	}
-	// }
-	// for _, id := range toDelete {
-	// 	delete(c.events, id)
-	// }
-	//
-	// might be better to just reset and load the others...
+	// TODO: This is the lazy way.
+	// LoadCalendars does full erase and load again for events map and tree. It also deletes all the repos, and reloads them from disk.
+	// Better approach would be to only delete the selected events.
 
-	c.events = make(map[uuid.UUID]*Event)
-	c.eventTree = interval.NewSearchTree[[]uuid.UUID](
-		func(x, y time.Time) int {
-			return x.Compare(y)
-		},
-	)
-
-	// TODO load back the existing calendars
-
-	return nil
+	return c.LoadCalendars()
 }
 
 func (c *Core) addRemote(calendar, remoteName, remoteUrl string) error {
