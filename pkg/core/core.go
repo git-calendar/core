@@ -120,23 +120,8 @@ func (c *Core) LoadCalendars() error {
 				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
 				continue
 			}
-
-			c.events[event.Id] = &event
-
-			eventEnd := event.To
-			if event.Repeat != nil {
-				eventEnd = event.Repeat.Until // if repeating, insert interval [From, Repetition.Until]
-				if event.Repeat.Count >= 1 /* if repeating on count basis */ {
-					eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-				}
-			}
-			ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
-			updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
-
-			err = c.eventTree.Insert(event.From, eventEnd, updated)
-			if err != nil {
-				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
-				continue
+			if err := c.insertIntoTree(event); err != nil {
+				return err
 			}
 		}
 	}
@@ -248,26 +233,12 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 	}
 
 	// add to all events
-	c.events[event.Id] = &event
-
-	// -------- insert into tree --------
-	eventEnd := event.To
-	if event.Repeat != nil {
-		eventEnd = event.Repeat.Until // if repeating, insert interval [From, Repetition.Until]
-		if event.Repeat.Count >= 1 /* if repeating on count basis */ {
-			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-		}
-	}
-	ids, _ := c.eventTree.Find(event.From, eventEnd) // find existing interval
-	updated := append(ids, event.Id)                 // if not found, ids is nil -> append makes [event.Id]
-
-	err := c.eventTree.Insert(event.From, eventEnd, updated)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+	if err := c.insertIntoTree(event); err != nil {
+		return nil, err
 	}
 
 	// -------- create json file and add to git --------
-	err = c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Added event '%s'", event.Title))
+	err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Added event '%s'", event.Title))
 	if err != nil {
 		return nil, fmt.Errorf("failed to save event to repo: %w", err)
 	}
@@ -362,20 +333,8 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 	}
 	// make the incoming event new Master event
 	event.MasterId = uuid.Nil
-	c.events[event.Id] = &event
-	// calculate the end of the new series for the tree
-	eventEnd := event.To
-	if event.Repeat != nil {
-		eventEnd = event.Repeat.Until
-		if event.Repeat.Count >= 1 {
-			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-		}
-	}
-	// insert the new master into the tree
-	ids, _ := c.eventTree.Find(event.From, eventEnd)
-	updated := append(ids, event.Id)
-	if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
-		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+	if err := c.insertIntoTree(event); err != nil {
+		return nil, err
 	}
 	if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
 		return nil, err
@@ -827,6 +786,25 @@ func (c *Core) rebuildTreeForEvent(master, updated *Event) error {
 	newIds = append(newIds, master.Id) // add the master id
 	if err := c.eventTree.Insert(updated.From, newEnd, newIds); err != nil {
 		return fmt.Errorf("failed to reinsert event into tree: %w", err)
+	}
+	return nil
+}
+
+func (c *Core) insertIntoTree(event Event) error {
+	c.events[event.Id] = &event
+	// calculate the end of the new series for the tree
+	eventEnd := event.To
+	if event.Repeat != nil {
+		eventEnd = event.Repeat.Until
+		if event.Repeat.Count >= 1 {
+			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
+		}
+	}
+	// insert the new master into the tree
+	ids, _ := c.eventTree.Find(event.From, eventEnd)
+	updated := append(ids, event.Id)
+	if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+		return fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 	return nil
 }
