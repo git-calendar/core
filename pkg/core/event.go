@@ -14,7 +14,7 @@ type Event struct {
 	Location     string      `json:"location"`
 	Description  string      `json:"description"`
 	From         time.Time   `json:"from"`
-	OriginalFrom time.Time   `json:"original_from,omitzero"`
+	OriginalFrom time.Time   `json:"original_from,omitzero"` // only for slave; keeps the value of the original time, so it can be added to exceptions when From updated
 	To           time.Time   `json:"to"`
 	Calendar     string      `json:"calendar"`
 	Tag          string      `json:"tag"`
@@ -31,8 +31,8 @@ type Repetition struct {
 }
 
 type Exception struct {
-	Id   uuid.UUID `json:"id"`
-	Time time.Time `json:"time"`
+	Id   uuid.UUID `json:"id"`   // Event.Id of the generated event that is excluded from generating
+	Time time.Time `json:"time"` // Event.From of the generated event that is excluded from generating
 }
 
 func (e *Event) Validate() error {
