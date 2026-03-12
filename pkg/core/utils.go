@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
+	"github.com/rdleal/intervalst/interval"
 )
 
 func addUnit(t time.Time, value int, unit Freq) time.Time {
@@ -82,10 +83,6 @@ func containsTime(exceptions []Exception, t time.Time) bool {
 	return false
 }
 
-func isGeneratedEvent(event Event) bool {
-	return event.MasterId != uuid.Nil
-}
-
 // Extracts the auth (http://USER:PASS@example.com/...) from repoUrl and returns a new url using proxyUrl if present.
 func prepareRepoUrl(repoUrl url.URL, proxyUrl *url.URL) (url.URL, *http.BasicAuth) {
 	// parse auth from url and delete the credentials
@@ -126,4 +123,13 @@ func authFromUrl(u url.URL) *http.BasicAuth {
 func calendarNameFromUrl(u url.URL) string {
 	name := path.Base(u.Path)
 	return strings.TrimSuffix(name, ".git")
+}
+
+func insertEventIntoTree(tree *interval.SearchTree[[]uuid.UUID, time.Time], event Event) error {
+	eventEnd := event.getTreeEndTime()
+	ids, _ := tree.Find(event.From, eventEnd) // find existing interval
+	updated := append(ids, event.Id)          // if not found, ids is nil -> append makes [event.Id]
+
+	err := tree.Insert(event.From, eventEnd, updated)
+	return err
 }

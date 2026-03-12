@@ -120,8 +120,13 @@ func (c *Core) LoadCalendars() error {
 				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
 				continue
 			}
-			if err := c.insertIntoTree(&event); err != nil {
-				return err
+
+			c.events[event.Id] = &event
+
+			err = insertEventIntoTree(c.eventTree, event)
+			if err != nil {
+				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
+				continue
 			}
 		}
 	}
@@ -232,16 +237,17 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
 
-	// add to all events
-	if err := c.insertIntoTree(&event); err != nil {
-		return nil, err
+	c.events[event.Id] = &event
+
+	if err := insertEventIntoTree(c.eventTree, event); err != nil {
+		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
-	// -------- create json file and add to git --------
-	err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Added event '%s'", event.Title))
+	err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Added event '%s'", event.Title))
 	if err != nil {
 		return nil, fmt.Errorf("failed to save event to repo: %w", err)
 	}
+
 	return &event, nil
 }
 
@@ -251,30 +257,19 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
 
-	if isGeneratedEvent(event) { // generated event
+	if event.isGenerated() {
 		return c.updateGenerated(event, opts...)
 	}
-
 	// ------- normal event or normal exception event -------
+
 	originalEvent, exists := c.events[event.Id]
 	if !exists {
 		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
 	}
 
-	oldEnd := originalEvent.To
-	if originalEvent.Repeat != nil { // use repeat
-		oldEnd = originalEvent.Repeat.Until
-		if originalEvent.Repeat.Count >= 1 {
-			oldEnd = addUnit(originalEvent.To, originalEvent.Repeat.Interval*originalEvent.Repeat.Count, originalEvent.Repeat.Frequency)
-		}
-	}
-	newEnd := event.To
-	if event.Repeat != nil {
-		newEnd = event.Repeat.Until
-		if event.Repeat.Count >= 1 {
-			newEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-		}
-	}
+	oldEnd := originalEvent.getTreeEndTime()
+	newEnd := event.getTreeEndTime()
+
 	if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
 		ids, found := c.eventTree.Find(originalEvent.From, oldEnd)
 		if found {
@@ -288,34 +283,30 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 				}
 			}
 		}
-		newIds, _ := c.eventTree.Find(event.From, newEnd)
-		newIds = append(newIds, event.Id)
-		if err := c.eventTree.Insert(event.From, newEnd, newIds); err != nil {
+		err := insertEventIntoTree(c.eventTree, event)
+		if err != nil {
 			return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
 		}
 	}
 
 	c.events[event.Id] = &event
-	if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
+	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
 		return nil, err
 	}
+
 	return &event, nil
 }
 
+// Removes an event from calendar
 func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
 	}
 
-	if event.MasterId == uuid.Nil {
-		// real event, must be deleted entirely
-		return c.removeReal(event)
-	} else if event.MasterId != uuid.Nil {
-		// generated repeating event, must be added to repeat exceptions
-		// if event.Repeat == nil && event.MasterId != uuid.Nil {
-		return c.removeGenerated(event)
+	if !event.isGenerated() {
+		return c.removeReal(event) // must be deleted entirely
 	}
-	return errors.New("something went wrong, event was not removed")
+	return c.removeGenerated(event) // must be added to exceptions
 }
 
 // Returns event by id, or an error if it doesn't exist.
@@ -480,7 +471,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 }
 
 // Serializes event to JSON, saves to file, stages and commits with given message.
-func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
+func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	// marshal event
 	data, err := json.MarshalIndent(event, "", "  ")
 	if err != nil {
@@ -543,7 +534,7 @@ func (c *Core) saveEventToRepo(event *Event, commitMsg string) error {
 }
 
 // Removes event from filesystem and commits the change.
-func (c *Core) deleteEventFromRepo(eventId uuid.UUID, commitMsg string) error {
+func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	event, ok := c.events[eventId]
 	if !ok {
 		return fmt.Errorf("failed to find event by id")
@@ -613,81 +604,61 @@ func (c *Core) moveEventInTree(master, updated *Event) error {
 		}
 	}
 
-	// calculate the new end based on the updated event
-	newEnd := updated.To
-	if updated.Repeat != nil {
-		newEnd = updated.Repeat.Until
-		if updated.Repeat.Count >= 1 {
-			newEnd = addUnit(updated.To, updated.Repeat.Interval*updated.Repeat.Count, updated.Repeat.Frequency)
-		}
-	}
-
-	// insert back the new interval
-	newIds, _ := c.eventTree.Find(updated.From, newEnd)
-	newIds = append(newIds, master.Id) // add the master id
-	if err := c.eventTree.Insert(updated.From, newEnd, newIds); err != nil {
+	if err := insertEventIntoTree(c.eventTree, *updated); err != nil {
 		return fmt.Errorf("failed to reinsert event into tree: %w", err)
 	}
 	return nil
 }
 
-// Inserts the event into the interval tree
-func (c *Core) insertIntoTree(event *Event) error {
-	c.events[event.Id] = event
-	// calculate the end of the new series for the tree
-	eventEnd := event.To
-	if event.Repeat != nil {
-		eventEnd = event.Repeat.Until
-		if event.Repeat.Count >= 1 {
-			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-		}
-	}
-	// insert the new master into the tree
-	ids, _ := c.eventTree.Find(event.From, eventEnd)
-	updated := append(ids, event.Id)
-	if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
-		return fmt.Errorf("failed to insert into index tree: %w", err)
-	}
-	return nil
-}
-
-// Updates the current event and creates new exception for the master
 func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error) {
+	// ----- update master event with the new exception -----
 	exceptionTime := event.OriginalFrom
 	if exceptionTime.IsZero() {
 		exceptionTime = event.From
 	}
-	exception := Exception{Id: event.Id, Time: exceptionTime}
+	exception := Exception{
+		event.Id,
+		exceptionTime,
+	}
 	master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
-	if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
+
+	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
 		return nil, fmt.Errorf("failed to save master event: %w", err)
 	}
-	event.Repeat = nil
+
+	// ----- update master event with the new exception -----
+	event.Repeat = nil // detach from repeating time series
+
 	c.events[event.Id] = &event
-	ids, _ := c.eventTree.Find(event.From, event.To)
-	updated := append(ids, event.Id)
-	if err := c.eventTree.Insert(event.From, event.To, updated); err != nil {
+
+	if err := insertEventIntoTree(c.eventTree, event); err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
-	if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Saved exception event '%s'", event.Title)); err != nil {
+
+	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Saved exception event '%s'", event.Title)); err != nil {
 		return nil, err
 	}
+
 	return &event, nil
 }
 
 // Stops the original event from repeating anymore and creates new repeating event with new updated properties
 func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, error) {
 	master.Repeat.Until = event.From // cap master at start of change
-	master.Repeat.Count = -1         // enforce 'Until' logic over 'Count'
-	if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
+	master.Repeat.Count = -1         // enforce "Until" logic over "Count"
+
+	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
 		return nil, fmt.Errorf("failed to cap master event: %w", err)
 	}
+
 	// make the incoming event new Master event
 	event.MasterId = uuid.Nil
-	if err := c.insertIntoTree(&event); err != nil {
-		return nil, err
+	c.events[event.Id] = &event
+
+	if err := insertEventIntoTree(c.eventTree, event); err != nil {
+		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
-	if err := c.saveEventToRepo(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
+	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
 		return nil, err
 	}
 	return &event, nil
@@ -698,12 +669,14 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	fromChanged := event.From != master.From
 	toChanged := event.To != master.To
 	repeatChanged := event.Repeat != master.Repeat
+
 	if fromChanged { // shift all exceptions by the time difference
 		distance := event.From.Sub(master.From)
 		for i := range master.Repeat.Exceptions {
 			master.Repeat.Exceptions[i].Time = master.Repeat.Exceptions[i].Time.Add(distance)
 		}
 	}
+
 	if fromChanged || toChanged || repeatChanged {
 		err := c.moveEventInTree(master, &event)
 		if err != nil {
@@ -718,7 +691,7 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	master.Tag = event.Tag
 	master.Repeat = event.Repeat
 
-	if err := c.saveEventToRepo(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
+	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
 		return nil, fmt.Errorf("failed to save event to repo: %w", err)
 	}
 	return master, nil
@@ -748,13 +721,7 @@ func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error
 
 func (c *Core) removeReal(event Event) error {
 	// find last slave and its To
-	eventEnd := event.To
-	if event.Repeat != nil {
-		eventEnd = event.Repeat.Until
-		if event.Repeat.Count >= 1 {
-			eventEnd = addUnit(event.To, event.Repeat.Interval*event.Repeat.Count, event.Repeat.Frequency)
-		}
-	}
+	eventEnd := event.getTreeEndTime()
 
 	// get the full interval
 	ids, found := c.eventTree.Find(event.From, eventEnd)
@@ -782,7 +749,7 @@ func (c *Core) removeReal(event Event) error {
 	}
 
 	// delete file from disk + git
-	err := c.deleteEventFromRepo(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
+	err := c.deleteAndCommitEvent(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
 	if err != nil {
 		return fmt.Errorf("failed to delete event: %w", err)
 	}
@@ -807,7 +774,7 @@ func (c *Core) removeGenerated(event Event) error {
 		masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
 
 		// update/overwrite the file in repo
-		err := c.saveEventToRepo(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
+		err := c.saveAndCommitEvent(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
 		if err != nil {
 			return fmt.Errorf("failed to save event to repo: %w", err)
 		}
