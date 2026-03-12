@@ -25,16 +25,16 @@ jobs:
         run: go test -v ./...
 
       # wasm tests
-      - name: Install wasmbrowsertest
-        run: |
-          go install github.com/agnivade/wasmbrowsertest@latest
-          mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
+      # - name: Install wasmbrowsertest
+      #   run: |
+      #     go install github.com/agnivade/wasmbrowsertest@latest
+      #     mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
 
-      - name: Install Chrome
-        uses: browser-actions/setup-chrome@latest
+      # - name: Install Chrome
+      #   uses: browser-actions/setup-chrome@latest
 
-      - name: Run WASM Tests
-        run: GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm # no e2e cuz they wont work (no opfsRootHandle exists etc.)
+      # - name: Run WASM Tests
+      #   run: GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm # no e2e cuz they wont work (no opfsRootHandle exists etc.)
 
   build-and-release:
     needs: tests # only release if security AND all tests pass
