@@ -95,3 +95,22 @@ func (e *Exception) Validate() error {
 	}
 	return nil
 }
+
+func (e Event) isGenerated() bool {
+	return e.MasterId != uuid.Nil
+}
+
+func (e Event) getTreeEndTime() time.Time {
+	if e.Repeat == nil {
+		return e.To
+	}
+
+	eventEnd := e.To
+	if e.Repeat != nil {
+		eventEnd = e.Repeat.Until // if repeating, use interval [From, Repetition.Until]
+		if e.Repeat.Count >= 1 {  // if repeating on count basis
+			eventEnd = addUnit(e.To, e.Repeat.Interval*e.Repeat.Count, e.Repeat.Frequency)
+		}
+	}
+	return eventEnd
+}
