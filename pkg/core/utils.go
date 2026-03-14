@@ -3,14 +3,15 @@ package core
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
-	"github.com/rdleal/intervalst/interval"
 )
 
 func addUnit(t time.Time, value int, unit Freq) time.Time {
@@ -103,6 +104,13 @@ func prepareRepoUrl(repoUrl url.URL, proxyUrl *url.URL) (url.URL, *http.BasicAut
 	return repoUrl, auth
 }
 
+// Merges the originalUrl with proxyUrl to use the cors proxy. Using the "url" query parameter.
+//
+// For Example:
+//
+//	originalUrl: "https://github.com/joe/my-calendar"
+//	proxyUrl: "https://cors-proxy.abc"
+//	out: "https://cors-proxy.abc/?url=https%3A//github.com/joe/my-calendar"
 func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
 	// create the query parameter
 	q := proxyUrl.Query()
@@ -126,12 +134,14 @@ func authFromUrl(u url.URL) *http.BasicAuth {
 	}
 }
 
+// Turns "http://abc.com/foo/bar/my-calendar.git" into "my-calendar".
 func calendarNameFromUrl(u url.URL) string {
 	name := path.Base(u.Path)
 	return strings.TrimSuffix(name, ".git")
 }
 
-func insertEventIntoTree(tree *interval.SearchTree[[]uuid.UUID, time.Time], event Event) error {
+// Inserts an Event to its interval in the tree. Handles basic, as well as repeating master events.
+func insertEventIntoTree(tree EventTree, event Event) error {
 	eventEnd := event.getTreeEndTime()
 	ids, _ := tree.Find(event.From, eventEnd) // find existing interval
 	updated := append(ids, event.Id)          // if not found, ids is nil -> append makes [event.Id]
@@ -180,4 +190,29 @@ func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 		return uuid.Nil
 	}
 	return newId
+}
+
+// Removes the master event from its old interval and reinserts it under the new interval in the interval tree.
+func moveEventInTree(tree EventTree, master, updated *Event) error {
+	// calculate the old end based on the master event
+	oldEnd := master.getTreeEndTime()
+
+	// remove the old interval
+	ids, found := tree.Find(master.From, oldEnd)
+	if found {
+		index := slices.Index(ids, master.Id)
+		if index != -1 {
+			ids = slices.Delete(ids, index, index+1)
+			if len(ids) == 0 {
+				_ = tree.Delete(master.From, oldEnd)
+			} else {
+				_ = tree.Insert(master.From, oldEnd, ids)
+			}
+		}
+	}
+
+	if err := insertEventIntoTree(tree, *updated); err != nil {
+		return fmt.Errorf("failed to reinsert event into tree: %w", err)
+	}
+	return nil
 }
