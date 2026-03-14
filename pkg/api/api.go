@@ -22,7 +22,7 @@ const (
 	emptyJsonArr = "[]"
 )
 
-// The exposed/exported JSON-only API interface
+// The exposed/exported JSON-only API interface.
 type Api struct {
 	inner *core.Core
 }
@@ -35,6 +35,7 @@ func NewApi() *Api {
 }
 
 // -------------------------- Boring methods that do not need any json parsing etc. -------------------------
+
 // func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
 func (a *Api) CreateCalendar(name string) error   { return a.inner.CreateCalendar(name) }
 func (a *Api) RemoveCalendar(name string) error   { return a.inner.RemoveCalendar(name) }
@@ -156,17 +157,14 @@ func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.
 
 // Unmarshalls event from JSON to core.Event for internal use and validates the input.
 func parseAndValidateEventHelper(eventJson string) (core.Event, error) {
-	// unmarshal to struct
 	var e core.Event
 	err := json.Unmarshal([]byte(eventJson), &e)
 	if err != nil {
 		return e, fmt.Errorf("failed to unmarshal event data: %w", err)
 	}
-	// validate
 	err = e.Validate()
 	if err != nil {
 		return e, fmt.Errorf("invalid event data: %w", err)
 	}
-
 	return e, nil
 }
