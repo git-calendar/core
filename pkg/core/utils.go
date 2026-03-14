@@ -1,8 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -132,4 +134,35 @@ func insertEventIntoTree(tree *interval.SearchTree[[]uuid.UUID, time.Time], even
 
 	err := tree.Insert(event.From, eventEnd, updated)
 	return err
+}
+
+// Removes the master event from its old interval and reinserts it under the new interval in the search tree
+func moveEventInTree(tree EventTree, master, updated *Event) error {
+	// calculate the old end based on the master event
+	oldEnd := master.To
+	if master.Repeat != nil {
+		oldEnd = master.Repeat.Until
+		if master.Repeat.Count >= 1 {
+			oldEnd = addUnit(master.To, master.Repeat.Interval*master.Repeat.Count, master.Repeat.Frequency)
+		}
+	}
+
+	// remove the old interval
+	ids, found := tree.Find(master.From, oldEnd)
+	if found {
+		index := slices.Index(ids, master.Id)
+		if index != -1 {
+			ids = slices.Delete(ids, index, index+1)
+			if len(ids) == 0 {
+				_ = tree.Delete(master.From, oldEnd)
+			} else {
+				_ = tree.Insert(master.From, oldEnd, ids)
+			}
+		}
+	}
+
+	if err := insertEventIntoTree(tree, *updated); err != nil {
+		return fmt.Errorf("failed to reinsert event into tree: %w", err)
+	}
+	return nil
 }

@@ -341,7 +341,7 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	}
 
 	if fromChanged || toChanged || repeatChanged {
-		err := c.moveEventInTree(master, &event)
+		err := moveEventInTree(c.eventTree, master, &event)
 		if err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
 		}

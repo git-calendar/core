@@ -1,6 +1,12 @@
 package core
 
-import "strings"
+import (
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/rdleal/intervalst/interval"
+)
 
 const (
 	IndexFileName     string = "index.json"
@@ -8,6 +14,8 @@ const (
 
 	EventsDirName string = "events"
 )
+
+type EventTree = *interval.SearchTree[[]uuid.UUID, time.Time]
 
 type Freq int
 

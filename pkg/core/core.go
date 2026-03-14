@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 //
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
-	eventTree *interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events ({time.Time, time.Time} -> []uuid.UUID)
+	eventTree EventTree // for each interval we can have multiple events ({time.Time, time.Time} -> []uuid.UUID)
 	events    map[uuid.UUID]*Event
 	repos     map[string]*gogit.Repository
 	fs        billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
@@ -144,35 +143,4 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 	}
 
 	return repo, nil
-}
-
-// Removes the master event from its old interval and reinserts it under the new interval in the search tree
-func (c *Core) moveEventInTree(master, updated *Event) error {
-	// calculate the old end based on the master event
-	oldEnd := master.To
-	if master.Repeat != nil {
-		oldEnd = master.Repeat.Until
-		if master.Repeat.Count >= 1 {
-			oldEnd = addUnit(master.To, master.Repeat.Interval*master.Repeat.Count, master.Repeat.Frequency)
-		}
-	}
-
-	// remove the old interval
-	ids, found := c.eventTree.Find(master.From, oldEnd)
-	if found {
-		index := slices.Index(ids, master.Id)
-		if index != -1 {
-			ids = slices.Delete(ids, index, index+1)
-			if len(ids) == 0 {
-				_ = c.eventTree.Delete(master.From, oldEnd)
-			} else {
-				_ = c.eventTree.Insert(master.From, oldEnd, ids)
-			}
-		}
-	}
-
-	if err := insertEventIntoTree(c.eventTree, *updated); err != nil {
-		return fmt.Errorf("failed to reinsert event into tree: %w", err)
-	}
-	return nil
 }
