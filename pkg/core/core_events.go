@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Creates a new event.
+// Creates a new event and save it into git.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)

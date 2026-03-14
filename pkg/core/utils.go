@@ -98,6 +98,13 @@ func prepareRepoUrl(repoUrl url.URL, proxyUrl *url.URL) (url.URL, *http.BasicAut
 	return repoUrl, auth
 }
 
+// Merges the originalUrl with proxyUrl to use the cors proxy. Using the "url" query parameter.
+//
+// For Example:
+//
+//	originalUrl: "https://github.com/joe/my-calendar"
+//	proxyUrl: "https://cors-proxy.abc"
+//	out: "https://cors-proxy.abc/?url=https%3A//github.com/joe/my-calendar"
 func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
 	// create the query parameter
 	q := proxyUrl.Query()
@@ -121,6 +128,7 @@ func authFromUrl(u url.URL) *http.BasicAuth {
 	}
 }
 
+// Turns "http://abc.com/foo/bar/my-calendar.git" into "my-calendar".
 func calendarNameFromUrl(u url.URL) string {
 	name := path.Base(u.Path)
 	return strings.TrimSuffix(name, ".git")
