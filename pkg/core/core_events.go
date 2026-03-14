@@ -22,7 +22,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 
 	c.events[event.Id] = &event
 
-	if err := insertEventIntoTree(c.eventTree, event); err != nil {
+	if err := insertEventIntoTree(c.tree, event); err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
@@ -34,7 +34,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 	return &event, nil
 }
 
-// Updates an event based on its id. You can specify an UpdateOption to control the behaviour for updating a repeating event,
+// Updates an event based on its id. You have to specify an UpdateOption to control the behaviour for updating a repeating event.
 func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
@@ -43,41 +43,8 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 	if event.isGenerated() {
 		return c.updateGenerated(event, opts...)
 	}
-	// ------- normal event or normal exception event -------
 
-	originalEvent, exists := c.events[event.Id]
-	if !exists {
-		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
-	}
-
-	oldEnd := originalEvent.getTreeEndTime()
-	newEnd := event.getTreeEndTime()
-
-	if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
-		ids, found := c.eventTree.Find(originalEvent.From, oldEnd)
-		if found {
-			index := slices.Index(ids, originalEvent.Id)
-			if index != -1 {
-				updated := slices.Delete(ids, index, index+1)
-				if len(updated) == 0 {
-					_ = c.eventTree.Delete(originalEvent.From, oldEnd)
-				} else {
-					_ = c.eventTree.Insert(originalEvent.From, oldEnd, updated)
-				}
-			}
-		}
-		err := insertEventIntoTree(c.eventTree, event)
-		if err != nil {
-			return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
-		}
-	}
-
-	c.events[event.Id] = &event
-	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
-		return nil, err
-	}
-
-	return &event, nil
+	return c.updateReal(event)
 }
 
 // Removes an event from calendar
@@ -96,15 +63,15 @@ func (c *Core) RemoveEvent(event Event) error {
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, ok := c.events[id]
 	if !ok {
-		return nil, fmt.Errorf("event with this id doesnt exist")
+		return nil, fmt.Errorf("event with this id doesn't exist")
 	}
 	return e, nil
 }
 
-// Returns an array of events which fall into the specified interval.
+// Returns an array of events which fall into the specified interval <from, to>.
 func (c *Core) GetEvents(from, to time.Time) []Event {
 	// query the interval tree
-	intervalsMatched, found := c.eventTree.AllIntersections(from, to)
+	intervalsMatched, found := c.tree.AllIntersections(from, to)
 	if !found {
 		return []Event{}
 	}
@@ -164,6 +131,68 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 	return result
 }
 
+// ------------------------------------------------ Helpers -------------------------------------------------
+
+func (c *Core) updateReal(event Event) (*Event, error) {
+	originalEvent, exists := c.events[event.Id]
+	if !exists {
+		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
+	}
+
+	oldEnd := originalEvent.getTreeEndTime()
+	newEnd := event.getTreeEndTime()
+
+	if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
+		ids, found := c.tree.Find(originalEvent.From, oldEnd)
+		if found {
+			index := slices.Index(ids, originalEvent.Id)
+			if index != -1 {
+				updated := slices.Delete(ids, index, index+1)
+				if len(updated) == 0 {
+					_ = c.tree.Delete(originalEvent.From, oldEnd)
+				} else {
+					_ = c.tree.Insert(originalEvent.From, oldEnd, updated)
+				}
+			}
+		}
+		err := insertEventIntoTree(c.tree, event)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
+		}
+	}
+
+	c.events[event.Id] = &event
+	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title)); err != nil {
+		return nil, err
+	}
+
+	return &event, nil
+}
+
+// Updates generated event. Assumes that input event is already validated.
+func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error) {
+	if len(opts) != 1 || !opts[0].IsValid() {
+		return nil, fmt.Errorf("invalid update event: incorrect options provided")
+	}
+
+	master, ok := c.events[event.MasterId]
+	if !ok || master == nil || master.Repeat == nil {
+		return nil, fmt.Errorf("invalid update event: no valid master found")
+	}
+
+	switch opts[0] {
+	case Current:
+		return c.updateGeneratedCurrent(event, master)
+	case Following:
+		return c.updateGeneratedFollowing(event, master)
+	case All:
+		return c.updateGeneratedAll(event, master)
+	default:
+		return nil, fmt.Errorf("update option %d isn't implemented", opts[0])
+	}
+}
+
+// Updates single generated/slave event by adding a repeat rule to its master and creating a brand new one.
 func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error) {
 	// ----- update master event with the new exception -----
 	exceptionTime := event.OriginalFrom
@@ -196,7 +225,7 @@ func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error
 	return &event, nil
 }
 
-// Stops the original event from repeating anymore and creates new repeating event with new updated properties
+// Stops the original master event from repeating further and creates brand new repeating event with updated properties.
 func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, error) {
 	master.Repeat.Until = event.From // cap master at start of change
 	master.Repeat.Count = -1         // enforce "Until" logic over "Count"
@@ -209,7 +238,7 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 	event.MasterId = uuid.Nil
 	c.events[event.Id] = &event
 
-	if err := insertEventIntoTree(c.eventTree, event); err != nil {
+	if err := insertEventIntoTree(c.tree, event); err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
@@ -218,7 +247,7 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 	return &event, nil
 }
 
-// Updates all event related to the master
+// Updates the master event only. That means all generated slave events get updated too.
 func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	fromChanged := event.From != master.From
 	toChanged := event.To != master.To
@@ -232,7 +261,7 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	}
 
 	if fromChanged || toChanged || repeatChanged {
-		err := moveEventInTree(c.eventTree, master, &event)
+		err := moveEventInTree(c.tree, master, &event)
 		if err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
 		}
@@ -251,34 +280,13 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	return master, nil
 }
 
-// Updates generated event. Assumes that input event is already validated.
-func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error) {
-	if len(opts) != 1 || !opts[0].IsValid() {
-		return nil, fmt.Errorf("invalid update event: incorrect options provided")
-	}
-	master, ok := c.events[event.MasterId]
-	if !ok || master == nil || master.Repeat == nil {
-		return nil, fmt.Errorf("invalid update event: no valid master found")
-	}
-
-	switch opts[0] {
-	case Current:
-		return c.updateGeneratedCurrent(event, master)
-	case Following:
-		return c.updateGeneratedFollowing(event, master)
-	case All:
-		return c.updateGeneratedAll(event, master)
-	default:
-		return nil, fmt.Errorf("update option %d isn't implemented", opts[0])
-	}
-}
-
+// Deletes a real (basic/repeating master) event from memory as well as from git.
 func (c *Core) removeReal(event Event) error {
 	// find last slave and its To
 	eventEnd := event.getTreeEndTime()
 
 	// get the full interval
-	ids, found := c.eventTree.Find(event.From, eventEnd)
+	ids, found := c.tree.Find(event.From, eventEnd)
 	if !found {
 		return fmt.Errorf("event not found in search tree")
 	}
@@ -293,11 +301,11 @@ func (c *Core) removeReal(event Event) error {
 	updated := slices.Delete(ids, index, index+1)
 
 	if len(updated) == 0 { // interval now empty -> delete from tree
-		if err := c.eventTree.Delete(event.From, eventEnd); err != nil {
+		if err := c.tree.Delete(event.From, eventEnd); err != nil {
 			return fmt.Errorf("failed to delete tree node: %w", err)
 		}
 	} else { // not empty -> overwrite
-		if err := c.eventTree.Insert(event.From, eventEnd, updated); err != nil {
+		if err := c.tree.Insert(event.From, eventEnd, updated); err != nil {
 			return fmt.Errorf("failed to reinsert node into tree: %w", err)
 		}
 	}
@@ -312,6 +320,7 @@ func (c *Core) removeReal(event Event) error {
 	return nil
 }
 
+// Deletes a generated/slave event by adding an exception to its master repeat rule.
 func (c *Core) removeGenerated(event Event) error {
 	masterEvent := c.events[event.MasterId]
 	if masterEvent == nil || masterEvent.Repeat == nil {

@@ -20,11 +20,11 @@ import (
 //
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
-	eventTree EventTree // for each interval we can have multiple events ({time.Time, time.Time} -> []uuid.UUID)
-	events    map[uuid.UUID]*Event
-	repos     map[string]*gogit.Repository
-	fs        billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl  *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
+	tree     EventTree
+	events   map[uuid.UUID]*Event
+	repos    map[string]*gogit.Repository
+	fs       billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
+	proxyUrl *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 	// tags      map[string][]string // might not be needed to "cache" it like this
 }
 
@@ -99,7 +99,7 @@ func (c *Core) PullAll() error {
 
 // Resets the Core internal variables and reallocates them.
 func (c *Core) eraseAndAlloc() {
-	c.eventTree = interval.NewSearchTree[[]uuid.UUID](
+	c.tree = interval.NewSearchTree[[]uuid.UUID](
 		func(x, y time.Time) int {
 			return x.Compare(y)
 		},

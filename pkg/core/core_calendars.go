@@ -85,7 +85,7 @@ func (c *Core) LoadCalendars() error {
 
 			c.events[event.Id] = &event
 
-			err = insertEventIntoTree(c.eventTree, event)
+			err = insertEventIntoTree(c.tree, event)
 			if err != nil {
 				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
 				continue
@@ -136,7 +136,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 
 	// repair the remote url (set the pure url with auth, without proxy)
 	err = c.repos[calendarName].DeleteRemote("origin")
-	c.addRemote(calendarName, "origin", repoUrl.String())
+	c.AddRemote(calendarName, "origin", repoUrl.String())
 
 	return err
 }
@@ -159,7 +159,8 @@ func (c *Core) RemoveCalendar(name string) error {
 	return c.LoadCalendars()
 }
 
-func (c *Core) addRemote(calendar, remoteName, remoteUrl string) error {
+// Adds a new remote to the specified calendar repository.
+func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
 	var validUrl string
 	{
 		// validate URL (git doesn't do that when adding a remote, it fails afterwards with e.g. git fetch)
