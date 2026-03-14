@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
-	"github.com/rdleal/intervalst/interval"
 )
 
 func addUnit(t time.Time, value int, unit Freq) time.Time {
@@ -127,7 +126,8 @@ func calendarNameFromUrl(u url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-func insertEventIntoTree(tree *interval.SearchTree[[]uuid.UUID, time.Time], event Event) error {
+// Inserts an Event to its interval in the tree. Handles basic, as well as repeating master events.
+func insertEventIntoTree(tree EventTree, event Event) error {
 	eventEnd := event.getTreeEndTime()
 	ids, _ := tree.Find(event.From, eventEnd) // find existing interval
 	updated := append(ids, event.Id)          // if not found, ids is nil -> append makes [event.Id]
