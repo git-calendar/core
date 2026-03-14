@@ -194,7 +194,7 @@ func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error
 
 // Updates single generated/slave event by adding a repeat rule to its master and creating a brand new one.
 func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error) {
-	// ----- update master event with the new exception -----
+	// update master event with the new exception
 	exceptionTime := event.OriginalFrom
 	if exceptionTime.IsZero() {
 		exceptionTime = event.From
@@ -209,20 +209,8 @@ func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error
 		return nil, fmt.Errorf("failed to save master event: %w", err)
 	}
 
-	// ----- update master event with the new exception -----
-	event.Repeat = nil // detach from repeating time series
-
-	c.events[event.Id] = &event
-
-	if err := insertEventIntoTree(c.eventTree, event); err != nil {
-		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
-	}
-
-	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Saved exception event '%s'", event.Title)); err != nil {
-		return nil, err
-	}
-
-	return &event, nil
+	event.Repeat = nil          // detach from repeating time series
+	return c.CreateEvent(event) // save as new
 }
 
 // Stops the original master event from repeating further and creates brand new repeating event with updated properties.
