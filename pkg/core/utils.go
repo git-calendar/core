@@ -150,15 +150,15 @@ func insertEventIntoTree(tree EventTree, event Event) error {
 	return err
 }
 
-// Generates custom uuid from masterId and some time. It uses 6 bytes for the master and 6 bytes for the time
+// Generates custom uuid from masterId and some time. It uses 9 bytes for the master and 4 bytes for the time
 // If the generation fails, it returns uuid.New()
 func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
 	copy(idBuf[:6], masterId[:6])      // take first 6 bytes from masterId
+	copy(idBuf[9:12], masterId[13:16]) // take another 3 bytes from masterId
 	idBuf[6] = 0x80                    // set version
-	idBuf[7] = 0x69                    // could be a flag, but now is 0x69
+	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
 	idBuf[8] = 0x80                    // RFC 9562
-	copy(idBuf[9:12], masterId[13:16]) // take another 3 bytes from master
 	unix32 := uint32(t.Unix())
 	binary.BigEndian.PutUint32(idBuf[12:16], unix32) // add the time
 	id, err := uuid.FromBytes(idBuf)
@@ -168,6 +168,7 @@ func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
 	return id
 }
 
+// extracts time from custom UUIDv8
 func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
 	// check if the id is v8
 	if id[6] != 0x80 {
@@ -177,6 +178,7 @@ func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
 	return time.Unix(int64(unix32), 0), nil
 }
 
+// takes custom UUISv8 and shifts the time by duration
 func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 	idBuf := make([]byte, 16)
 	copy(idBuf[0:16], id[:8])

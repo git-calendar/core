@@ -26,13 +26,8 @@ type Repetition struct {
 	Interval   int         `json:"interval"`   // 1..N (freq:Weekly + interval:2 => every other week)
 	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
 	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions"` // an array of slaves "From" timestamps
+	Exceptions []uuid.UUID `json:"exceptions"` // an array of slaves ids
 }
-
-/*type Exception struct {
-	Id   uuid.UUID `json:"id"`   // Event.Id of the generated event that is excluded from generating
-	Time time.Time `json:"time"` // Event.From of the generated event that is excluded from generating
-}*/
 
 func (e *Event) Validate() error {
 	if e == nil {
@@ -68,11 +63,6 @@ func (r *Repetition) Validate() error {
 	if !r.Frequency.IsValid() {
 		return errors.New("repetition frequency is invalid")
 	}
-	/*for _, ex := range r.Exceptions {
-		if ex.Validate() == nil {
-			return errors.New("repetition exceptions are not valid")
-		}
-	}*/
 	if r.Interval < 1 {
 		return errors.New("repetition interval is invalid")
 	}
@@ -85,16 +75,6 @@ func (r *Repetition) Validate() error {
 
 	return nil
 }
-
-/*func (e *Exception) Validate() error {
-	if e == nil {
-		return nil
-	}
-	if e.Time.IsZero() {
-		return errors.New("exception time cannot be empty")
-	}
-	return nil
-}*/
 
 func (e Event) isGenerated() bool {
 	return e.MasterId != uuid.Nil
