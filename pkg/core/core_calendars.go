@@ -37,7 +37,7 @@ func (c *Core) ListCalendars() []string {
 
 // Tries to load every directory/repo/calendar in the fs root.
 func (c *Core) LoadCalendars() error {
-	c.eraseAndAlloc()
+	c.resetCore()
 
 	// load repositories
 	entries, err := c.fs.ReadDir(filesystem.DirName)
@@ -85,7 +85,7 @@ func (c *Core) LoadCalendars() error {
 
 			c.events[event.Id] = &event
 
-			err = insertEventIntoTree(c.tree, event)
+			err = c.intervalTree.InsertEvent(event)
 			if err != nil {
 				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
 				continue

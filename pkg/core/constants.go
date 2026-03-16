@@ -2,10 +2,6 @@ package core
 
 import (
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
-	"github.com/rdleal/intervalst/interval"
 )
 
 const (
@@ -13,9 +9,9 @@ const (
 	RichIndexFileName string = "index-rich.json"
 
 	EventsDirName string = "events"
-)
 
-type EventTree = *interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events; <time.Time, time.Time> -> []uuid.UUID
+	GitAuthorName string = "git-calendar"
+)
 
 // ------- Repeating frequency -------
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/firu11/git-calendar-core/pkg/filesystem"
 	"github.com/go-git/go-billy/v5"
@@ -13,25 +12,24 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/uuid"
-	"github.com/rdleal/intervalst/interval"
 )
 
 // The real API.
 //
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
-	tree     EventTree
-	events   map[uuid.UUID]*Event
-	repos    map[string]*gogit.Repository
-	fs       billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
+	intervalTree *IntervalTree
+	events       map[uuid.UUID]*Event
+	repos        map[string]*gogit.Repository
+	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
+	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 	// tags      map[string][]string // might not be needed to "cache" it like this
 }
 
 // A "constructor" for Core.
 func NewCore() *Core {
 	var c Core
-	c.eraseAndAlloc()
+	c.resetCore()
 
 	// get the fs; go tags handle which one (classic/wasm)
 	var err error
@@ -98,12 +96,8 @@ func (c *Core) PullAll() error {
 // ------------------------------------------------ Helpers -------------------------------------------------
 
 // Resets the Core internal variables and reallocates them.
-func (c *Core) eraseAndAlloc() {
-	c.tree = interval.NewSearchTree[[]uuid.UUID](
-		func(x, y time.Time) int {
-			return x.Compare(y)
-		},
-	)
+func (c *Core) resetCore() {
+	c.intervalTree = NewIntervalTree()
 	c.events = make(map[uuid.UUID]*Event)
 	c.repos = make(map[string]*gogit.Repository)
 }

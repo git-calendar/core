@@ -23,7 +23,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 
 	c.events[event.Id] = &event
 
-	if err := insertEventIntoTree(c.tree, event); err != nil {
+	if err := c.intervalTree.InsertEvent(event); err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
@@ -72,7 +72,7 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 // Returns an array of events which fall into the specified interval <from, to>.
 func (c *Core) GetEvents(from, to time.Time) []Event {
 	// query the interval tree
-	intervalsMatched, found := c.tree.AllIntersections(from, to)
+	intervalsMatched, found := c.intervalTree.tree.AllIntersections(from, to)
 	if !found {
 		return []Event{}
 	}
@@ -144,20 +144,20 @@ func (c *Core) updateReal(event Event) (*Event, error) {
 	oldEnd := originalEvent.getTreeEndTime()
 	newEnd := event.getTreeEndTime()
 
-	if originalEvent.From != event.From || oldEnd != newEnd { // update the eventTree
-		ids, found := c.tree.Find(originalEvent.From, oldEnd)
+	if originalEvent.From != event.From || oldEnd != newEnd { // update the interval tree
+		ids, found := c.intervalTree.tree.Find(originalEvent.From, oldEnd)
 		if found {
 			index := slices.Index(ids, originalEvent.Id)
 			if index != -1 {
 				updated := slices.Delete(ids, index, index+1)
 				if len(updated) == 0 {
-					_ = c.tree.Delete(originalEvent.From, oldEnd)
+					_ = c.intervalTree.tree.Delete(originalEvent.From, oldEnd)
 				} else {
-					_ = c.tree.Insert(originalEvent.From, oldEnd, updated)
+					_ = c.intervalTree.tree.Insert(originalEvent.From, oldEnd, updated)
 				}
 			}
 		}
-		err := insertEventIntoTree(c.tree, event)
+		err := c.intervalTree.InsertEvent(event)
 		if err != nil {
 			return nil, fmt.Errorf("failed to reinsert event into tree: %w", err)
 		}
@@ -228,7 +228,7 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 	event.MasterId = uuid.Nil
 	c.events[event.Id] = &event
 
-	if err := insertEventIntoTree(c.tree, event); err != nil {
+	if err := c.intervalTree.InsertEvent(event); err != nil {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
@@ -259,7 +259,7 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	}
 
 	if fromChanged || toChanged || repeatChanged {
-		err := moveEventInTree(c.tree, master, &event)
+		err := c.intervalTree.MoveEvent(master, &event)
 		if err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
 		}
@@ -280,38 +280,15 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 
 // Deletes a real (basic/repeating master) event from memory as well as from git.
 func (c *Core) removeReal(event Event) error {
-	// find last slave and its To
-	eventEnd := event.getTreeEndTime()
-
-	// get the full interval
-	ids, found := c.tree.Find(event.From, eventEnd)
-	if !found {
-		return fmt.Errorf("event not found in search tree")
-	}
-
-	// find index of our event
-	index := slices.Index(ids, event.Id)
-	if index == -1 {
-		return errors.New("")
-	}
-
-	// delete event from interval
-	updated := slices.Delete(ids, index, index+1)
-
-	if len(updated) == 0 { // interval now empty -> delete from tree
-		if err := c.tree.Delete(event.From, eventEnd); err != nil {
-			return fmt.Errorf("failed to delete tree node: %w", err)
-		}
-	} else { // not empty -> overwrite
-		if err := c.tree.Insert(event.From, eventEnd, updated); err != nil {
-			return fmt.Errorf("failed to reinsert node into tree: %w", err)
-		}
+	err := c.intervalTree.RemoveRealEvent(event)
+	if err != nil {
+		return fmt.Errorf("failed to delete event from interval tree")
 	}
 
 	// delete file from disk + git
-	err := c.deleteAndCommitEvent(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
+	err = c.deleteAndCommitEvent(event.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
 	if err != nil {
-		return fmt.Errorf("failed to delete event: %w", err)
+		return fmt.Errorf("failed to delete event from git: %w", err)
 	}
 
 	delete(c.events, event.Id)
@@ -393,7 +370,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	// commit
 	_, err = w.Commit(commitMsg, &gogit.CommitOptions{
 		Author: &object.Signature{
-			Name:  "git-calendar",
+			Name:  GitAuthorName,
 			Email: "",
 			When:  time.Now(),
 		},
@@ -439,7 +416,7 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 
 	_, err = w.Commit(commitMsg, &gogit.CommitOptions{
 		Author: &object.Signature{
-			Name:  "git-calendar",
+			Name:  GitAuthorName,
 			Email: "",
 			When:  time.Now(),
 		},

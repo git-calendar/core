@@ -3,10 +3,8 @@ package core
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net/url"
 	"path"
-	"slices"
 	"strings"
 	"time"
 
@@ -66,15 +64,6 @@ func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
 	default:
 		return event.From, -1
 	}
-}
-
-func containsId(exceptions []uuid.UUID, id uuid.UUID) bool {
-	for _, ex := range exceptions {
-		if ex == id {
-			return true
-		}
-	}
-	return false
 }
 
 func containsTime(exceptions []uuid.UUID, t time.Time) bool {
@@ -140,17 +129,7 @@ func calendarNameFromUrl(u url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// Inserts an Event to its interval in the tree. Handles basic, as well as repeating master events.
-func insertEventIntoTree(tree EventTree, event Event) error {
-	eventEnd := event.getTreeEndTime()
-	ids, _ := tree.Find(event.From, eventEnd) // find existing interval
-	updated := append(ids, event.Id)          // if not found, ids is nil -> append makes [event.Id]
-
-	err := tree.Insert(event.From, eventEnd, updated)
-	return err
-}
-
-// Generates custom uuid from masterId and some time. It uses 9 bytes for the master and 4 bytes for the time
+// Generates custom uuid from masterId and some time. It uses 6 bytes for the master and 6 bytes for the time
 // If the generation fails, it returns uuid.New()
 func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
@@ -192,29 +171,4 @@ func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 		return uuid.Nil
 	}
 	return newId
-}
-
-// Removes the master event from its old interval and reinserts it under the new interval in the interval tree.
-func moveEventInTree(tree EventTree, master, updated *Event) error {
-	// calculate the old end based on the master event
-	oldEnd := master.getTreeEndTime()
-
-	// remove the old interval
-	ids, found := tree.Find(master.From, oldEnd)
-	if found {
-		index := slices.Index(ids, master.Id)
-		if index != -1 {
-			ids = slices.Delete(ids, index, index+1)
-			if len(ids) == 0 {
-				_ = tree.Delete(master.From, oldEnd)
-			} else {
-				_ = tree.Insert(master.From, oldEnd, ids)
-			}
-		}
-	}
-
-	if err := insertEventIntoTree(tree, *updated); err != nil {
-		return fmt.Errorf("failed to reinsert event into tree: %w", err)
-	}
-	return nil
 }
