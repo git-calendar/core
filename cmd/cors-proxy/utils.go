@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,22 +26,13 @@ var roundTripper http.RoundTripper = &http.Transport{
 	ResponseHeaderTimeout: 10 * time.Second,
 }
 
-// TODO separate into a text file
-var allowedHosts = map[string]bool{
-	"github.com":                true,
-	"raw.githubusercontent.com": true,
-	"gitlab.com":                true,
-	"codeberg.org":              true,
-}
-
 func isAllowedHost(u *url.URL) bool {
 	if u == nil {
 		return false
 	}
 
 	host := strings.ToLower(u.Hostname())
-	_, ok := allowedHosts[host]
-	return ok
+	return slices.Contains(cfg.AllowedHosts, host)
 }
 
 // ------------------- middleware -------------------
@@ -124,10 +116,11 @@ type config struct {
 	Production      bool
 	UpstreamTimeout time.Duration
 	MaxResponseSize int64
+	AllowedHosts    []string
 }
 
-func loadConfig() *config {
-	var cfg config
+func loadConfig() {
+	cfg = &config{}
 	var err error
 
 	prodEnv := os.Getenv(prefix + "PRODUCTION")
@@ -149,5 +142,18 @@ func loadConfig() *config {
 		cfg.MaxResponseSize = 1 << 20 // 1MB
 	}
 
-	return &cfg
+	rawHostsEnv := os.Getenv(prefix + "ALLOWED_HOSTS")
+	if len(rawHostsEnv) == 0 {
+		cfg.AllowedHosts = []string{
+			"github.com",
+			"raw.githubusercontent.com",
+			"gitlab.com",
+			"codeberg.org",
+		}
+	} else {
+		cfg.AllowedHosts = strings.Split(os.Getenv(prefix+"ALLOWED_HOSTS"), ",")
+		for i := range cfg.AllowedHosts {
+			cfg.AllowedHosts[i] = strings.TrimSpace(cfg.AllowedHosts[i]) // remove extra spaces: "  github.com"
+		}
+	}
 }

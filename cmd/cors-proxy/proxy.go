@@ -15,7 +15,7 @@ var cfg *config
 
 func main() {
 	// load config
-	cfg = loadConfig()
+	loadConfig()
 
 	// setup logger
 	var logger *slog.Logger
@@ -38,9 +38,10 @@ func main() {
 		MaxHeaderBytes: 64 << 10, // 1KB
 	}
 
-	// run the proxy
+	slog.Info(fmt.Sprintf("configuration: %+v\n", *cfg))
 	slog.Info("running on " + s.Addr)
 
+	// run the proxy
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error(err.Error())
 		panic(err)
@@ -122,7 +123,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if n > cfg.MaxResponseSize {
-		http.Error(w, "response too large", http.StatusBadGateway)
+		slog.Info("response too large")
 		return
 	}
 }
