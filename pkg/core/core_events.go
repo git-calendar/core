@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"time"
 
@@ -107,22 +108,23 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 				index++
 				generatedEvent := Event{
-					Id:           uuid.New(),
-					Title:        curEvent.Title,
-					Location:     curEvent.Location,
-					Description:  curEvent.Description,
-					From:         tmpEventTime,
-					OriginalFrom: tmpEventTime,
-					To:           tmpEventTime.Add(duration),
-					Calendar:     curEvent.Calendar,
-					Tag:          curEvent.Tag,
-					MasterId:     curEvent.Id,
-					Repeat:       curEvent.Repeat, // TODO send the repeat struct
+					Id:          generateCustomUUID(curEvent.Id, tmpEventTime),
+					Title:       curEvent.Title,
+					Location:    curEvent.Location,
+					Description: curEvent.Description,
+					From:        tmpEventTime,
+					// OriginalFrom: tmpEventTime,
+					To:       tmpEventTime.Add(duration),
+					Calendar: curEvent.Calendar,
+					Tag:      curEvent.Tag,
+					MasterId: curEvent.Id,
+					Repeat:   curEvent.Repeat, // TODO send the repeat struct
 				}
 				// ignore exceptions
-				if !containsTime(curEvent.Repeat.Exceptions, tmpEventTime) {
+				if !slices.Contains(curEvent.Repeat.Exceptions, generatedEvent.Id) {
 					result = append(result, generatedEvent)
 				}
+
 				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
 			}
 		}
@@ -195,14 +197,14 @@ func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error
 // Updates single generated/slave event by adding a repeat rule to its master and creating a brand new one.
 func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error) {
 	// update master event with the new exception
-	exceptionTime := event.OriginalFrom
+	exceptionTime, err := getTimeFromUUID(event.Id)
+	if err != nil {
+		return nil, err
+	}
 	if exceptionTime.IsZero() {
 		exceptionTime = event.From
 	}
-	exception := Exception{
-		event.Id,
-		exceptionTime,
-	}
+	exception := event.Id
 	master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
 
 	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
@@ -239,12 +241,20 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 	fromChanged := event.From != master.From
 	toChanged := event.To != master.To
-	repeatChanged := event.Repeat != master.Repeat
+	repeatChanged := !reflect.DeepEqual(event.Repeat, master.Repeat)
 
-	if fromChanged { // shift all exceptions by the time difference
+	if fromChanged && master.Repeat != nil { // shift all exceptions by the time difference
 		distance := event.From.Sub(master.From)
 		for i := range master.Repeat.Exceptions {
-			master.Repeat.Exceptions[i].Time = master.Repeat.Exceptions[i].Time.Add(distance)
+			exceptionTime, err := getTimeFromUUID(master.Repeat.Exceptions[i])
+			if err != nil {
+				return nil, err
+			}
+			if exceptionTime.IsZero() {
+				continue
+			}
+			newId := getShiftedUUID(master.Repeat.Exceptions[i], distance)
+			master.Repeat.Exceptions[i] = newId
 		}
 	}
 
@@ -316,12 +326,9 @@ func (c *Core) removeGenerated(event Event) error {
 	}
 
 	// if exception doesn't exist yet
-	if !containsTime(masterEvent.Repeat.Exceptions, event.From) {
+	if !slices.Contains(masterEvent.Repeat.Exceptions, event.Id) {
 		// add date to master exceptions
-		newException := Exception{
-			event.Id,
-			event.From,
-		}
+		newException := event.Id
 		masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
 
 		// update/overwrite the file in repo

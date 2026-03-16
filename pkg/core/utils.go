@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -66,18 +68,22 @@ func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
 	}
 }
 
-func containsId(exceptions []Exception, id uuid.UUID) bool {
+func containsId(exceptions []uuid.UUID, id uuid.UUID) bool {
 	for _, ex := range exceptions {
-		if ex.Id == id {
+		if ex == id {
 			return true
 		}
 	}
 	return false
 }
 
-func containsTime(exceptions []Exception, t time.Time) bool {
+func containsTime(exceptions []uuid.UUID, t time.Time) bool {
 	for _, ex := range exceptions {
-		if ex.Time.Equal(t) {
+		exTime, err := getTimeFromUUID(ex)
+		if err != nil {
+			continue
+		}
+		if exTime.Equal(t) {
 			return true
 		}
 	}
@@ -144,16 +150,54 @@ func insertEventIntoTree(tree EventTree, event Event) error {
 	return err
 }
 
-// Removes the master event from its old interval and reinserts it under the new interval in the search tree
+// Generates custom uuid from masterId and some time. It uses 9 bytes for the master and 4 bytes for the time
+// If the generation fails, it returns uuid.New()
+func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
+	idBuf := make([]byte, 16)
+	copy(idBuf[:6], masterId[:6])      // take first 6 bytes from masterId
+	copy(idBuf[9:12], masterId[13:16]) // take another 3 bytes from masterId
+	idBuf[6] = 0x80                    // set version
+	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
+	idBuf[8] = 0x80                    // RFC 9562
+	unix32 := uint32(t.Unix())
+	binary.BigEndian.PutUint32(idBuf[12:16], unix32) // add the time
+	id, err := uuid.FromBytes(idBuf)
+	if err != nil {
+		return uuid.New()
+	}
+	return id
+}
+
+// extracts time from custom UUIDv8
+func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
+	// check if the id is v8
+	if id[6] != 0x80 {
+		return time.Time{}, errors.New("invalid UUID")
+	}
+	unix32 := binary.BigEndian.Uint32(id[12:16])
+	return time.Unix(int64(unix32), 0), nil
+}
+
+// takes custom UUISv8 and shifts the time by duration
+func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
+	idBuf := make([]byte, 16)
+	copy(idBuf[0:16], id[:8])
+	if idBuf[6] != 0x80 {
+		return uuid.Nil
+	}
+	shiftedTime := uint32(time.Unix(int64(binary.BigEndian.Uint32(id[12:16])), 0).Add(duration).Unix())
+	binary.BigEndian.PutUint32(idBuf[12:16], shiftedTime) // add the time
+	newId, err := uuid.FromBytes(idBuf)
+	if err != nil {
+		return uuid.Nil
+	}
+	return newId
+}
+
+// Removes the master event from its old interval and reinserts it under the new interval in the interval tree.
 func moveEventInTree(tree EventTree, master, updated *Event) error {
 	// calculate the old end based on the master event
-	oldEnd := master.To
-	if master.Repeat != nil {
-		oldEnd = master.Repeat.Until
-		if master.Repeat.Count >= 1 {
-			oldEnd = addUnit(master.To, master.Repeat.Interval*master.Repeat.Count, master.Repeat.Frequency)
-		}
-	}
+	oldEnd := master.getTreeEndTime()
 
 	// remove the old interval
 	ids, found := tree.Find(master.From, oldEnd)

@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -387,6 +388,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 		t.Errorf("not all events were generated: %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
+	t.Logf("events: %+v", eventsOut)
 	eventToRemove := eventsOut[0]
 	err = a.RemoveEvent(eventToRemove)
 	if err != nil {
@@ -394,7 +396,10 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	}
 
 	eventsOut = a.GetEvents(queryFrom, queryTo)
-	if len(eventsOut) != COUNT-1 && slices.Contains(eventsOut, eventToRemove) {
+	t.Logf("events: %+v", eventsOut)
+	master, _ := a.GetEvent(eventsOut[0].MasterId)
+	t.Logf("master: %+v", master.Repeat)
+	if len(eventsOut) != COUNT-1 || slices.Contains(eventsOut, eventToRemove) {
 		t.Errorf("event wasn't removed correctly %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
@@ -532,7 +537,6 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	targetEvent.Title = "Daily event - update"
 	targetEvent.From = startTime.Add(time.Hour)
 	targetEvent.To = startTime.Add(2 * time.Hour)
-	targetEvent.OriginalFrom = originalFrom
 
 	_, err := a.UpdateEvent(targetEvent, core.Current)
 	if err != nil {
@@ -542,7 +546,8 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	masterOut, _ := a.GetEvent(masterId)
 	foundException := false
 	for _, ex := range masterOut.Repeat.Exceptions {
-		if ex.Time.Equal(originalFrom) {
+		t := time.Unix(int64(binary.BigEndian.Uint32(ex[12:16])), 0)
+		if t.Equal(originalFrom) {
 			foundException = true
 			break
 		}
@@ -665,5 +670,50 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 	}
 	if masterOut.Title != "Monthly Review - Shifted" {
 		t.Errorf("master event Title was not updated")
+	}
+}
+func Test_UpdateEvent_FromStandardToRepeating_Works(t *testing.T) {
+	a := core.NewCore()
+	_ = a.CreateCalendar(TestCalendarName)
+
+	id := uuid.New()
+	startTime := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
+	eventIn := core.Event{
+		Id:       id,
+		Calendar: TestCalendarName,
+		Title:    "One-time meeting",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+	}
+
+	_, err := a.CreateEvent(eventIn)
+	if err != nil {
+		t.Fatalf("failed to create an event: %v", err)
+	}
+
+	// Now, update it to be a repeating event
+	eventIn.Title = "Weekly meeting"
+	eventIn.Repeat = &core.Repetition{
+		Frequency: core.Week,
+		Interval:  1,
+		Count:     3,
+	}
+
+	_, err = a.UpdateEvent(eventIn)
+	if err != nil {
+		t.Fatalf("failed to update event to repeating: %v", err)
+	}
+
+	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 1, 0))
+	if len(eventsOut) != 3 {
+		t.Errorf("expected 3 events after update, got %d", len(eventsOut))
+	}
+
+	updatedMaster, err := a.GetEvent(id)
+	if err != nil {
+		t.Fatalf("failed to get master event after update: %v", err)
+	}
+	if updatedMaster.Repeat == nil || updatedMaster.Repeat.Count != 3 {
+		t.Errorf("master event was not correctly updated to be repeating")
 	}
 }
