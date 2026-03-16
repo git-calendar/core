@@ -131,6 +131,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 		Auth:       auth,
 	})
 	if err != nil {
+		c.RemoveCalendar(calendarName) // even on error, clone creates a directory, so lets delete it
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
