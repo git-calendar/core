@@ -99,7 +99,7 @@ func prepareRepoUrl(repoUrl url.URL, proxyUrl *url.URL) (url.URL, *http.BasicAut
 //
 //	originalUrl: "https://github.com/joe/my-calendar"
 //	proxyUrl: "https://cors-proxy.abc"
-//	out: "https://cors-proxy.abc/?url=https%3A//github.com/joe/my-calendar"
+//	out: "https://cors-proxy.abc/?url=https%3A%2F%2Fgithub.com%2Fjoe%2Fmy-calendar"
 func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
 	// create the query parameter
 	q := proxyUrl.Query()
@@ -115,7 +115,10 @@ func useCorsProxy(originalUrl url.URL, proxyUrl url.URL) url.URL {
 // Extracts BasicAuth credentials from an URL.
 func authFromUrl(u url.URL) *http.BasicAuth {
 	credentials := u.User
-	pass, _ := credentials.Password()
+	pass, ok := credentials.Password()
+	if !ok && credentials.Username() == "" {
+		return nil
+	}
 
 	return &http.BasicAuth{
 		Username: credentials.Username(),
@@ -126,6 +129,9 @@ func authFromUrl(u url.URL) *http.BasicAuth {
 // Turns "http://abc.com/foo/bar/my-calendar.git" into "my-calendar".
 func calendarNameFromUrl(u url.URL) string {
 	name := path.Base(u.Path)
+	if name == "." || name == "/" {
+		return "shouldnthappen"
+	}
 	return strings.TrimSuffix(name, ".git")
 }
 
