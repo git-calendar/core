@@ -17,6 +17,10 @@ import (
 
 // Creates a new event and save it into git.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
+	if _, ok := c.events[event.Id]; ok && event.Id != uuid.Nil {
+		return nil, fmt.Errorf("an event with this id already exists")
+	}
+
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
@@ -282,7 +286,7 @@ func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
 func (c *Core) removeReal(event Event) error {
 	err := c.intervalTree.RemoveRealEvent(event)
 	if err != nil {
-		return fmt.Errorf("failed to delete event from interval tree")
+		return fmt.Errorf("failed to delete event from interval tree: %w", err)
 	}
 
 	// delete file from disk + git
