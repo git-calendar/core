@@ -17,13 +17,13 @@ type Event struct {
 	To          time.Time   `json:"to"`
 	Calendar    string      `json:"calendar"`
 	Tag         string      `json:"tag"`
-	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if master
+	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if basic event or repeating master event
 	Repeat      *Repetition `json:"repeat"`    // nil if slave
 }
 
 type Repetition struct {
-	Frequency  Freq        `json:"frequency"`  // Daily, Weekly, ... (None if master)
-	Interval   int         `json:"interval"`   // 1..N (freq:Weekly + interval:2 => every other week)
+	Frequency  Freq        `json:"frequency"`  // Day, Week, ... (None if master)
+	Interval   int         `json:"interval"`   // 1..N (freq:Week + interval:2 => every other week)
 	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
 	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
 	Exceptions []uuid.UUID `json:"exceptions"` // an array of slaves ids
