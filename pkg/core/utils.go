@@ -167,3 +167,16 @@ func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 	}
 	return newId
 }
+
+// Combines the base date with source clock/time only. For example:
+//
+//	base:   2026-03-11T10:30:00
+//	source: 2025-01-01T09:00:00
+//	output: 2026-03-11T09:00:00
+func withTimeOfDay(base, clockSource time.Time) time.Time {
+	return time.Date(
+		base.Year(), base.Month(), base.Day(),
+		clockSource.Hour(), clockSource.Minute(), clockSource.Second(), clockSource.Nanosecond(),
+		base.Location(),
+	)
+}

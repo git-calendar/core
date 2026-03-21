@@ -262,8 +262,8 @@ func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) 
 	master.Title = updated.Title
 	master.Location = updated.Location
 	master.Description = updated.Description
-	master.From = updated.From
-	master.To = updated.To
+	master.From = withTimeOfDay(master.From, updated.From)
+	master.To = withTimeOfDay(master.To, updated.To)
 	master.Tag = updated.Tag
 	master.Repeat = updated.Repeat
 	master.Calendar = updated.Calendar
