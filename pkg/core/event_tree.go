@@ -24,7 +24,7 @@ func NewIntervalTree() *IntervalTree {
 	}
 }
 
-// Inserts an Event to its interval in the tree. Handles basic, as well as repeating master events.
+// Inserts an Event to its interval in the tree.
 func (et *IntervalTree) InsertEvent(event Event) error {
 	eventEnd := event.getTreeEndTime()
 	ids, _ := et.tree.Find(event.From, eventEnd) // find existing interval
@@ -34,33 +34,8 @@ func (et *IntervalTree) InsertEvent(event Event) error {
 	return err
 }
 
-// Removes the master event from its old interval and reinserts it under the new interval in the interval tree.
-func (et *IntervalTree) MoveEvent(master, updated *Event) error {
-	// calculate the old end based on the master event
-	oldEnd := master.getTreeEndTime()
-
-	// remove the old interval
-	ids, found := et.tree.Find(master.From, oldEnd)
-	if found {
-		index := slices.Index(ids, master.Id)
-		if index != -1 {
-			ids = slices.Delete(ids, index, index+1)
-			if len(ids) == 0 {
-				_ = et.tree.Delete(master.From, oldEnd)
-			} else {
-				_ = et.tree.Insert(master.From, oldEnd, ids)
-			}
-		}
-	}
-
-	if err := et.InsertEvent(*updated); err != nil {
-		return fmt.Errorf("failed to reinsert event into tree: %w", err)
-	}
-	return nil
-}
-
-// Deletes a real (non-repeating) event from the interval tree.
-func (et *IntervalTree) RemoveRealEvent(event Event) error {
+// Deletes an Event from the interval tree.
+func (et *IntervalTree) RemoveEvent(event Event) error {
 	// find last slave and its To
 	eventEnd := event.getTreeEndTime()
 
@@ -83,7 +58,7 @@ func (et *IntervalTree) RemoveRealEvent(event Event) error {
 		if err := et.tree.Delete(event.From, eventEnd); err != nil {
 			return fmt.Errorf("failed to delete tree node: %w", err)
 		}
-	} else { // not empty -> overwrite
+	} else { // not empty -> replace
 		if err := et.tree.Insert(event.From, eventEnd, updated); err != nil {
 			return fmt.Errorf("failed to reinsert node into tree: %w", err)
 		}

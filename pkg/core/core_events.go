@@ -85,7 +85,11 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 	for _, intersection := range intervalsMatched {
 		for _, eId := range intersection {
-			curEvent := c.events[eId]
+			curEvent, ok := c.events[eId]
+			if !ok {
+				fmt.Printf("event with id: '%v' doesn't exist in events map WTF\n", eId)
+				continue
+			}
 
 			// if it doesn't repeat, just plain append to result
 			if curEvent.Repeat == nil {
@@ -93,16 +97,20 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 				continue
 			}
 
-			duration := curEvent.To.Sub(curEvent.From)
-			tmpEventTime, index := getFirstCandidate(from, curEvent)
+			eventDuration := curEvent.To.Sub(curEvent.From)
+			firstStart, index := firstOccurrenceAtOrAfter(from, curEvent)
 
-			for tmpEventTime.Before(to) { // while generated event fits in the wanted interval
-				if tmpEventTime.Add(duration).Before(from) { // if the generated event ends before our wanted interval -> skip
-					tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
+			if firstStart.IsZero() {
+				continue // no occurrences >= from
+			}
+
+			for firstStart.Before(to) { // while generated event fits in the wanted interval
+				if firstStart.Add(eventDuration).Before(from) { // if the generated event ends before our wanted interval -> skip
+					firstStart = addUnit(firstStart, curEvent.Repeat.Interval, curEvent.Repeat.Frequency) // next occurrence
 					continue
 				}
 				// logic when repeating until
-				if curEvent.Repeat.Count == -1 && tmpEventTime.After(curEvent.Repeat.Until) {
+				if curEvent.Repeat.Count == -1 && firstStart.After(curEvent.Repeat.Until) {
 					break // new event exceeded the repetition end (Until)
 				}
 				// logic for repeating only N times (count)
@@ -112,24 +120,23 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 				index++
 				generatedEvent := Event{
-					Id:          generateCustomUUID(curEvent.Id, tmpEventTime),
+					Id:          generateCustomUUID(curEvent.Id, firstStart),
 					Title:       curEvent.Title,
 					Location:    curEvent.Location,
 					Description: curEvent.Description,
-					From:        tmpEventTime,
-					// OriginalFrom: tmpEventTime,
-					To:       tmpEventTime.Add(duration),
-					Calendar: curEvent.Calendar,
-					Tag:      curEvent.Tag,
-					MasterId: curEvent.Id,
-					Repeat:   curEvent.Repeat, // TODO send the repeat struct
+					From:        firstStart,
+					To:          firstStart.Add(eventDuration),
+					Calendar:    curEvent.Calendar,
+					Tag:         curEvent.Tag,
+					MasterId:    curEvent.Id,
+					Repeat:      curEvent.Repeat, // TODO send the repeat struct
 				}
 				// ignore exceptions
 				if !slices.Contains(curEvent.Repeat.Exceptions, generatedEvent.Id) {
 					result = append(result, generatedEvent)
 				}
 
-				tmpEventTime = addUnit(tmpEventTime, 1, curEvent.Repeat.Frequency) // next occurrence
+				firstStart = addUnit(firstStart, 1, curEvent.Repeat.Frequency) // next occurrence
 			}
 		}
 	}
@@ -219,72 +226,63 @@ func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error
 	return c.CreateEvent(event) // save as new
 }
 
-// Stops the original master event from repeating further and creates brand new repeating event with updated properties.
+// Splits the time series into two by stopping the original master event from repeating further and creating brand new repeating event with updated properties.
 func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, error) {
 	master.Repeat.Until = event.From // cap master at start of change
 	master.Repeat.Count = -1         // enforce "Until" logic over "Count"
 
 	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
-		return nil, fmt.Errorf("failed to cap master event: %w", err)
+		return nil, fmt.Errorf("failed to commit master event: %w", err)
 	}
 
-	// make the incoming event new Master event
-	event.MasterId = uuid.Nil
-	c.events[event.Id] = &event
+	// create the new master for the second half of the time series
+	event.MasterId = uuid.Nil // not slave anymore
+	event.Id = uuid.Nil       // let it create a new one, don't keep the same as its old master
 
-	if err := c.intervalTree.InsertEvent(event); err != nil {
-		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
+	if _, err := c.CreateEvent(event); err != nil {
+		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
-	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("CALENDAR: Created new master event '%s'", event.Title)); err != nil {
-		return nil, err
-	}
+
 	return &event, nil
 }
 
 // Updates the master event only. That means all generated slave events get updated too.
-func (c *Core) updateGeneratedAll(event Event, master *Event) (*Event, error) {
-	fromChanged := event.From != master.From
-	toChanged := event.To != master.To
-	repeatChanged := !reflect.DeepEqual(event.Repeat, master.Repeat)
-
-	if fromChanged && master.Repeat != nil { // shift all exceptions by the time difference
-		distance := event.From.Sub(master.From)
-		for i := range master.Repeat.Exceptions {
-			exceptionTime, err := getTimeFromUUID(master.Repeat.Exceptions[i])
-			if err != nil {
-				return nil, err
-			}
-			if exceptionTime.IsZero() {
-				continue
-			}
-			newId := getShiftedUUID(master.Repeat.Exceptions[i], distance)
-			master.Repeat.Exceptions[i] = newId
-		}
-	}
+func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) {
+	fromChanged := !updated.From.Equal(master.From)
+	toChanged := !updated.To.Equal(master.To)
+	repeatChanged := !reflect.DeepEqual(*updated.Repeat, *master.Repeat)
 
 	if fromChanged || toChanged || repeatChanged {
-		err := c.intervalTree.MoveEvent(master, &event)
-		if err != nil {
+		if err := c.intervalTree.RemoveEvent(*master); err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
 		}
 	}
-	master.Title = event.Title
-	master.Location = event.Location
-	master.Description = event.Description
-	master.From = event.From
-	master.To = event.To
-	master.Tag = event.Tag
-	master.Repeat = event.Repeat
+
+	master.Title = updated.Title
+	master.Location = updated.Location
+	master.Description = updated.Description
+	master.From = updated.From
+	master.To = updated.To
+	master.Tag = updated.Tag
+	master.Repeat = updated.Repeat
+	master.Calendar = updated.Calendar
+
+	if fromChanged || toChanged || repeatChanged {
+		if err := c.intervalTree.InsertEvent(*master); err != nil {
+			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
+		}
+	}
 
 	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
 		return nil, fmt.Errorf("failed to save event to repo: %w", err)
 	}
+
 	return master, nil
 }
 
 // Deletes a real (basic/repeating master) event from memory as well as from git.
 func (c *Core) removeReal(event Event) error {
-	err := c.intervalTree.RemoveRealEvent(event)
+	err := c.intervalTree.RemoveEvent(event)
 	if err != nil {
 		return fmt.Errorf("failed to delete event from interval tree: %w", err)
 	}

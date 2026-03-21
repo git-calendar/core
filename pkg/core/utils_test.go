@@ -33,7 +33,7 @@ func Test_addUnit(t *testing.T) {
 	}
 }
 
-func Test_getFirstCandidate(t *testing.T) {
+func Test_firstOccurrenceAtOrAfter(t *testing.T) {
 	type args struct {
 		searchStart time.Time
 		event       *Event
@@ -48,7 +48,7 @@ func Test_getFirstCandidate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1 := getFirstCandidate(tt.args.searchStart, tt.args.event)
+			got, got1 := firstOccurrenceAtOrAfter(tt.args.searchStart, tt.args.event)
 			if !cmp.Equal(tt.want, got) {
 				t.Errorf("getFirstCandidate() got = %v, want %v\ndiff=%s", got, tt.want, cmp.Diff(tt.want, got))
 			}

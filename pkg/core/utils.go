@@ -27,43 +27,32 @@ func addUnit(t time.Time, value int, unit Freq) time.Time {
 	}
 }
 
-func getFirstCandidate(searchStart time.Time, event *Event) (time.Time, int) {
-	switch event.Repeat.Frequency {
-	case Day:
-		diffHours := searchStart.Sub(event.From).Hours()
-		cycleHours := 24.0 * float64(event.Repeat.Interval)
-		cycles := int(diffHours / cycleHours)
-		days := cycles * event.Repeat.Interval
-		return addUnit(event.From, days, Day), cycles
-	case Week:
-		diffHours := searchStart.Sub(event.From).Hours()
-		cycleHours := 24.0 * 7 * float64(event.Repeat.Interval)
-		cycles := int(diffHours / cycleHours)
-		weeks := cycles * event.Repeat.Interval
-		return addUnit(event.From, weeks, Week), cycles
-	case Month:
-		diffMonths := (searchStart.Year()-event.From.Year())*12 + int(searchStart.Month()-event.From.Month())
-		cycles := diffMonths / event.Repeat.Interval
-		months := cycles * event.Repeat.Interval
-		candidate := addUnit(event.From, months, Month)
-		if candidate.Before(searchStart) {
-			candidate = addUnit(event.From, event.Repeat.Interval, Month)
-			cycles++
+// Returns the first start time >= searchStart (or zero time if none reasonable).
+// Also returns how many steps from the original (0 = original event time).
+func firstOccurrenceAtOrAfter(searchStart time.Time, ev *Event) (time.Time, int) {
+	if ev.Repeat == nil {
+		if !searchStart.After(ev.From) {
+			return ev.From, 0
 		}
-		return candidate, cycles
-	case Year:
-		diffYears := searchStart.Year() - event.From.Year()
-		cycles := diffYears / event.Repeat.Interval
-		years := cycles * event.Repeat.Interval
-		candidate := addUnit(event.From, years, Year)
-		if candidate.Before(searchStart) {
-			candidate = addUnit(event.From, event.Repeat.Interval, Year)
-			cycles++
-		}
-		return candidate, cycles
-	default:
-		return event.From, -1
+		return time.Time{}, -1 // none in range
 	}
+
+	current := ev.From
+	steps := 0
+	interval := max(1, ev.Repeat.Interval) // prevent crazy input
+
+	const maxSteps = 36500 // safety limit (~100 years)
+
+	for current.Before(searchStart) && steps < maxSteps {
+		current = addUnit(current, interval, ev.Repeat.Frequency)
+		steps++
+	}
+
+	if steps >= maxSteps || current.IsZero() {
+		return time.Time{}, -1
+	}
+
+	return current, steps
 }
 
 func containsTime(exceptions []uuid.UUID, t time.Time) bool {

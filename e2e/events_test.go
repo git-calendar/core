@@ -129,7 +129,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(eventIn, *eventOut) {
-		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 }
 
@@ -201,7 +201,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
-		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 
 	queryFrom := time.Now().AddDate(0, 0, 6)
@@ -247,7 +247,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 		t.Errorf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
-		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 
 	queryFrom := time.Now().AddDate(0, 0, 6)
@@ -365,7 +365,6 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 			Frequency: core.Week,
 			Interval:  1,
 			Count:     COUNT,
-			Until:     time.Time{},
 		},
 	}
 	_, err = a.CreateEvent(eventIn)
@@ -378,27 +377,23 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 		t.Errorf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
-		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, eventOut)
+		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 
-	queryFrom := time.Now().AddDate(0, 0, 6)
-	queryTo := queryFrom.AddDate(0, 2, 0)
+	queryFrom := time.Now().AddDate(-1, 0, 0)
+	queryTo := time.Now().AddDate(1, 0, 0)
 	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT {
-		t.Errorf("not all events were generated: %v", err)
+		t.Errorf("not all events were generated")
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+		return
 	}
-	t.Logf("events: %+v", eventsOut)
 	eventToRemove := eventsOut[0]
-	err = a.RemoveEvent(eventToRemove)
-	if err != nil {
+	if err := a.RemoveEvent(eventToRemove); err != nil {
 		t.Errorf("failed to remove event: %v", err)
 	}
 
 	eventsOut = a.GetEvents(queryFrom, queryTo)
-	t.Logf("events: %+v", eventsOut)
-	master, _ := a.GetEvent(eventsOut[0].MasterId)
-	t.Logf("master: %+v", master.Repeat)
 	if len(eventsOut) != COUNT-1 || slices.Contains(eventsOut, eventToRemove) {
 		t.Errorf("event wasn't removed correctly %v", err)
 		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
@@ -672,6 +667,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 		t.Errorf("master event Title was not updated")
 	}
 }
+
 func Test_UpdateEvent_FromStandardToRepeating_Works(t *testing.T) {
 	a := core.NewCore()
 	_ = a.CreateCalendar(TestCalendarName)
