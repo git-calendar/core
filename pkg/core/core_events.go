@@ -68,7 +68,7 @@ func (c *Core) RemoveEvent(event Event) error {
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, ok := c.events[id]
 	if !ok {
-		return nil, fmt.Errorf("event with this id doesn't exist")
+		return nil, fmt.Errorf("event with id: '%s' doesn't exist", id)
 	}
 	return e, nil
 }
@@ -110,11 +110,11 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					continue
 				}
 				// logic when repeating until
-				if curEvent.Repeat.Count == -1 && firstStart.After(curEvent.Repeat.Until) {
+				if curEvent.Repeat.Count == 0 && firstStart.After(curEvent.Repeat.Until) {
 					break // new event exceeded the repetition end (Until)
 				}
 				// logic for repeating only N times (count)
-				if curEvent.Repeat.Count != -1 && index >= curEvent.Repeat.Count {
+				if curEvent.Repeat.Count != 0 && index >= curEvent.Repeat.Count {
 					break // new event exceeded the max count of generated events
 				}
 
@@ -129,14 +129,14 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					Calendar:    curEvent.Calendar,
 					Tag:         curEvent.Tag,
 					MasterId:    curEvent.Id,
-					Repeat:      curEvent.Repeat, // TODO send the repeat struct
+					Repeat:      curEvent.Repeat,
 				}
 				// ignore exceptions
 				if !slices.Contains(curEvent.Repeat.Exceptions, generatedEvent.Id) {
 					result = append(result, generatedEvent)
 				}
 
-				firstStart = addUnit(firstStart, 1, curEvent.Repeat.Frequency) // next occurrence
+				firstStart = addUnit(firstStart, curEvent.Repeat.Interval, curEvent.Repeat.Frequency) // next occurrence
 			}
 		}
 	}
@@ -229,7 +229,7 @@ func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error
 // Splits the time series into two by stopping the original master event from repeating further and creating brand new repeating event with updated properties.
 func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, error) {
 	master.Repeat.Until = event.From // cap master at start of change
-	master.Repeat.Count = -1         // enforce "Until" logic over "Count"
+	master.Repeat.Count = 0          // enforce "Until" logic over "Count"
 
 	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
 		return nil, fmt.Errorf("failed to commit master event: %w", err)
@@ -239,11 +239,12 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 	event.MasterId = uuid.Nil // not slave anymore
 	event.Id = uuid.Nil       // let it create a new one, don't keep the same as its old master
 
-	if _, err := c.CreateEvent(event); err != nil {
+	newMaster, err := c.CreateEvent(event)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
 
-	return &event, nil
+	return newMaster, nil
 }
 
 // Updates the master event only. That means all generated slave events get updated too.

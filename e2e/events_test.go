@@ -27,7 +27,7 @@ func Test_CreateCalendar_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	home, err := os.UserHomeDir()
@@ -57,7 +57,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
@@ -90,7 +90,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	}
 	err = json.Unmarshal(b, &parsedEvent)
 	if err != nil {
-		t.Errorf("failed to parse event json file: %v", err)
+		t.Fatalf("failed to parse event json file: %v", err)
 	}
 
 	if parsedEvent.Id != id {
@@ -106,7 +106,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
@@ -125,7 +125,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 
 	eventOut, err := a.GetEvent(id)
 	if err != nil {
-		t.Errorf("failed to get an event by id: %v", err)
+		t.Fatalf("failed to get an event by id: %v", err)
 	}
 
 	if !reflect.DeepEqual(eventIn, *eventOut) {
@@ -138,7 +138,7 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -173,11 +173,11 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
-	startTime := time.Now()
+	startTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	eventIn := core.Event{
 		Id:       id,
 		Calendar: TestCalendarName,
@@ -187,7 +187,6 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 		Repeat: &core.Repetition{
 			Frequency: core.Week,
 			Interval:  1,
-			Count:     -1,
 			Until:     time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
 		},
 	}
@@ -198,18 +197,16 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	eventOut, err := a.GetEvent(id)
 	if err != nil {
-		t.Errorf("failed to get an event by id: %v", err)
+		t.Fatalf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 
-	queryFrom := time.Now().AddDate(0, 0, 6)
-	queryTo := queryFrom.AddDate(0, 1, 0)
-	eventsOut := a.GetEvents(queryFrom, queryTo)
-	if !(len(eventsOut) == 4 || len(eventsOut) == 5) { // can fit 5 weeks
-		t.Errorf("not all events were generated: %v", err)
-		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+	queryTo := startTime.AddDate(1, 0, 0)
+	eventsOut := a.GetEvents(startTime, queryTo)
+	if len(eventsOut) != 53 { // 2026 has 53 weeks
+		t.Errorf("not all events were generated; eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
 }
 
@@ -218,7 +215,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	const COUNT = 6
@@ -234,7 +231,6 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 			Frequency: core.Week,
 			Interval:  1,
 			Count:     COUNT,
-			Until:     time.Time{},
 		},
 	}
 	_, err = a.CreateEvent(eventIn)
@@ -244,18 +240,17 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 
 	eventOut, err := a.GetEvent(id)
 	if err != nil {
-		t.Errorf("failed to get an event by id: %v", err)
+		t.Fatalf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
 
-	queryFrom := time.Now().AddDate(0, 0, 6)
-	queryTo := queryFrom.AddDate(0, 2, 0)
+	queryFrom := time.Now().AddDate(-1, 0, 0)
+	queryTo := time.Now().AddDate(1, 0, 0)
 	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT {
-		t.Errorf("not all events were generated: %v", err)
-		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+		t.Errorf("not all events were generated; eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
 }
 
@@ -264,7 +259,7 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -308,7 +303,7 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -349,7 +344,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	const COUNT = 6
@@ -374,7 +369,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 
 	eventOut, err := a.GetEvent(id)
 	if err != nil {
-		t.Errorf("failed to get an event by id: %v", err)
+		t.Fatalf("failed to get an event by id: %v", err)
 	}
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
@@ -384,8 +379,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	queryTo := time.Now().AddDate(1, 0, 0)
 	eventsOut := a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT {
-		t.Errorf("not all events were generated")
-		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+		t.Errorf("not all events were generated; eventsOut: %d: %+v", len(eventsOut), eventsOut)
 		return
 	}
 	eventToRemove := eventsOut[0]
@@ -395,8 +389,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 
 	eventsOut = a.GetEvents(queryFrom, queryTo)
 	if len(eventsOut) != COUNT-1 || slices.Contains(eventsOut, eventToRemove) {
-		t.Errorf("event wasn't removed correctly %v", err)
-		t.Errorf("eventsOut: %d: %+v", len(eventsOut), eventsOut)
+		t.Errorf("event wasn't removed correctly; eventsOut: %d: %+v", len(eventsOut), eventsOut)
 	}
 }
 
@@ -405,28 +398,27 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
-	from := time.Now()
-	to := from.Add(1 * time.Hour)
 	id := uuid.New()
+	startTime := time.Now()
 	eventIn := core.Event{
 		Id:       id,
 		Calendar: TestCalendarName,
 		Title:    "Event To Delete",
-		From:     from,
-		To:       to,
+		From:     startTime,
+		To:       startTime.Add(1 * time.Hour),
 	}
 
 	_, err = a.CreateEvent(eventIn)
 	if err != nil {
-		t.Errorf("failed to create an event: %v", err)
+		t.Fatalf("failed to create an event: %v", err)
 	}
 
 	out, err := a.GetEvent(id)
 	if err != nil || out == nil {
-		t.Errorf("failed to get an event by id: %v", err)
+		t.Fatalf("failed to get an event by id: %v", err)
 	}
 	if out.Id != id {
 		t.Errorf("id should be %s, got %s", id, out.Id)
@@ -462,7 +454,7 @@ func Test_UpdateStandardEvent_Works(t *testing.T) {
 
 	err := a.CreateCalendar(TestCalendarName)
 	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	id := uuid.New()
@@ -490,7 +482,7 @@ func Test_UpdateStandardEvent_Works(t *testing.T) {
 
 	eventOut, err := a.GetEvent(id)
 	if err != nil {
-		t.Errorf("failed to get updated event: %v", err)
+		t.Fatalf("failed to get updated event: %v", err)
 	}
 
 	if eventOut.Title != "Updated Title" {
@@ -553,7 +545,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 
 	isolatedOut, err := a.GetEvent(targetEvent.Id)
 	if err != nil {
-		t.Errorf("isolated event was not created: %v", err)
+		t.Fatalf("isolated event was not created: %v", err)
 	}
 	if !isolatedOut.From.Equal(startTime.Add(time.Hour)) {
 		t.Errorf("isolated event doesnt have the right From")
@@ -582,7 +574,6 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 			Frequency: core.Day,
 			Interval:  1,
 			Until:     startTime.AddDate(0, 1, 0),
-			Count:     -1,
 		},
 	}
 	_, _ = a.CreateEvent(masterEvent)
@@ -595,27 +586,27 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 		Frequency: core.Day,
 		Interval:  1,
 		Until:     startTime.AddDate(0, 1, 0),
-		Count:     -1,
 	}
-	_, err := a.UpdateEvent(targetEvent, core.Following)
+	newMasterOut, err := a.UpdateEvent(targetEvent, core.Following)
 	if err != nil {
 		t.Errorf("failed to update generated event (Following): %v", err)
 	}
-
-	masterOut, _ := a.GetEvent(masterId)
-	if !masterOut.Repeat.Until.Equal(originalFrom) {
-		t.Errorf("master event Until was not capped correctly. Expected %s, got %s", originalFrom, masterOut.Repeat.Until)
-	}
-	if masterOut.Repeat.Count != -1 {
-		t.Errorf("master event Count should be overridden to -1, got %d", masterOut.Repeat.Count)
-	}
-
-	newMasterOut, _ := a.GetEvent(targetEvent.Id)
 	if newMasterOut.MasterId != uuid.Nil {
 		t.Errorf("new event should be a master, but MasterId is %s", newMasterOut.MasterId)
 	}
 	if newMasterOut.Title != "Weekly Meeting - New Phase" {
 		t.Errorf("title not updated on new master")
+	}
+
+	olderMasterOut, err := a.GetEvent(masterId)
+	if err != nil {
+		t.Fatalf("failed to get master out: %v", err)
+	}
+	if !olderMasterOut.Repeat.Until.Equal(originalFrom) {
+		t.Errorf("master event Until was not capped correctly. Expected %s, got %s", originalFrom, olderMasterOut.Repeat.Until)
+	}
+	if olderMasterOut.Repeat.Count != 0 {
+		t.Errorf("master event Count should be overridden to 0, got %d", olderMasterOut.Repeat.Count)
 	}
 }
 
