@@ -42,16 +42,16 @@ func (e *Event) Validate() error {
 		e.Id = uuid.New() // create one if not specified
 	}
 	if e.Title == "" {
-		return errors.New("event title cannot be empty")
+		return errors.New("Title cannot be empty")
 	}
 	if e.From.IsZero() || e.To.IsZero() {
-		return errors.New("event timestamps cannot be 0")
+		return errors.New("timestamps From & To cannot be 0")
 	}
 	if e.From.Compare(e.To) != -1 {
-		return errors.New("event 'from' timestamp cannot be greater or equal than 'to' (cannot end before it starts)")
+		return errors.New("From timestamp cannot be greater or equal than To (cannot end before it starts)")
 	}
 	if err := e.Repeat.Validate(); err != nil {
-		return fmt.Errorf("events repetition is invalid: %w", err)
+		return fmt.Errorf("repetition is invalid: %w", err)
 	}
 	return nil
 }
@@ -61,16 +61,16 @@ func (r *Repetition) Validate() error {
 		return nil
 	}
 	if !r.Frequency.IsValid() {
-		return errors.New("repetition frequency is invalid")
+		return errors.New("frequency is invalid")
 	}
 	if r.Interval < 1 {
-		return errors.New("repetition interval is invalid")
+		return errors.New("interval is invalid")
 	}
 	if r.Until.IsZero() && r.Count < 1 {
-		return errors.New("repetition combination of Until & Count is invalid")
+		return errors.New("combination of Until & Count is invalid")
 	}
-	if !r.Until.IsZero() && r.Count >= 0 {
-		return errors.New("repetition when Until date set Count must be negative")
+	if !r.Until.IsZero() && r.Count > 0 {
+		return errors.New("Count must be 0 when Until date is set")
 	}
 
 	return nil
