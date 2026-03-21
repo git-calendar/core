@@ -1,9 +1,5 @@
 package core
 
-import (
-	"strings"
-)
-
 const (
 	IndexFileName     string = "index.json"
 	RichIndexFileName string = "index-rich.json"
@@ -43,17 +39,4 @@ const (
 
 func (opt UpdateOption) IsValid() bool {
 	return opt >= Current && opt <= All
-}
-
-func ParseUpdateOption(strategy string) UpdateOption {
-	switch strings.ToLower(strategy) {
-	case "current":
-		return Current
-	case "following":
-		return Following
-	case "all":
-		return All
-	default:
-		return Current
-	}
 }

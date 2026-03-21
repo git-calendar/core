@@ -74,17 +74,18 @@ func (a *Api) UpdateEvent(eventJson string) (string, error) {
 	return returnJsonEventAndError(eventJson, wrapper)
 }
 
-func (a *Api) UpdateEventWithStrategy(eventJson string, strategy string) (string, error) {
+func (a *Api) UpdateEventWithStrategy(eventJson string, strategy int) (string, error) {
 	wrapper := func(e core.Event) (*core.Event, error) {
-		return a.inner.UpdateEvent(e, core.ParseUpdateOption(strategy))
+		return a.inner.UpdateEvent(e, core.UpdateOption(strategy))
 	}
 	return returnJsonEventAndError(eventJson, wrapper)
 }
 
 func (a *Api) RemoveEvent(eventJson string) error {
-	event, err := parseAndValidateEventHelper(eventJson)
+	var event core.Event
+	err := json.Unmarshal([]byte(eventJson), &event)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal event data: %w", err)
 	}
 	return a.inner.RemoveEvent(event)
 }
@@ -137,13 +138,16 @@ func (a *Api) GetEvents(from, to string) (string, error) {
 //  3. Marshals event that came back to JSON
 //  4. Returns json
 func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.Event, error)) (string, error) {
-	event, err := parseAndValidateEventHelper(eventJson)
+	var event core.Event
+	err := json.Unmarshal([]byte(eventJson), &event)
 	if err != nil {
-		return emptyJson, err
+		fmt.Println("CalendarCore got: ", eventJson)
+		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
 	}
 
 	newEvent, err := coreFunc(event)
 	if err != nil {
+		fmt.Println("CalendarCore got: ", eventJson)
 		return emptyJson, err
 	}
 
@@ -153,18 +157,4 @@ func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.
 	}
 
 	return string(jsonBytes), err
-}
-
-// Unmarshalls event from JSON to core.Event for internal use and validates the input.
-func parseAndValidateEventHelper(eventJson string) (core.Event, error) {
-	var e core.Event
-	err := json.Unmarshal([]byte(eventJson), &e)
-	if err != nil {
-		return e, fmt.Errorf("failed to unmarshal event data: %w", err)
-	}
-	err = e.Validate()
-	if err != nil {
-		return e, fmt.Errorf("invalid event data: %w", err)
-	}
-	return e, nil
 }
