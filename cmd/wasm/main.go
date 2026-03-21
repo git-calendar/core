@@ -85,6 +85,11 @@ func RegisterCallbacks(api *api.Api) {
 					return api.UpdateEvent(args[0].String())
 				})
 			}),
+			"updateEventWithStrategy": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.UpdateEventWithStrategy(args[0].String(), args[1].Int())
+				})
+			}),
 			// TODO others
 		}),
 	)
