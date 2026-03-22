@@ -259,6 +259,14 @@ func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) 
 		}
 	}
 
+	// shift all exceptions if updated.From changed
+	if fromChanged && updated.Repeat != nil {
+		difference := updated.From.Sub(master.From)
+		for i, _ := range updated.Repeat.Exceptions {
+			updated.Repeat.Exceptions[i] = getShiftedUUID(updated.Repeat.Exceptions[i], difference)
+		}
+	}
+
 	master.Title = updated.Title
 	master.Location = updated.Location
 	master.Description = updated.Description
