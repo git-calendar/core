@@ -14,8 +14,8 @@ func deriveKey(password string, salt []byte, size uint32) []byte {
 		[]byte(password),
 		salt,
 		1,       // iterations
-		16*1024, // memory (64 MB)
-		1,       // threads
+		16*1024, // memory (16 MB)
+		1,       // 1 thread in browser
 		size,
 	)
 }
