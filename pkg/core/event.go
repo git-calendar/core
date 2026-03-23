@@ -115,5 +115,5 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	return nil // TODO: decrypt
+	return encryption.DecryptFields(e, raw)
 }
