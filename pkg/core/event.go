@@ -13,23 +13,23 @@ import (
 
 type Event struct {
 	Id          uuid.UUID   `json:"-"` // use UUIDv4; shouldn't change (different id = different event)
-	Title       string      `json:"title" encrypt:"true"`
-	Location    string      `json:"location" encrypt:"true"`
-	Description string      `json:"description" encrypt:"true"`
-	From        time.Time   `json:"from" encrypt:"true"`
-	To          time.Time   `json:"to" encrypt:"true"`
-	Calendar    string      `json:"calendar" encrypt:"true"`
-	Tag         string      `json:"tag" encrypt:"true"`
-	MasterId    uuid.UUID   `json:"-"`                     // uuid.Nil if basic event or repeating master event
-	Repeat      *Repetition `json:"repeat" encrypt:"true"` // nil if slave
+	Title       string      `json:"title"`
+	Location    string      `json:"location,omitzero"`
+	Description string      `json:"description,omitzero"`
+	From        time.Time   `json:"from"`
+	To          time.Time   `json:"to"`
+	Calendar    string      `json:"calendar"`
+	Tag         string      `json:"tag"`
+	MasterId    uuid.UUID   `json:"-"`               // uuid.Nil if basic event or repeating master event
+	Repeat      *Repetition `json:"repeat,omitzero"` // nil if slave
 }
 
 type Repetition struct {
-	Frequency  Freq        `json:"frequency"`  // Day, Week, ... (None if master)
-	Interval   int         `json:"interval"`   // 1..N (freq:Week + interval:2 => every other week)
-	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
-	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions"` // an array of slaves ids
+	Frequency  Freq        `json:"frequency"`      // Day, Week, ... (None if master)
+	Interval   int         `json:"interval"`       // 1..N (freq:Week + interval:2 => every other week)
+	Until      time.Time   `json:"until,omitzero"` // the end of repetition by timestamp
+	Count      int         `json:"count,omitzero"` // or by number of occurrences (only one condition can be present not both)
+	Exceptions []uuid.UUID `json:"exceptions"`     // an array of slaves ids
 }
 
 func (e *Event) Validate() error {
@@ -99,7 +99,9 @@ func (e Event) getTreeEndTime() time.Time {
 }
 
 func (e *Event) MarshalJSON() ([]byte, error) {
-	enc, err := encryption.EncryptFields(e)
+	type plainEvent Event // create a new type based on Event just to strip away its methods to avoid infinite recursion of MarshalJSON()
+
+	enc, err := encryption.EncryptFields((*plainEvent)(e))
 	if err != nil {
 		return nil, err
 	}

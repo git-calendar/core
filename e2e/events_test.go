@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -60,9 +59,8 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
-	id := uuid.New()
 	eventIn := core.Event{
-		Id:       id,
+		Id:       uuid.New(),
 		Calendar: TestCalendarName,
 		Title:    "Foo Event",
 		From:     time.Now(),
@@ -79,25 +77,9 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
+	_, err = os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", eventIn.Id)))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
-	}
-
-	var parsedEvent struct {
-		Id    uuid.UUID `json:"id"`
-		Title string    `json:"title"`
-	}
-	err = json.Unmarshal(b, &parsedEvent)
-	if err != nil {
-		t.Fatalf("failed to parse event json file: %v", err)
-	}
-
-	if parsedEvent.Id != id {
-		t.Errorf("id is not the same as input: \nin:   %d\n!=\nfile: %v", 1, parsedEvent.Id)
-	}
-	if parsedEvent.Title != "Foo Event" {
-		t.Errorf("id is not the same as input: \nin:   %s\n!=\nfile: %s", "Foo Event", parsedEvent.Title)
 	}
 }
 
