@@ -211,9 +211,19 @@ func hasOmitzero(field reflect.StructField) bool {
 	return slices.Contains(tagParts, "omitzero")
 }
 
-// Returns the field_name from `json:"field_name"`.
+// Returns the "field_name" from:
+//
+//	FieldName `json:"field_name"`
+//
+// Returns "FieldName" if not present.
 func getJsonFieldName(field reflect.StructField) string {
 	tag := field.Tag.Get("json")
-	tagParts := strings.Split(tag, ",")
-	return tagParts[0] // always len > 0 -> safe
+	tagParts := strings.Split(tag, ",") // always len > 0
+	if tagParts[0] == "-" {
+		return ""
+	}
+	if len(tagParts[0]) != 0 {
+		return tagParts[0]
+	}
+	return field.Name // fallback to struct field name instead of json name
 }
