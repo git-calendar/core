@@ -1,24 +1,27 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/firu11/git-calendar-core/pkg/core/encryption"
 	"github.com/google/uuid"
+	// deterministic AEAD
 )
 
 type Event struct {
-	Id          uuid.UUID   `json:"id"` // use UUIDv4; shouldn't change (different id = different event)
-	Title       string      `json:"title"`
-	Location    string      `json:"location"`
-	Description string      `json:"description"`
-	From        time.Time   `json:"from"`
-	To          time.Time   `json:"to"`
-	Calendar    string      `json:"calendar"`
-	Tag         string      `json:"tag"`
-	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if basic event or repeating master event
-	Repeat      *Repetition `json:"repeat"`    // nil if slave
+	Id          uuid.UUID   `json:"-"` // use UUIDv4; shouldn't change (different id = different event)
+	Title       string      `json:"title" encrypt:"true"`
+	Location    string      `json:"location" encrypt:"true"`
+	Description string      `json:"description" encrypt:"true"`
+	From        time.Time   `json:"from" encrypt:"true"`
+	To          time.Time   `json:"to" encrypt:"true"`
+	Calendar    string      `json:"calendar" encrypt:"true"`
+	Tag         string      `json:"tag" encrypt:"true"`
+	MasterId    uuid.UUID   `json:"-"`                     // uuid.Nil if basic event or repeating master event
+	Repeat      *Repetition `json:"repeat" encrypt:"true"` // nil if slave
 }
 
 type Repetition struct {
@@ -93,4 +96,22 @@ func (e Event) getTreeEndTime() time.Time {
 		}
 	}
 	return eventEnd
+}
+
+func (e *Event) MarshalJSON() ([]byte, error) {
+	enc, err := encryption.EncryptFields(e)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(enc)
+}
+
+func (e *Event) UnmarshalJSON(data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	return nil // TODO: decrypt
 }
