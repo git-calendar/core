@@ -632,7 +632,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 	_, _ = a.CreateEvent(masterEvent)
 
 	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 6, 0))
-	targetEvent := eventsOut[0]
+	targetEvent, _ := a.GetEvent(eventsOut[0].MasterId)
 
 	shift := 2 * time.Hour
 	targetEvent.From = targetEvent.From.Add(shift)
@@ -644,7 +644,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 		Count:     5,
 	}
 
-	_, err := a.UpdateEvent(targetEvent, core.All)
+	_, err := a.UpdateEvent(*targetEvent, core.All)
 	if err != nil {
 		t.Errorf("failed to update generated event (All): %v", err)
 	}

@@ -248,20 +248,31 @@ func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, err
 }
 
 // Updates the master event only. That means all generated slave events get updated too.
+// Keep in mind that function expect Masters only!
 func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) {
+	// check if the event we are changing is the original Master
+	if updated.Id != master.Id {
+		return nil, fmt.Errorf("invalid update event: id '%s' does not match master id '%s'", updated.Id, master.Id)
+	}
+
+	// check if the master *Event is actually Master
+	if master.MasterId != uuid.Nil || master.Repeat == nil {
+		return nil, fmt.Errorf("invalid master updated")
+	}
+
 	fromChanged := !updated.From.Equal(master.From)
 	toChanged := !updated.To.Equal(master.To)
-	repeatChanged := !reflect.DeepEqual(*updated.Repeat, *master.Repeat)
+	repeatChanged := !reflect.DeepEqual(updated.Repeat, master.Repeat)
 
 	if fromChanged || toChanged || repeatChanged {
 		if err := c.intervalTree.RemoveEvent(*master); err != nil {
-			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
+			return nil, fmt.Errorf("failed to rebuild tree for updated: %w", err)
 		}
 	}
 
-	// shift all exceptions if updated.From changed
+	// shift all exceptions by the difference between updated.From and master.From
+	difference := updated.From.Sub(master.From)
 	if fromChanged && updated.Repeat != nil {
-		difference := updated.From.Sub(master.From)
 		for i, _ := range updated.Repeat.Exceptions {
 			updated.Repeat.Exceptions[i] = getShiftedUUID(updated.Repeat.Exceptions[i], difference)
 		}
@@ -270,20 +281,20 @@ func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) 
 	master.Title = updated.Title
 	master.Location = updated.Location
 	master.Description = updated.Description
-	master.From = withTimeOfDay(master.From, updated.From)
-	master.To = withTimeOfDay(master.To, updated.To)
+	master.From = updated.From
+	master.To = updated.To
 	master.Tag = updated.Tag
 	master.Repeat = updated.Repeat
 	master.Calendar = updated.Calendar
 
 	if fromChanged || toChanged || repeatChanged {
 		if err := c.intervalTree.InsertEvent(*master); err != nil {
-			return nil, fmt.Errorf("failed to rebuild tree for event: %w", err)
+			return nil, fmt.Errorf("failed to rebuild tree for updated: %w", err)
 		}
 	}
 
-	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Updated master event '%s'", master.Title)); err != nil {
-		return nil, fmt.Errorf("failed to save event to repo: %w", err)
+	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Updated master updated '%s'", master.Title)); err != nil {
+		return nil, fmt.Errorf("failed to save updated to repo: %w", err)
 	}
 
 	return master, nil
