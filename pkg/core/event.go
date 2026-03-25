@@ -8,25 +8,35 @@ import (
 	"github.com/google/uuid"
 )
 
+// Event represents a single calendar entry.
+//
+// Follows a Parent/Child relationship model:
+//  1. Basic:   A standalone event that does not repeat (ParentId is nil, Repeat is nil).
+//  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
+//  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
-	Id          uuid.UUID   `json:"id"` // shouldn't change (different id = different event); only UUIDv4 or UUIDv8 for children
-	Title       string      `json:"title"`
-	Location    string      `json:"location"`
+	Id          uuid.UUID   `json:"id"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
+	Title       string      `json:"title"`    // Should not be empty.
+	Location    string      `json:"location"` // Physical or virtual location (e.g., URL).
 	Description string      `json:"description"`
 	From        time.Time   `json:"from"`
 	To          time.Time   `json:"to"`
-	Calendar    string      `json:"calendar"`
-	Tag         string      `json:"tag"`
-	ParentId    uuid.UUID   `json:"parent_id"` // specific for child events; its uuid.Nil if the event is basic or parent
+	Calendar    string      `json:"calendar"`  // The name of the calendar the event belongs to.
+	Tag         string      `json:"tag"`       // User-defined category or label.
+	ParentId    uuid.UUID   `json:"parent_id"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
 	Repeat      *Repetition `json:"repeat"`    // nil if child
 }
 
+// Repetition defines the recurrence rules for a Parent event.
+//
+// A Repetition object exists only on Parent events to generate Children.
+// A series must be capped by either Until (date) or Count (occurrences). Not both.
 type Repetition struct {
-	Frequency  Freq        `json:"frequency"`  // Day, Week, ... (None if parent)
-	Interval   int         `json:"interval"`   // 1..N (freq:Week + interval:2 => every other week)
-	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
-	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions"` // an array of children ids
+	Frequency  Freq        `json:"frequency"`  // The unit of time for recurrence (Day, Week, Month, etc.).
+	Interval   int         `json:"interval"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
+	Until      time.Time   `json:"until"`      // Hard stop date for the series.
+	Count      int         `json:"count"`      // Total number of occurrences to generate.
+	Exceptions []uuid.UUID `json:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
 }
 
 func (e *Event) Validate() error {
@@ -84,6 +94,7 @@ func (e Event) isParent() bool {
 	return e.ParentId == uuid.Nil && e.Repeat != nil
 }
 
+// Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of Parent event and returns its To.
 func (e Event) getTreeEndTime() time.Time {
 	if e.Repeat == nil {
 		return e.To
