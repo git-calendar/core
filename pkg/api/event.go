@@ -12,7 +12,7 @@ type Event struct {
 	To          string      `json:"to"`   // RFC3339 format e.g. 2009-11-10T23:00:00Z (the default format for json.Marshal() when it comes to time.Time)
 	Calendar    string      `json:"calendar"`
 	Tag         string      `json:"tag"`
-	MasterId    string      `json:"masterId"`
+	ParentId    string      `json:"parentId"`
 	Repeat      *Repetition `json:"repeat"`
 }
 

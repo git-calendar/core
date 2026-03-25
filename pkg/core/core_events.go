@@ -45,7 +45,7 @@ func (c *Core) UpdateEvent(event Event, opts ...UpdateOption) (*Event, error) {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
 
-	if event.isGenerated() {
+	if event.isChild() {
 		return c.updateGenerated(event, opts...)
 	}
 
@@ -58,7 +58,7 @@ func (c *Core) RemoveEvent(event Event) error {
 		return fmt.Errorf("invalid event: %w", err)
 	}
 
-	if !event.isGenerated() {
+	if !event.isChild() {
 		return c.removeReal(event) // must be deleted entirely
 	}
 	return c.removeGenerated(event) // must be added to exceptions
@@ -128,7 +128,7 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					To:          firstStart.Add(eventDuration),
 					Calendar:    curEvent.Calendar,
 					Tag:         curEvent.Tag,
-					MasterId:    curEvent.Id,
+					ParentId:    curEvent.Id,
 					Repeat:      curEvent.Repeat,
 				}
 				// ignore exceptions
@@ -188,26 +188,26 @@ func (c *Core) updateGenerated(event Event, opts ...UpdateOption) (*Event, error
 		return nil, fmt.Errorf("invalid update event: incorrect options provided")
 	}
 
-	master, ok := c.events[event.MasterId]
-	if !ok || master == nil || master.Repeat == nil {
-		return nil, fmt.Errorf("invalid update event: no valid master found")
+	parent, ok := c.events[event.ParentId]
+	if !ok || parent == nil || !parent.isParent() {
+		return nil, fmt.Errorf("invalid update event: no valid parent found")
 	}
 
 	switch opts[0] {
 	case Current:
-		return c.updateGeneratedCurrent(event, master)
+		return c.updateGeneratedCurrent(event, parent)
 	case Following:
-		return c.updateGeneratedFollowing(event, master)
+		return c.updateGeneratedFollowing(event, parent)
 	case All:
-		return c.updateGeneratedAll(event, master)
+		return c.updateGeneratedAll(event, parent)
 	default:
 		return nil, fmt.Errorf("update option %d isn't implemented", opts[0])
 	}
 }
 
-// Updates single generated/slave event by adding a repeat rule to its master and creating a brand new one.
-func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error) {
-	// update master event with the new exception
+// Updates single generated/child event by adding a repeat rule to its parent and creating a brand new one.
+func (c *Core) updateGeneratedCurrent(event Event, parent *Event) (*Event, error) {
+	// update parent event with the new exception
 	exceptionTime, err := getTimeFromUUID(event.Id)
 	if err != nil {
 		return nil, err
@@ -216,91 +216,86 @@ func (c *Core) updateGeneratedCurrent(event Event, master *Event) (*Event, error
 		exceptionTime = event.From
 	}
 	exception := event.Id
-	master.Repeat.Exceptions = append(master.Repeat.Exceptions, exception)
+	parent.Repeat.Exceptions = append(parent.Repeat.Exceptions, exception)
 
-	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Added exception to master '%s'", master.Title)); err != nil {
-		return nil, fmt.Errorf("failed to save master event: %w", err)
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("CALENDAR: Added exception to parent '%s'", parent.Title)); err != nil {
+		return nil, fmt.Errorf("failed to save parent event: %w", err)
 	}
 
 	event.Repeat = nil          // detach from repeating time series
 	return c.CreateEvent(event) // save as new
 }
 
-// Splits the time series into two by stopping the original master event from repeating further and creating brand new repeating event with updated properties.
-func (c *Core) updateGeneratedFollowing(event Event, master *Event) (*Event, error) {
-	master.Repeat.Until = event.From // cap master at start of change
-	master.Repeat.Count = 0          // enforce "Until" logic over "Count"
+// Splits the time series into two by stopping the original parent event from repeating further and creating brand new repeating event with updated properties.
+func (c *Core) updateGeneratedFollowing(event Event, parent *Event) (*Event, error) {
+	parent.Repeat.Until = event.From // cap parent at start of change
+	parent.Repeat.Count = 0          // enforce "Until" logic over "Count"
 
-	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Capped master event '%s'", master.Title)); err != nil {
-		return nil, fmt.Errorf("failed to commit master event: %w", err)
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("CALENDAR: Capped parent event '%s'", parent.Title)); err != nil {
+		return nil, fmt.Errorf("failed to commit parent event: %w", err)
 	}
 
-	// create the new master for the second half of the time series
-	event.MasterId = uuid.Nil // not slave anymore
-	event.Id = uuid.Nil       // let it create a new one, don't keep the same as its old master
+	// create the new parent for the second half of the time series
+	event.ParentId = uuid.Nil // not child anymore
+	event.Id = uuid.Nil       // let it create a new one, don't keep the same as its old parent
 
-	newMaster, err := c.CreateEvent(event)
+	newParent, err := c.CreateEvent(event)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
 
-	return newMaster, nil
+	return newParent, nil
 }
 
-// Updates the master event only. That means all generated slave events get updated too.
-// Keep in mind that function expect Masters only!
-func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) {
-	// check if the event we are changing is the original Master
-	if updated.Id != master.Id {
-		return nil, fmt.Errorf("invalid update event: id '%s' does not match master id '%s'", updated.Id, master.Id)
+// Updates the parent event only. That means all generated child events get updated too.
+// Keep in mind that function expect Parents only!
+func (c *Core) updateGeneratedAll(updated Event, parent *Event) (*Event, error) {
+	// check if the event we are changing is the original Parent
+	if updated.Id != parent.Id {
+		return nil, fmt.Errorf("invalid update event: id '%s' does not match parent id '%s'", updated.Id, parent.Id)
 	}
 
-	// check if the master *Event is actually Master
-	if master.MasterId != uuid.Nil || master.Repeat == nil {
-		return nil, fmt.Errorf("invalid master updated")
-	}
-
-	fromChanged := !updated.From.Equal(master.From)
-	toChanged := !updated.To.Equal(master.To)
-	repeatChanged := !reflect.DeepEqual(updated.Repeat, master.Repeat)
+	fromChanged := !updated.From.Equal(parent.From)
+	toChanged := !updated.To.Equal(parent.To)
+	repeatChanged := !reflect.DeepEqual(updated.Repeat, parent.Repeat)
 
 	if fromChanged || toChanged || repeatChanged {
-		if err := c.intervalTree.RemoveEvent(*master); err != nil {
+		if err := c.intervalTree.RemoveEvent(*parent); err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for updated: %w", err)
 		}
 	}
 
-	// shift all exceptions by the difference between updated.From and master.From
-	difference := updated.From.Sub(master.From)
+	// shift all exceptions by the difference between updated.From and parent.From
+	difference := updated.From.Sub(parent.From)
 	if fromChanged && updated.Repeat != nil {
-		for i, _ := range updated.Repeat.Exceptions {
+		for i := range updated.Repeat.Exceptions {
 			updated.Repeat.Exceptions[i] = getShiftedUUID(updated.Repeat.Exceptions[i], difference)
 		}
 	}
 
-	master.Title = updated.Title
-	master.Location = updated.Location
-	master.Description = updated.Description
-	master.From = updated.From
-	master.To = updated.To
-	master.Tag = updated.Tag
-	master.Repeat = updated.Repeat
-	master.Calendar = updated.Calendar
+	parent.Title = updated.Title
+	parent.Location = updated.Location
+	parent.Description = updated.Description
+	parent.From = updated.From
+	parent.To = updated.To
+	parent.Tag = updated.Tag
+	parent.Repeat = updated.Repeat
+	parent.Calendar = updated.Calendar
 
 	if fromChanged || toChanged || repeatChanged {
-		if err := c.intervalTree.InsertEvent(*master); err != nil {
+		if err := c.intervalTree.InsertEvent(*parent); err != nil {
 			return nil, fmt.Errorf("failed to rebuild tree for updated: %w", err)
 		}
 	}
 
-	if err := c.saveAndCommitEvent(master, fmt.Sprintf("CALENDAR: Updated master updated '%s'", master.Title)); err != nil {
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("CALENDAR: Updated parent updated '%s'", parent.Title)); err != nil {
 		return nil, fmt.Errorf("failed to save updated to repo: %w", err)
 	}
 
-	return master, nil
+	return parent, nil
 }
 
-// Deletes a real (basic/repeating master) event from memory as well as from git.
+// Deletes a real (basic/repeating parent) event from memory as well as from git.
 func (c *Core) removeReal(event Event) error {
 	err := c.intervalTree.RemoveEvent(event)
 	if err != nil {
@@ -317,21 +312,21 @@ func (c *Core) removeReal(event Event) error {
 	return nil
 }
 
-// Deletes a generated/slave event by adding an exception to its master repeat rule.
+// Deletes a child event by adding an exception to its parent repeat rule.
 func (c *Core) removeGenerated(event Event) error {
-	masterEvent := c.events[event.MasterId]
-	if masterEvent == nil || masterEvent.Repeat == nil {
-		return fmt.Errorf("master event not found")
+	parentEvent := c.events[event.ParentId]
+	if parentEvent == nil || parentEvent.Repeat == nil {
+		return fmt.Errorf("parent event not found")
 	}
 
 	// if exception doesn't exist yet
-	if !slices.Contains(masterEvent.Repeat.Exceptions, event.Id) {
-		// add date to master exceptions
+	if !slices.Contains(parentEvent.Repeat.Exceptions, event.Id) {
+		// add date to parent exceptions
 		newException := event.Id
-		masterEvent.Repeat.Exceptions = append(masterEvent.Repeat.Exceptions, newException)
+		parentEvent.Repeat.Exceptions = append(parentEvent.Repeat.Exceptions, newException)
 
 		// update/overwrite the file in repo
-		err := c.saveAndCommitEvent(masterEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
+		err := c.saveAndCommitEvent(parentEvent, fmt.Sprintf("CALENDAR: Updated event '%s'", event.Title))
 		if err != nil {
 			return fmt.Errorf("failed to save event to repo: %w", err)
 		}

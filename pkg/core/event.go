@@ -9,7 +9,7 @@ import (
 )
 
 type Event struct {
-	Id          uuid.UUID   `json:"id"` // use UUIDv4; shouldn't change (different id = different event)
+	Id          uuid.UUID   `json:"id"` // shouldn't change (different id = different event); only UUIDv4 or UUIDv8 for children
 	Title       string      `json:"title"`
 	Location    string      `json:"location"`
 	Description string      `json:"description"`
@@ -17,16 +17,16 @@ type Event struct {
 	To          time.Time   `json:"to"`
 	Calendar    string      `json:"calendar"`
 	Tag         string      `json:"tag"`
-	MasterId    uuid.UUID   `json:"master_id"` // uuid.Nil if basic event or repeating master event
-	Repeat      *Repetition `json:"repeat"`    // nil if slave
+	ParentId    uuid.UUID   `json:"parent_id"` // specific for child events; its uuid.Nil if the event is basic or parent
+	Repeat      *Repetition `json:"repeat"`    // nil if child
 }
 
 type Repetition struct {
-	Frequency  Freq        `json:"frequency"`  // Day, Week, ... (None if master)
+	Frequency  Freq        `json:"frequency"`  // Day, Week, ... (None if parent)
 	Interval   int         `json:"interval"`   // 1..N (freq:Week + interval:2 => every other week)
 	Until      time.Time   `json:"until"`      // the end of repetition by timestamp
 	Count      int         `json:"count"`      // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions"` // an array of slaves ids
+	Exceptions []uuid.UUID `json:"exceptions"` // an array of children ids
 }
 
 func (e *Event) Validate() error {
@@ -76,8 +76,12 @@ func (r *Repetition) Validate() error {
 	return nil
 }
 
-func (e Event) isGenerated() bool {
-	return e.MasterId != uuid.Nil
+func (e Event) isChild() bool {
+	return e.ParentId != uuid.Nil
+}
+
+func (e Event) isParent() bool {
+	return e.ParentId == uuid.Nil && e.Repeat != nil
 }
 
 func (e Event) getTreeEndTime() time.Time {

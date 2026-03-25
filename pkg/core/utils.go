@@ -124,12 +124,12 @@ func calendarNameFromUrl(u url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// Generates custom uuid from masterId and some time. It uses 6 bytes for the master and 6 bytes for the time
+// Generates custom uuid from parentId and some time. It uses 6 bytes for the parent and 6 bytes for the time
 // If the generation fails, it returns uuid.New()
-func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
+func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
-	copy(idBuf[:6], masterId[:6])      // take first 6 bytes from masterId
-	copy(idBuf[9:12], masterId[13:16]) // take another 3 bytes from masterId
+	copy(idBuf[:6], parentId[:6])      // take first 6 bytes from parentId
+	copy(idBuf[9:12], parentId[13:16]) // take another 3 bytes from parentId
 	idBuf[6] = 0x80                    // set version
 	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
 	idBuf[8] = 0x80                    // RFC 9562

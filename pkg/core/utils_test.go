@@ -258,7 +258,7 @@ func Test_calendarNameFromUrl(t *testing.T) {
 
 func Test_generateCustomUUID(t *testing.T) {
 	type args struct {
-		masterId uuid.UUID
+		parentId uuid.UUID
 		t        time.Time
 	}
 	tests := []struct {
@@ -270,7 +270,7 @@ func Test_generateCustomUUID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := generateCustomUUID(tt.args.masterId, tt.args.t); !cmp.Equal(tt.want, got) {
+			if got := generateCustomUUID(tt.args.parentId, tt.args.t); !cmp.Equal(tt.want, got) {
 				t.Errorf("generateCustomUUID() = %v, want %v\ndiff=%s", got, tt.want, cmp.Diff(tt.want, got))
 			}
 		})

@@ -497,10 +497,10 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	a := core.NewCore()
 	_ = a.CreateCalendar(TestCalendarName)
 
-	masterId := uuid.New()
+	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	masterEvent := core.Event{
-		Id:       masterId,
+	parentEvent := core.Event{
+		Id:       parentId,
 		Calendar: TestCalendarName,
 		Title:    "Daily event",
 		From:     startTime,
@@ -511,7 +511,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 			Count:     5,
 		},
 	}
-	_, _ = a.CreateEvent(masterEvent)
+	_, _ = a.CreateEvent(parentEvent)
 
 	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 0, 5))
 	if len(eventsOut) != 5 {
@@ -530,9 +530,9 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 		t.Errorf("failed to update generated event (Current): %v", err)
 	}
 
-	masterOut, _ := a.GetEvent(masterId)
+	parentOut, _ := a.GetEvent(parentId)
 	foundException := false
-	for _, ex := range masterOut.Repeat.Exceptions {
+	for _, ex := range parentOut.Repeat.Exceptions {
 		t := time.Unix(int64(binary.BigEndian.Uint32(ex[12:16])), 0)
 		if t.Equal(originalFrom) {
 			foundException = true
@@ -540,7 +540,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 		}
 	}
 	if !foundException {
-		t.Errorf("master event did not receive the exception for time: %s", originalFrom)
+		t.Errorf("parent event did not receive the exception for time: %s", originalFrom)
 	}
 
 	isolatedOut, err := a.GetEvent(targetEvent.Id)
@@ -562,10 +562,10 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 	a := core.NewCore()
 	_ = a.CreateCalendar(TestCalendarName)
 
-	masterId := uuid.New()
+	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	masterEvent := core.Event{
-		Id:       masterId,
+	parentEvent := core.Event{
+		Id:       parentId,
 		Calendar: TestCalendarName,
 		Title:    "Daily Meeting",
 		From:     startTime,
@@ -576,7 +576,7 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 			Until:     startTime.AddDate(0, 1, 0),
 		},
 	}
-	_, _ = a.CreateEvent(masterEvent)
+	_, _ = a.CreateEvent(parentEvent)
 
 	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 0, 21))
 	targetEvent := eventsOut[2]
@@ -587,26 +587,26 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 		Interval:  1,
 		Until:     startTime.AddDate(0, 1, 0),
 	}
-	newMasterOut, err := a.UpdateEvent(targetEvent, core.Following)
+	newParentOut, err := a.UpdateEvent(targetEvent, core.Following)
 	if err != nil {
 		t.Errorf("failed to update generated event (Following): %v", err)
 	}
-	if newMasterOut.MasterId != uuid.Nil {
-		t.Errorf("new event should be a master, but MasterId is %s", newMasterOut.MasterId)
+	if newParentOut.ParentId != uuid.Nil {
+		t.Errorf("new event should be a parent, but ParentId is %s", newParentOut.ParentId)
 	}
-	if newMasterOut.Title != "Weekly Meeting - New Phase" {
-		t.Errorf("title not updated on new master")
+	if newParentOut.Title != "Weekly Meeting - New Phase" {
+		t.Errorf("title not updated on new parent")
 	}
 
-	olderMasterOut, err := a.GetEvent(masterId)
+	olderParentOut, err := a.GetEvent(parentId)
 	if err != nil {
-		t.Fatalf("failed to get master out: %v", err)
+		t.Fatalf("failed to get parent out: %v", err)
 	}
-	if !olderMasterOut.Repeat.Until.Equal(originalFrom) {
-		t.Errorf("master event Until was not capped correctly. Expected %s, got %s", originalFrom, olderMasterOut.Repeat.Until)
+	if !olderParentOut.Repeat.Until.Equal(originalFrom) {
+		t.Errorf("parent event Until was not capped correctly. Expected %s, got %s", originalFrom, olderParentOut.Repeat.Until)
 	}
-	if olderMasterOut.Repeat.Count != 0 {
-		t.Errorf("master event Count should be overridden to 0, got %d", olderMasterOut.Repeat.Count)
+	if olderParentOut.Repeat.Count != 0 {
+		t.Errorf("parent event Count should be overridden to 0, got %d", olderParentOut.Repeat.Count)
 	}
 }
 
@@ -614,10 +614,10 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 	a := core.NewCore()
 	_ = a.CreateCalendar(TestCalendarName)
 
-	masterId := uuid.New()
+	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	masterEvent := core.Event{
-		Id:       masterId,
+	parentEvent := core.Event{
+		Id:       parentId,
 		Calendar: TestCalendarName,
 		Title:    "Monthly Review",
 		From:     startTime,
@@ -629,10 +629,10 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 		},
 	}
 
-	_, _ = a.CreateEvent(masterEvent)
+	_, _ = a.CreateEvent(parentEvent)
 
 	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 6, 0))
-	targetEvent, _ := a.GetEvent(eventsOut[0].MasterId)
+	targetEvent, _ := a.GetEvent(eventsOut[0].ParentId)
 
 	shift := 2 * time.Hour
 	targetEvent.From = targetEvent.From.Add(shift)
@@ -649,13 +649,13 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 		t.Errorf("failed to update generated event (All): %v", err)
 	}
 
-	masterOut, _ := a.GetEvent(masterId)
+	parentOut, _ := a.GetEvent(parentId)
 	expectedNewFrom := startTime.Add(shift)
-	if !masterOut.From.Equal(expectedNewFrom) {
-		t.Errorf("master event From was not shifted. Expected %s, got %s", expectedNewFrom, masterOut.From)
+	if !parentOut.From.Equal(expectedNewFrom) {
+		t.Errorf("parent event From was not shifted. Expected %s, got %s", expectedNewFrom, parentOut.From)
 	}
-	if masterOut.Title != "Monthly Review - Shifted" {
-		t.Errorf("master event Title was not updated")
+	if parentOut.Title != "Monthly Review - Shifted" {
+		t.Errorf("parent event Title was not updated")
 	}
 }
 
@@ -696,11 +696,11 @@ func Test_UpdateEvent_FromStandardToRepeating_Works(t *testing.T) {
 		t.Errorf("expected 3 events after update, got %d", len(eventsOut))
 	}
 
-	updatedMaster, err := a.GetEvent(id)
+	updatedParent, err := a.GetEvent(id)
 	if err != nil {
-		t.Fatalf("failed to get master event after update: %v", err)
+		t.Fatalf("failed to get parent event after update: %v", err)
 	}
-	if updatedMaster.Repeat == nil || updatedMaster.Repeat.Count != 3 {
-		t.Errorf("master event was not correctly updated to be repeating")
+	if updatedParent.Repeat == nil || updatedParent.Repeat.Count != 3 {
+		t.Errorf("parent event was not correctly updated to be repeating")
 	}
 }
