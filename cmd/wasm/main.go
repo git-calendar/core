@@ -85,9 +85,14 @@ func RegisterCallbacks(api *api.Api) {
 					return api.UpdateEvent(args[0].String())
 				})
 			}),
-			"updateEventWithStrategy": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"updateRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return api.UpdateEventWithStrategy(args[0].String(), args[1].Int())
+					return api.UpdateRepeatingEvent(args[0].String(), args[1].String(), args[2].Int())
+				})
+			}),
+			"removeRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RemoveRepeatingEvent(args[0].String(), args[1].Int())
 				})
 			}),
 			// TODO others

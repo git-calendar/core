@@ -68,17 +68,35 @@ func (a *Api) CreateEvent(eventJson string) (string, error) {
 }
 
 func (a *Api) UpdateEvent(eventJson string) (string, error) {
-	wrapper := func(e core.Event) (*core.Event, error) {
-		return a.inner.UpdateEvent(e)
-	}
-	return returnJsonEventAndError(eventJson, wrapper)
+	return returnJsonEventAndError(eventJson, a.inner.UpdateEvent)
 }
 
-func (a *Api) UpdateEventWithStrategy(eventJson string, strategy int) (string, error) {
-	wrapper := func(e core.Event) (*core.Event, error) {
-		return a.inner.UpdateEvent(e, core.UpdateOption(strategy))
+func (a *Api) UpdateRepeatingEvent(oldEventJson, newEventJson string, strategy int) (string, error) {
+	var oldEvent core.Event
+	var newEvent core.Event
+
+	if err := json.Unmarshal([]byte(oldEventJson), &oldEvent); err != nil {
+		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
+		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
 	}
-	return returnJsonEventAndError(eventJson, wrapper)
+
+	if err := json.Unmarshal([]byte(newEventJson), &newEvent); err != nil {
+		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
+		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
+	}
+
+	updatedEvent, err := a.inner.UpdateRepeatingEvent(oldEvent, newEvent, core.UpdateStrategy(strategy))
+	if err != nil {
+		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
+		return emptyJson, err
+	}
+
+	jsonBytes, err := json.Marshal(updatedEvent)
+	if err != nil {
+		return emptyJson, err
+	}
+
+	return string(jsonBytes), err
 }
 
 func (a *Api) RemoveEvent(eventJson string) error {
@@ -88,6 +106,15 @@ func (a *Api) RemoveEvent(eventJson string) error {
 		return fmt.Errorf("failed to unmarshal event data: %w", err)
 	}
 	return a.inner.RemoveEvent(event)
+}
+
+func (a *Api) RemoveRepeatingEvent(eventJson string, strategy int) error {
+	var event core.Event
+	err := json.Unmarshal([]byte(eventJson), &event)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal event data: %w", err)
+	}
+	return a.inner.RemoveRepeatingEvent(event, core.UpdateStrategy(strategy))
 }
 
 func (a *Api) GetEvent(id string) (string, error) {

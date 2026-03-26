@@ -48,7 +48,7 @@ func (et *IntervalTree) RemoveEvent(event Event) error {
 	// find index of our event
 	index := slices.Index(ids, event.Id)
 	if index == -1 {
-		return errors.New("")
+		return errors.New("event not in searched interval")
 	}
 
 	// delete event from interval

@@ -383,7 +383,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 		return
 	}
 	eventToRemove := eventsOut[0]
-	if err := a.RemoveEvent(eventToRemove); err != nil {
+	if err := a.RemoveRepeatingEvent(eventToRemove, core.Current); err != nil {
 		t.Errorf("failed to remove event: %v", err)
 	}
 
@@ -519,13 +519,14 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	}
 
 	targetEvent := eventsOut[2]
+	updatedTarget := targetEvent
 	originalFrom := targetEvent.From
 
-	targetEvent.Title = "Daily event - update"
-	targetEvent.From = startTime.Add(time.Hour)
-	targetEvent.To = startTime.Add(2 * time.Hour)
+	updatedTarget.Title = "Daily event - update"
+	updatedTarget.From = startTime.Add(time.Hour)
+	updatedTarget.To = startTime.Add(2 * time.Hour)
 
-	_, err := a.UpdateEvent(targetEvent, core.Current)
+	_, err := a.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Current)
 	if err != nil {
 		t.Errorf("failed to update generated event (Current): %v", err)
 	}
@@ -543,10 +544,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 		t.Errorf("parent event did not receive the exception for time: %s", originalFrom)
 	}
 
-	isolatedOut, err := a.GetEvent(targetEvent.Id)
-	if err != nil {
-		t.Fatalf("isolated event was not created: %v", err)
-	}
+	isolatedOut := a.GetEvents(updatedTarget.From, updatedTarget.To)[0]
 	if !isolatedOut.From.Equal(startTime.Add(time.Hour)) {
 		t.Errorf("isolated event doesnt have the right From")
 	}
@@ -580,14 +578,16 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 
 	eventsOut := a.GetEvents(startTime, startTime.AddDate(0, 0, 21))
 	targetEvent := eventsOut[2]
+	updatedTarget := targetEvent
 	originalFrom := targetEvent.From
-	targetEvent.Title = "Weekly Meeting - New Phase"
-	targetEvent.Repeat = &core.Repetition{
+
+	updatedTarget.Title = "Weekly Meeting - New Phase"
+	updatedTarget.Repeat = &core.Repetition{
 		Frequency: core.Day,
 		Interval:  1,
 		Until:     startTime.AddDate(0, 1, 0),
 	}
-	newParentOut, err := a.UpdateEvent(targetEvent, core.Following)
+	newParentOut, err := a.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Following)
 	if err != nil {
 		t.Errorf("failed to update generated event (Following): %v", err)
 	}
@@ -644,7 +644,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 		Count:     5,
 	}
 
-	_, err := a.UpdateEvent(*targetEvent, core.All)
+	_, err := a.UpdateEvent(*targetEvent)
 	if err != nil {
 		t.Errorf("failed to update generated event (All): %v", err)
 	}
