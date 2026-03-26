@@ -1,35 +1,41 @@
 package e2e
 
-// func Test_AddRemote_Works(t *testing.T) {
-// 	a := core.NewCore()
+import (
+	"testing"
 
-// 	err := a.RemoveCalendar(TestCalendarName)
-// 	if err != nil {
-// 		t.Errorf("failed to delete existing repo: %v", err)
-// 	}
+	"github.com/firu11/git-calendar-core/pkg/core"
+)
 
-// 	err = a.CreateCalendar(TestCalendarName)
-// 	if err != nil {
-// 		t.Errorf("failed to init repo: %v", err)
-// 	}
+func Test_AddRemote_Works(t *testing.T) {
+	c := core.NewCore()
 
-// 	err = a.AddRemote("github", "https://github.com/firu11/git-calendar-core.git")
-// 	if err != nil {
-// 		t.Errorf("failed to add remote: %v", err)
-// 	}
+	err := c.RemoveCalendar(TestCalendarName)
+	if err != nil {
+		t.Errorf("failed to delete existing repo: %v", err)
+	}
 
-// 	err = a.AddRemote("github", "foo")
-// 	if err == nil {
-// 		t.Errorf("expected an error after adding an existing remote")
-// 	}
+	err = c.CreateCalendar(TestCalendarName)
+	if err != nil {
+		t.Errorf("failed to init repo: %v", err)
+	}
 
-// 	err = a.AddRemote("foo", "invalid url bla bla")
-// 	if err == nil {
-// 		t.Errorf("expected an error after adding an invalid url")
-// 	}
+	err = c.AddRemote(TestCalendarName, "github", "https://github.com/firu11/git-calendar-core.git")
+	if err != nil {
+		t.Errorf("failed to add remote: %v", err)
+	}
 
-// 	err = a.AddRemote("bar", "https://github.com/firu11/git-calendar-core")
-// 	if err == nil {
-// 		t.Errorf("expected an error after adding an non-git url")
-// 	}
-// }
+	err = c.AddRemote(TestCalendarName, "github", "foo")
+	if err == nil {
+		t.Errorf("expected an error after adding an existing remote")
+	}
+
+	err = c.AddRemote(TestCalendarName, "foo", "invalid url bla bla")
+	if err == nil {
+		t.Errorf("expected an error after adding an invalid url")
+	}
+
+	err = c.AddRemote(TestCalendarName, "bar", "https://github.com/firu11/git-calendar-core")
+	if err == nil {
+		t.Errorf("expected an error after adding an non-git url")
+	}
+}
