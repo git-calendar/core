@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/firu11/git-calendar-core/pkg/filesystem"
 	gogitutil "github.com/go-git/go-billy/v5/util"
@@ -15,7 +16,24 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/google/uuid"
 )
+
+type TagMetadata struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+type TimeTreeNode struct {
+	From    time.Time   `json:"from"`
+	To      time.Time   `json:"to"`
+	EventID []uuid.UUID `json:"eventID"`
+}
+
+type CalendarIndex struct {
+	Tags      map[int]TagMetadata `json:"tags"`
+	TreeNodes []TimeTreeNode      `json:"nodes"`
+}
 
 // Creates a new calendar.
 func (c *Core) CreateCalendar(name string) error {
