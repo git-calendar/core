@@ -1,5 +1,5 @@
 # Git Calendar Core
-[![Go Report Card](https://goreportcard.com/badge/github.com/firu11/git-calendar-core)](https://goreportcard.com/report/github.com/firu11/git-calendar-core)
+[![Go Report Card](https://goreportcard.com/badge/github.com/git-calendar/core)](https://goreportcard.com/report/github.com/git-calendar/core)
 
 
 Related projects:
@@ -11,11 +11,7 @@ For Android and IOS bindings, make sure to install [gomobile](https://pkg.go.dev
 ```sh
 go install golang.org/x/mobile/cmd/gomobile@latest
 ```
-You can build for all platforms using:
-```sh
-make
-```
-or individually:
+You can build for specific platforms using:
 ```sh
 make [build_android|build_ios|build_web]
 ```

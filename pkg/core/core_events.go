@@ -9,7 +9,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/firu11/git-calendar-core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/filesystem"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/google/uuid"
@@ -95,15 +95,11 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 		return nil, fmt.Errorf("invalid update event: id '%s' does not match parent id '%s'", old.Id, new.Id)
 	}
 
-	// if new.isParent() && (strat == All || strat == Following) { // not different from update all
-	// 	return c.UpdateEvent(new) // updating the parent means updating the whole series
-	// }
-
 	switch strat {
 	case Current:
 		return c.updateCurrentChild(&new)
 	case Following:
-		return c.updateFollowingChildren(&old, &new)
+		return c.updateFollowingChildren(&new)
 	case All:
 		return c.updateAllChildren(&old, &new)
 	default:
@@ -236,7 +232,7 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 // Updates single generated/child event by adding a repeat exception to its Parent and creating a brand new event instead.
 func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	parent, ok := c.events[updated.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
@@ -255,28 +251,28 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 }
 
 // Splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
-func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
-	parent, ok := c.events[new.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+func (c *Core) updateFollowingChildren(event *Event) (*Event, error) {
+	parent, ok := c.events[event.ParentId]
+	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
-	parent.Repeat.Until = new.From // cap parent at start of change
-	parent.Repeat.Count = 0        // enforce Until logic over Count
+	parent.Repeat.Until = event.From // cap parent at start of change
+	parent.Repeat.Count = 0          // enforce Until logic over Count
 
 	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Capped parent event '%s'", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to commit parent event: %w", err)
 	}
 
 	// create the new parent for the second half of the time series
-	new.ParentId = uuid.Nil // not child anymore
-	new.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
+	event.ParentId = uuid.Nil // not child anymore
+	event.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
 
-	if new.Repeat.Count != 0 {
+	if event.Repeat.Count != 0 {
 		// TODO: shorten the repeat for the second half
 	}
 
-	newParent, err := c.CreateEvent(*new)
+	newParent, err := c.CreateEvent(*event)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
@@ -287,12 +283,12 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 // Updates the entire repeating series by only modifying the parent. That means all generated child events get updated as well.
 // Both old and new arguments are child events.
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
-	if old.isParent() || new.isParent() {
+	if old.IsParent() || new.IsParent() {
 		return nil, fmt.Errorf("updateRepeatingAll works with child event")
 	}
 
 	parent, ok := c.events[new.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
@@ -344,7 +340,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 
 func (c *Core) removeCurrentChild(event *Event) error {
 	parent, ok := c.events[event.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	if !ok || parent == nil || !parent.IsParent() {
 		return fmt.Errorf("no valid parent found")
 	}
 

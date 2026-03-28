@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/firu11/git-calendar-core/pkg/core"
-	"github.com/firu11/git-calendar-core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/core"
+	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/google/uuid"
 )
 

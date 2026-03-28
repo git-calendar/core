@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/firu11/git-calendar-core/pkg/core"
+	"github.com/git-calendar/core/pkg/core"
 	"github.com/google/uuid"
 )
 

@@ -10,7 +10,7 @@ import (
 
 // Event represents a single calendar entry.
 //
-// Follows a Parent/Child relationship model:
+// Can be one of these:
 //  1. Basic:   A standalone event that does not repeat (ParentId is nil, Repeat is nil).
 //  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
 //  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
@@ -86,11 +86,15 @@ func (r *Repetition) Validate() error {
 	return nil
 }
 
-func (e Event) isChild() bool {
+func (e Event) IsBasic() bool {
+	return !e.IsChild() && !e.IsParent() // e.ParentId == uuid.Nil && e.Repeat == nil
+}
+
+func (e Event) IsChild() bool {
 	return e.ParentId != uuid.Nil
 }
 
-func (e Event) isParent() bool {
+func (e Event) IsParent() bool {
 	return e.ParentId == uuid.Nil && e.Repeat != nil
 }
 

@@ -55,7 +55,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Git-Protocol")
 
 	if r.Method == http.MethodOptions {
-		// this prevents the 405 from e.g. GitHub
+		// this prevents the 405 from e.g., GitHub
 		// the browser only needs to get the CORS headers and OK for OPTIONS request,
 		// so that it knows its safe to send the real request
 		w.WriteHeader(http.StatusNoContent)

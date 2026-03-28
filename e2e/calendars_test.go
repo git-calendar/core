@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/firu11/git-calendar-core/pkg/core"
-	"github.com/firu11/git-calendar-core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/core"
+	"github.com/git-calendar/core/pkg/filesystem"
 )
 
 func Test_CreateCalendar_Works(t *testing.T) {

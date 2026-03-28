@@ -64,7 +64,7 @@ succeds!
 ## I already have a reverse-proxy
 When using a [bare Git repository](https://git-scm.com/book/en/v2/Git-on-the-Server-Getting-Git-on-a-Server) on a [VPS](https://en.wikipedia.org/wiki/Virtual_private_server) this proxy is not necessary, since you control the enviroment.
 
-You can use any [reverse-proxy](https://en.wikipedia.org/wiki/Reverse_proxy) of your choice (e.g. [Caddy](https://caddyserver.com/) or [Nginx](https://nginx.org/en/)), and just add the CORS headers there.\
+You can use any [reverse-proxy](https://en.wikipedia.org/wiki/Reverse_proxy) of your choice (e.g., [Caddy](https://caddyserver.com/) or [Nginx](https://nginx.org/en/)), and just add the CORS headers there.\
 Example configuration for Caddy:\
 (based on [this](https://www.jamesatkins.com/posts/git-over-http-with-caddy/) very cool article)
 ```caddyfile

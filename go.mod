@@ -1,4 +1,4 @@
-module github.com/firu11/git-calendar-core
+module github.com/git-calendar/core
 
 go 1.25.5
 

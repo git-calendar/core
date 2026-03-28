@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/firu11/git-calendar-core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/cache"

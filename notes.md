@@ -1,18 +1,19 @@
 ### TODO
 
 - [ ] core functionality
-  - [ ] storage format
+  - [x] storage format
   - [ ] indexing
     - [x] interval-btree?
     - [ ] smart indexing (index file)
   - [x] repeating events
     - infinite shadow (ghost events)
   - [x] connect repeating event exceptions
-    - exception needs to have uuid and time
+    - exception needs to have uuid
+    - time encoded inside uuidv8
   - [ ] config file per repo
     - tags
   - [ ] better tests
-  - [ ] load repositories
+  - [x] load repositories
 - [ ] iCalendar compatibility
   - [ ] import (periodical & one-time)
   - [ ] export
@@ -49,38 +50,3 @@
     ├── index.jsonl
     └── index-rich.jsonl
 ```
-
-### Encryption
-
-- Why?
-
-> to hide data when using a public GitHub/GitLab/Gitea/Codeberg instance as a git remote
-
-- values-only encryption might be best for this
-  - json structure stays
-    - git diffs work well (unlike whole file encryption)
-  - something like this:
-    ```json
-    {
-        "title": "Meeting",
-        "location": "https://zoom.us/my/abcd",
-        "from": "2011-10-05T14:48:00.000Z",
-        ...
-    }
-                |         - something like AES-SIV or XChaCha20 encryption
-                v         - base64 representation
-    {
-        "title": "/sNrzDJP/K1mmAI6LkBOk3Rv4+JeQQ==",
-        "location": "29J6yCgbtHpeoPCr6pRB9Z8yrmNswW4n5xOFRK1IvGwduFtkljE=",
-        "from": "gZY/iXYQq3gU+sv38NsG4sh7sSw+kjqMttCEhnT8HQ9orN/XIGsg",
-        ...
-    }
-    ```
-
-#### Workflow:
-
-1. pull changes to disk/fs
-2. decrypt file (using a key stored somewhere) to memory
-3. make changes
-4. encrypt again and save to disk/fs
-5. push to remote

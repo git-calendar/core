@@ -3,7 +3,7 @@ package e2e
 import (
 	"testing"
 
-	"github.com/firu11/git-calendar-core/pkg/core"
+	"github.com/git-calendar/core/pkg/core"
 )
 
 func Test_AddRemote_Works(t *testing.T) {
@@ -19,7 +19,7 @@ func Test_AddRemote_Works(t *testing.T) {
 		t.Errorf("failed to init repo: %v", err)
 	}
 
-	err = c.AddRemote(TestCalendarName, "github", "https://github.com/firu11/git-calendar-core.git")
+	err = c.AddRemote(TestCalendarName, "github", "https://github.com/git-calendar/core.git")
 	if err != nil {
 		t.Errorf("failed to add remote: %v", err)
 	}
@@ -34,7 +34,7 @@ func Test_AddRemote_Works(t *testing.T) {
 		t.Errorf("expected an error after adding an invalid url")
 	}
 
-	err = c.AddRemote(TestCalendarName, "bar", "https://github.com/firu11/git-calendar-core")
+	err = c.AddRemote(TestCalendarName, "bar", "https://github.com/git-calendar/core")
 	if err == nil {
 		t.Errorf("expected an error after adding an non-git url")
 	}
