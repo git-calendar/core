@@ -34,6 +34,14 @@ func (et *IntervalTree) InsertEvent(event Event) error {
 	return err
 }
 
+func (et *IntervalTree) InsertEventInterval(eventId uuid.UUID, from, to time.Time) error {
+	ids, _ := et.tree.Find(from, to) // find existing interval
+	updated := append(ids, eventId)  // if not found, ids is nil -> append makes [event.Id]
+
+	err := et.tree.Insert(from, to, updated)
+	return err
+}
+
 // Deletes an Event from the interval tree.
 func (et *IntervalTree) RemoveEvent(event Event) error {
 	// find last child and its To
