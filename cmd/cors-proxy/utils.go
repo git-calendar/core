@@ -59,7 +59,14 @@ func rateLimit(next http.Handler) http.Handler {
 		panic(err)
 	}
 
-	middleware, err := httplimit.NewMiddleware(store, httplimit.IPKeyFunc())
+	var limitFunc httplimit.KeyFunc
+	if cfg.IpSourceHeader != "" {
+		limitFunc = httplimit.IPKeyFunc(cfg.IpSourceHeader)
+	} else {
+		limitFunc = httplimit.IPKeyFunc()
+	}
+
+	middleware, err := httplimit.NewMiddleware(store, limitFunc)
 	if err != nil {
 		panic(err)
 	}
@@ -165,6 +172,7 @@ type config struct {
 	AllowedHosts    []string      `env:"ALLOWED_HOSTS,default=github.com,raw.githubusercontent.com,gitlab.com,codeberg.org"`
 	RateTokens      uint64        `env:"RATE_TOKENS,default=40"` // 40 req/min should be ok for legit usage
 	RateInterval    time.Duration `env:"RATE_INTERVAL,default=1m"`
+	IpSourceHeader  string        `env:"RATE_IP_SOURCE_HEADER"` // for reverse proxy etc.
 }
 
 func loadConfig() {

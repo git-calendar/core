@@ -35,6 +35,7 @@ MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
 ALLOWED_HOSTS=github.com,raw.githubusercontent.com,gitlab.com,codeberg.org
 RATE_TOKENS=40
 RATE_INTERVAL=1m
+RATE_IP_SOURCE_HEADER="" # useful when behind a reverse-proxy
 ```
 
 ## Usage
