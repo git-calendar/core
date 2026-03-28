@@ -32,36 +32,22 @@ func main() {
 
 	s := &http.Server{
 		Addr:           fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-		Handler:        accessLog(mux),
+		Handler:        accessLog(corsMiddleware(rateLimit(mux))),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		MaxHeaderBytes: 64 << 10, // 1KB
 	}
 
-	slog.Info(fmt.Sprintf("configuration: %+v\n", *cfg))
+	slog.Info(fmt.Sprintf("configuration: %+v", *cfg))
 	slog.Info("running on " + s.Addr)
 
 	// run the proxy
 	if err := s.ListenAndServe(); err != nil {
-		slog.Error(err.Error())
 		panic(err)
 	}
 }
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
-	// add cors headers to allow any browser to use this endpoint
-	w.Header().Set("Access-Control-Allow-Origin", "*") // TODO add real https://git-calendar.firu.dev or whatever
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Git-Protocol")
-
-	if r.Method == http.MethodOptions {
-		// this prevents the 405 from e.g., GitHub
-		// the browser only needs to get the CORS headers and OK for OPTIONS request,
-		// so that it knows its safe to send the real request
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
 	// get the destination url from query
 	destUrlQuery := r.URL.Query().Get("url")
 	if destUrlQuery == "" {
