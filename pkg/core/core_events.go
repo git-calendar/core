@@ -17,7 +17,7 @@ import (
 
 // Creates a new event and save it into git.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
-	if _, ok := c.events[event.Id]; ok && event.Id != uuid.Nil {
+	if e, ok := c.GetEvent(event.Id); e != nil && ok == nil && event.Id != uuid.Nil {
 		return nil, fmt.Errorf("an event with this id already exists")
 	}
 
@@ -45,8 +45,8 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
 
-	originalEvent, exists := c.events[event.Id]
-	if !exists {
+	originalEvent, exists := c.GetEvent(event.Id)
+	if exists != nil {
 		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
 	}
 
@@ -153,9 +153,14 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 
 // Returns event by id, or an error if it doesn't exist.
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
-	e, ok := c.events[id]
-	if !ok {
-		return nil, fmt.Errorf("event with id: '%s' doesn't exist", id)
+	e, found := c.events[id]
+	if !found && e != nil {
+		var err error
+		e, err = c.loadEventFromFile(id)
+		if err != nil {
+			return nil, err
+		}
+		c.events[id] = e
 	}
 	return e, nil
 }
@@ -172,15 +177,15 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 	for _, intersection := range intervalsMatched {
 		for _, eId := range intersection {
-			curEvent, ok := c.events[eId]
-			if !ok {
+			curEvent, ok := c.GetEvent(eId)
+			if ok != nil {
 				fmt.Printf("event with id: '%v' doesn't exist in events map WTF\n", eId)
 				continue
 			}
 
 			// if it doesn't repeat, just plain append to result
 			if curEvent.Repeat == nil {
-				result = append(result, *c.events[eId])
+				result = append(result, *curEvent)
 				continue
 			}
 
@@ -235,8 +240,8 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 // Updates single generated/child event by adding a repeat exception to its Parent and creating a brand new event instead.
 func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
-	parent, ok := c.events[updated.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	parent, ok := c.GetEvent(updated.ParentId)
+	if ok != nil || parent == nil || !parent.isParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
@@ -256,8 +261,8 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 
 // Splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
 func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
-	parent, ok := c.events[new.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	parent, ok := c.GetEvent(new.ParentId)
+	if ok != nil || parent == nil || !parent.isParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
@@ -291,8 +296,8 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		return nil, fmt.Errorf("updateRepeatingAll works with child event")
 	}
 
-	parent, ok := c.events[new.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	parent, ok := c.GetEvent(new.ParentId)
+	if ok != nil || parent == nil || !parent.isParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
@@ -343,8 +348,8 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 }
 
 func (c *Core) removeCurrentChild(event *Event) error {
-	parent, ok := c.events[event.ParentId]
-	if !ok || parent == nil || !parent.isParent() {
+	parent, ok := c.GetEvent(event.ParentId)
+	if ok != nil || parent == nil || !parent.isParent() {
 		return fmt.Errorf("no valid parent found")
 	}
 
@@ -439,8 +444,8 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 
 // Removes event from filesystem and commits the change.
 func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
-	event, ok := c.events[eventId]
-	if !ok {
+	event, ok := c.GetEvent(eventId)
+	if ok != nil {
 		return fmt.Errorf("failed to find event by id")
 	}
 	filename := fmt.Sprintf("%s.json", eventId)
@@ -453,8 +458,8 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	}
 
 	// -------- remove from git --------
-	repo, ok := c.repos[event.Calendar]
-	if !ok {
+	repo, found := c.repos[event.Calendar]
+	if !found {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 

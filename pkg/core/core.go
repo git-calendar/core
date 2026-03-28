@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,9 +22,9 @@ type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
 	repos        map[string]*gogit.Repository
-	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
-	// tags      map[string][]string // might not be needed to "cache" it like this
+	fs           billy.Filesystem    // root "/" for OPFS, "$HOME" for classic FS
+	proxyUrl     *url.URL            // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
+	tags         map[int]TagMetadata // might not be needed to "cache" it like this
 }
 
 // A "constructor" for Core.
@@ -137,4 +138,33 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 	}
 
 	return repo, nil
+}
+func (c *Core) loadEventFromFile(id uuid.UUID) (*Event, error) {
+	// search for the wanted id
+	for _, repo := range c.repos {
+		wt, err := repo.Worktree()
+		if err != nil || wt == nil {
+			continue
+		}
+
+		fileName := wt.Filesystem.Join(EventsDirName, id.String()+".json")
+		file, err := wt.Filesystem.Open(fileName)
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+
+		var event Event
+		err = json.NewDecoder(file).Decode(&event)
+		if err != nil {
+			fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
+			return nil, err
+		}
+
+		if event.Id != id {
+			continue
+		}
+		return &event, nil
+	}
+	return nil, fmt.Errorf("event not found")
 }
