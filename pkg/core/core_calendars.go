@@ -24,15 +24,15 @@ type TagMetadata struct {
 	Color string `json:"color"`
 }
 
-type TimeTreeNode struct {
-	From    time.Time   `json:"from"`
-	To      time.Time   `json:"to"`
-	EventID []uuid.UUID `json:"eventID"`
+type TimeIntervalEntry struct {
+	From  time.Time `json:"from"`
+	To    time.Time `json:"to"`
+	Event uuid.UUID `json:"id"`
 }
 
 type CalendarIndex struct {
-	Tags      map[int]TagMetadata `json:"tags"`
-	TreeNodes []TimeTreeNode      `json:"nodes"`
+	Tags    map[int]TagMetadata `json:"tags"`
+	Entries []TimeIntervalEntry `json:"entries"`
 }
 
 // Creates a new calendar.
@@ -76,41 +76,32 @@ func (c *Core) LoadCalendars() error {
 		c.repos[entry.Name()] = repo
 	}
 
-	// load tree + events
-	// TODO do not load files, but build tree from index.json
+	// load tree + tags
 	for _, repo := range c.repos {
 		wt, _ := repo.Worktree()
-		entries, _ := wt.Filesystem.ReadDir(EventsDirName)
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
+		indexFileName := wt.Filesystem.Join(EventsDirName, "index.json")
+		indexFile, err := wt.Filesystem.Open(indexFileName)
+		if err != nil {
+			fmt.Printf("failed to open index file '%s': %v", indexFileName, err)
+			continue
+		}
+		defer indexFile.Close()
 
-			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
-			file, err := wt.Filesystem.Open(fileName)
+		var index CalendarIndex
+		err = json.NewDecoder(indexFile).Decode(&index)
+		if err != nil {
+			fmt.Printf("failed to decode index file '%s': %v", indexFileName, err)
+		}
+		// Insert entries into the tree
+		for _, entry := range index.Entries {
+			err = c.intervalTree.InsertEventInterval(entry.Event, entry.From, entry.To)
 			if err != nil {
-				fmt.Printf("failed to open file '%s': %v", fileName, err)
-				continue
-			}
-			defer file.Close()
-
-			var event Event
-			err = json.NewDecoder(file).Decode(&event)
-			if err != nil {
-				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
-				continue
-			}
-
-			c.events[event.Id] = &event
-
-			err = c.intervalTree.InsertEvent(event)
-			if err != nil {
-				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
+				fmt.Printf("failed to insert event interval entry '%s': %v", entry.Event, err)
 				continue
 			}
 		}
+		// TODO get tags
 	}
-
 	return nil
 }
 
