@@ -27,11 +27,14 @@ podman run -d --rm \
 
 ### Enviroment variables (optional; those values are default)
 ```sh
-CORS_PROXY_HOST=0.0.0.0
-CORS_PROXY_PORT=8080
-CORS_PROXY_PRODUCTION=false
-CORS_PROXY_UPSTREAM_TIMEOUT=15s
-CORS_PROXY_MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
+HOST=0.0.0.0
+PORT=8080
+PRODUCTION=false
+UPSTREAM_TIMEOUT=15s
+MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
+ALLOWED_HOSTS=github.com,raw.githubusercontent.com,gitlab.com,codeberg.org
+RATE_TOKENS=40
+RATE_INTERVAL=1m
 ```
 
 ## Usage
@@ -43,7 +46,7 @@ console.log(html);
 ```
 results in:
 ```
-Access to fetch at 'https://example.com' from origin 'https://...' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+Access to fetch at 'https://github.com' from origin 'https://...' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
 ```
 
 ---
@@ -114,6 +117,3 @@ your-repo-domain.com {
     }
 }
 ```
-
-## TODO 
-- rate-limiter (redis? for multi instance deployment)
