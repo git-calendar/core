@@ -46,7 +46,7 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 	}
 
 	originalEvent, exists := c.GetEvent(event.Id)
-	if exists != nil {
+	if exists != nil || originalEvent == nil {
 		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
 	}
 
@@ -154,7 +154,7 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 // Returns event by id, or an error if it doesn't exist.
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, found := c.events[id]
-	if !found && e != nil {
+	if !found {
 		var err error
 		e, err = c.loadEventFromFile(id)
 		if err != nil {
@@ -246,8 +246,8 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	}
 
 	// update parent event with the new exception
-	parent.Repeat.Exceptions = append(updated.Repeat.Exceptions, updated.Id)
-	if err := c.saveAndCommitEvent(updated, fmt.Sprintf("CALENDAR: Added exception to parent '%s'", updated.Title)); err != nil {
+	parent.Repeat.Exceptions = append(parent.Repeat.Exceptions, updated.Id)
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("CALENDAR: Added exception to parent '%s'", updated.Title)); err != nil {
 		return nil, fmt.Errorf("failed to save parent event: %w", err)
 	}
 
@@ -369,7 +369,7 @@ func (c *Core) removeCurrentChild(event *Event) error {
 	// TODO: cleanup the parent if all children are in exceptions
 	// either Count != 0 and count = len(exceptions) or hard to know from the Until
 	if (parent.Repeat.Count != 0 && len(parent.Repeat.Exceptions) == parent.Repeat.Count) || (!parent.Repeat.Until.IsZero() && false) { // ughhh
-		err := c.deleteAndCommitEvent(parent.ParentId, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
+		err := c.deleteAndCommitEvent(parent.Id, fmt.Sprintf("CALENDAR: Delete event '%s'", event.Title))
 		if err != nil {
 			return fmt.Errorf("failed to delete event from git: %w", err)
 		}

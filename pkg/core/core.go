@@ -139,6 +139,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 
 	return repo, nil
 }
+
 func (c *Core) loadEventFromFile(id uuid.UUID) (*Event, error) {
 	// search for the wanted id
 	for _, repo := range c.repos {
