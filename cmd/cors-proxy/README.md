@@ -27,11 +27,15 @@ podman run -d --rm \
 
 ### Enviroment variables (optional; those values are default)
 ```sh
-CORS_PROXY_HOST=0.0.0.0
-CORS_PROXY_PORT=8080
-CORS_PROXY_PRODUCTION=false
-CORS_PROXY_UPSTREAM_TIMEOUT=15s
-CORS_PROXY_MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
+HOST=0.0.0.0
+PORT=8080
+PRODUCTION=false
+UPSTREAM_TIMEOUT=15s
+MAX_RESPONSE_SIZE=1048576 # 1MB in bytes (1024^2)
+ALLOWED_HOSTS=github.com,raw.githubusercontent.com,gitlab.com,codeberg.org
+RATE_TOKENS=40
+RATE_INTERVAL=1m
+RATE_IP_SOURCE_HEADER="" # useful when behind a reverse-proxy
 ```
 
 ## Usage
@@ -43,7 +47,7 @@ console.log(html);
 ```
 results in:
 ```
-Access to fetch at 'https://example.com' from origin 'https://...' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+Access to fetch at 'https://github.com' from origin 'https://...' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
 ```
 
 ---
@@ -64,7 +68,7 @@ succeds!
 ## I already have a reverse-proxy
 When using a [bare Git repository](https://git-scm.com/book/en/v2/Git-on-the-Server-Getting-Git-on-a-Server) on a [VPS](https://en.wikipedia.org/wiki/Virtual_private_server) this proxy is not necessary, since you control the enviroment.
 
-You can use any [reverse-proxy](https://en.wikipedia.org/wiki/Reverse_proxy) of your choice (e.g. [Caddy](https://caddyserver.com/) or [Nginx](https://nginx.org/en/)), and just add the CORS headers there.\
+You can use any [reverse-proxy](https://en.wikipedia.org/wiki/Reverse_proxy) of your choice (e.g., [Caddy](https://caddyserver.com/) or [Nginx](https://nginx.org/en/)), and just add the CORS headers there.\
 Example configuration for Caddy:\
 (based on [this](https://www.jamesatkins.com/posts/git-over-http-with-caddy/) very cool article)
 ```caddyfile
@@ -114,6 +118,3 @@ your-repo-domain.com {
     }
 }
 ```
-
-## TODO 
-- rate-limiter (redis? for multi instance deployment)

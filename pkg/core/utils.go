@@ -124,12 +124,12 @@ func calendarNameFromUrl(u url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// Generates custom uuid from masterId and some time. It uses 6 bytes for the master and 6 bytes for the time
+// Generates custom uuid from parentId and some time. It uses 6 bytes for the parent and 6 bytes for the time
 // If the generation fails, it returns uuid.New()
-func generateCustomUUID(masterId uuid.UUID, t time.Time) uuid.UUID {
+func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
-	copy(idBuf[:6], masterId[:6])      // take first 6 bytes from masterId
-	copy(idBuf[9:12], masterId[13:16]) // take another 3 bytes from masterId
+	copy(idBuf[:6], parentId[:6])      // take first 6 bytes from parentId
+	copy(idBuf[9:12], parentId[13:16]) // take another 3 bytes from parentId
 	idBuf[6] = 0x80                    // set version
 	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
 	idBuf[8] = 0x80                    // RFC 9562
@@ -152,31 +152,34 @@ func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
 	return time.Unix(int64(unix32), 0), nil
 }
 
-// takes custom UUISv8 and shifts the time by duration
+// getShiftedUUID returns a copy of a UUIDv8 with its custom 32-bit timestamp
+// (stored in bytes 12–15, big-endian) shifted by the given duration.
+// Returns uuid.Nil if the input is not version 8 or is invalid.
 func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 	idBuf := make([]byte, 16)
-	copy(idBuf[0:16], id[:8])
-	if idBuf[6] != 0x80 {
+	copy(idBuf, id[:]) // copy full 16 bytes
+
+	// check UUID version (high 4 bits of byte 6 should be 8 for v8)
+	if (idBuf[6] >> 4) != 8 {
 		return uuid.Nil
 	}
-	shiftedTime := uint32(time.Unix(int64(binary.BigEndian.Uint32(id[12:16])), 0).Add(duration).Unix())
-	binary.BigEndian.PutUint32(idBuf[12:16], shiftedTime) // add the time
+
+	// read timestamp (last 4 bytes)
+	origTime := binary.BigEndian.Uint32(idBuf[12:16])
+
+	// shift time
+	shiftedTime := uint32(
+		time.Unix(int64(origTime), 0).
+			Add(duration).
+			Unix(),
+	)
+
+	// write back shifted timestamp
+	binary.BigEndian.PutUint32(idBuf[12:16], shiftedTime)
+
 	newId, err := uuid.FromBytes(idBuf)
 	if err != nil {
 		return uuid.Nil
 	}
 	return newId
-}
-
-// Combines the base date with source clock/time only. For example:
-//
-//	base:   2026-03-11T10:30:00
-//	source: 2025-01-01T09:00:00
-//	output: 2026-03-11T09:00:00
-func withTimeOfDay(base, clockSource time.Time) time.Time {
-	return time.Date(
-		base.Year(), base.Month(), base.Day(),
-		clockSource.Hour(), clockSource.Minute(), clockSource.Second(), clockSource.Nanosecond(),
-		base.Location(),
-	)
 }

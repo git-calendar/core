@@ -36,7 +36,7 @@ func (et *IntervalTree) InsertEvent(event Event) error {
 
 // Deletes an Event from the interval tree.
 func (et *IntervalTree) RemoveEvent(event Event) error {
-	// find last slave and its To
+	// find last child and its To
 	eventEnd := event.getTreeEndTime()
 
 	// get the full interval
@@ -48,7 +48,7 @@ func (et *IntervalTree) RemoveEvent(event Event) error {
 	// find index of our event
 	index := slices.Index(ids, event.Id)
 	if index == -1 {
-		return errors.New("")
+		return errors.New("event not in searched interval")
 	}
 
 	// delete event from interval

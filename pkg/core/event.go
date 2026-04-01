@@ -6,29 +6,39 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/firu11/git-calendar-core/pkg/core/encryption"
+	"github.com/git-calendar/core/pkg/core/encryption"
 	"github.com/google/uuid"
 )
 
+// Event represents a single calendar entry.
+//
+// Can be one of these:
+//  1. Basic:   A standalone event that does not repeat (ParentId is nil, Repeat is nil).
+//  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
+//  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
-	Id          uuid.UUID   `json:"id" encrypt:"-"` // use UUIDv4; shouldn't change (different id = different event)
-	Title       string      `json:"title"  encrypt:"title"`
-	Location    string      `json:"location,omitzero"  encrypt:"location"`
-	Description string      `json:"description,omitzero"  encrypt:"description"`
+	Id          uuid.UUID   `json:"id" encrypt:"-"`              // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
+	Title       string      `json:"title" encrypt:"title"`       // Should not be empty.
+	Location    string      `json:"location" encrypt:"location"` // Physical or virtual location (e.g., URL).
+	Description string      `json:"description" encrypt:"description"`
 	From        time.Time   `json:"from" encrypt:"from"`
 	To          time.Time   `json:"to" encrypt:"to"`
-	Calendar    string      `json:"calendar" encrypt:"calendar"`
-	Tag         string      `json:"tag" encrypt:"tag"`
-	MasterId    uuid.UUID   `json:"master_id" encrypt:"-"`            // uuid.Nil if basic event or repeating master event
-	Repeat      *Repetition `json:"repeat,omitzero" encrypt:"repeat"` // nil if slave
+	Calendar    string      `json:"calendar" encrypt:"calendar"` // The name of the calendar the event belongs to.
+	Tag         string      `json:"tag" encrypt:"tag"`           // User-defined category or label.
+	ParentId    uuid.UUID   `json:"parent_id" encrypt:"-"`       // Specific for child events. It is uuid.Nil if the event is basic or parent.
+	Repeat      *Repetition `json:"repeat" encrypt:"repeat"`     // nil if child
 }
 
+// Repetition defines the recurrence rules for a Parent event.
+//
+// A Repetition object exists only on Parent events to generate Children.
+// A series must be capped by either Until (date) or Count (occurrences). Not both.
 type Repetition struct {
-	Frequency  Freq        `json:"frequency" encrypt:"frequency"`   // Day, Week, ... (None if master)
-	Interval   int         `json:"interval" encrypt:"interval"`     // 1..N (freq:Week + interval:2 => every other week)
-	Until      time.Time   `json:"until,omitzero" encrypt:"until"`  // the end of repetition by timestamp
-	Count      int         `json:"count,omitzero" encrypt:"count"`  // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions" encrypt:"exceptions"` // an array of slaves ids
+	Frequency  Freq        `json:"frequency" encrypt:"frequency"`   // The unit of time for recurrence (Day, Week, Month, etc.).
+	Interval   int         `json:"interval" encrypt:"interval"`     // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
+	Until      time.Time   `json:"until" encrypt:"until"`           // Hard stop date for the series.
+	Count      int         `json:"count" encrypt:"count"`           // Total number of occurrences to generate.
+	Exceptions []uuid.UUID `json:"exceptions" encrypt:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
 }
 
 func (e *Event) Validate() error {
@@ -78,10 +88,19 @@ func (r *Repetition) Validate() error {
 	return nil
 }
 
-func (e Event) isGenerated() bool {
-	return e.MasterId != uuid.Nil
+func (e Event) IsBasic() bool {
+	return !e.IsChild() && !e.IsParent() // e.ParentId == uuid.Nil && e.Repeat == nil
 }
 
+func (e Event) IsChild() bool {
+	return e.ParentId != uuid.Nil
+}
+
+func (e Event) IsParent() bool {
+	return e.ParentId == uuid.Nil && e.Repeat != nil
+}
+
+// Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of Parent event and returns its To.
 func (e Event) getTreeEndTime() time.Time {
 	if e.Repeat == nil {
 		return e.To

@@ -27,16 +27,16 @@ func (t Freq) IsValid() bool {
 	return t > Invalid && t <= _max
 }
 
-// ------- Repeating update option -------
+// ------- Repeating update strategy -------
 
-type UpdateOption int
+type UpdateStrategy int
 
 const (
-	Current UpdateOption = iota
+	Current UpdateStrategy = iota
 	Following
 	All
 )
 
-func (opt UpdateOption) IsValid() bool {
+func (opt UpdateStrategy) IsValid() bool {
 	return opt >= Current && opt <= All
 }
