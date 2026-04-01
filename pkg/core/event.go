@@ -8,28 +8,27 @@ import (
 
 	"github.com/firu11/git-calendar-core/pkg/core/encryption"
 	"github.com/google/uuid"
-	// deterministic AEAD
 )
 
 type Event struct {
-	Id          uuid.UUID   `json:"-"` // use UUIDv4; shouldn't change (different id = different event)
-	Title       string      `json:"title"`
-	Location    string      `json:"location,omitzero"`
-	Description string      `json:"description,omitzero"`
-	From        time.Time   `json:"from"`
-	To          time.Time   `json:"to"`
-	Calendar    string      `json:"calendar"`
-	Tag         string      `json:"tag"`
-	MasterId    uuid.UUID   `json:"-"`               // uuid.Nil if basic event or repeating master event
-	Repeat      *Repetition `json:"repeat,omitzero"` // nil if slave
+	Id          uuid.UUID   `json:"id" encrypt:"-"` // use UUIDv4; shouldn't change (different id = different event)
+	Title       string      `json:"title"  encrypt:"title"`
+	Location    string      `json:"location,omitzero"  encrypt:"location"`
+	Description string      `json:"description,omitzero"  encrypt:"description"`
+	From        time.Time   `json:"from" encrypt:"from"`
+	To          time.Time   `json:"to" encrypt:"to"`
+	Calendar    string      `json:"calendar" encrypt:"calendar"`
+	Tag         string      `json:"tag" encrypt:"tag"`
+	MasterId    uuid.UUID   `json:"master_id" encrypt:"-"`            // uuid.Nil if basic event or repeating master event
+	Repeat      *Repetition `json:"repeat,omitzero" encrypt:"repeat"` // nil if slave
 }
 
 type Repetition struct {
-	Frequency  Freq        `json:"frequency"`      // Day, Week, ... (None if master)
-	Interval   int         `json:"interval"`       // 1..N (freq:Week + interval:2 => every other week)
-	Until      time.Time   `json:"until,omitzero"` // the end of repetition by timestamp
-	Count      int         `json:"count,omitzero"` // or by number of occurrences (only one condition can be present not both)
-	Exceptions []uuid.UUID `json:"exceptions"`     // an array of slaves ids
+	Frequency  Freq        `json:"frequency" encrypt:"frequency"`   // Day, Week, ... (None if master)
+	Interval   int         `json:"interval" encrypt:"interval"`     // 1..N (freq:Week + interval:2 => every other week)
+	Until      time.Time   `json:"until,omitzero" encrypt:"until"`  // the end of repetition by timestamp
+	Count      int         `json:"count,omitzero" encrypt:"count"`  // or by number of occurrences (only one condition can be present not both)
+	Exceptions []uuid.UUID `json:"exceptions" encrypt:"exceptions"` // an array of slaves ids
 }
 
 func (e *Event) Validate() error {
@@ -98,22 +97,26 @@ func (e Event) getTreeEndTime() time.Time {
 	return eventEnd
 }
 
-func (e *Event) MarshalJSON() ([]byte, error) {
-	type plainEvent Event // create a new type based on Event just to strip away its methods to avoid infinite recursion of MarshalJSON()
+// Returns the marshaled and encrypted (if key was set) JSON.
+func (e *Event) EncryptToIndentedJSON() ([]byte, error) {
+	idBytes, _ := e.Id.MarshalBinary() // err always nil
 
-	enc, err := encryption.EncryptFields((*plainEvent)(e))
+	enc, err := encryption.EncryptFields(e, idBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	return json.Marshal(enc)
+	return json.MarshalIndent(enc, "", "  ")
 }
 
-func (e *Event) UnmarshalJSON(data []byte) error {
+// Unmarshals and decrypts (if key was set) JSON.
+func (e *Event) DecryptFromJSON(data []byte) error {
+	idBytes, _ := e.Id.MarshalBinary() // err always nil
+
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	return encryption.DecryptFields(e, raw)
+	return encryption.DecryptFields(e, raw, idBytes)
 }

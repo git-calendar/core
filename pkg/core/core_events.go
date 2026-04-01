@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -262,7 +261,7 @@ func (c *Core) updateGeneratedAll(updated Event, master *Event) (*Event, error) 
 	// shift all exceptions if updated.From changed
 	if fromChanged && updated.Repeat != nil {
 		difference := updated.From.Sub(master.From)
-		for i, _ := range updated.Repeat.Exceptions {
+		for i := range updated.Repeat.Exceptions {
 			updated.Repeat.Exceptions[i] = getShiftedUUID(updated.Repeat.Exceptions[i], difference)
 		}
 	}
@@ -333,7 +332,7 @@ func (c *Core) removeGenerated(event Event) error {
 // Serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	// marshal event
-	data, err := json.MarshalIndent(event, "", "  ")
+	data, err := event.EncryptToIndentedJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}

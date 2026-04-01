@@ -5,46 +5,12 @@ import (
 	"testing"
 )
 
-func Test_hasOmitzero(t *testing.T) {
+func Test_getFieldName(t *testing.T) {
 	type testStruct struct {
-		WithOmitzero    string `json:"field,omitzero"`
-		WithoutOmitzero string `json:"field2"`
-	}
-	typ := reflect.TypeOf(testStruct{})
-
-	tests := []struct {
-		name  string
-		field reflect.StructField
-		want  bool
-	}{
-		{
-			name:  "has omitzero",
-			field: typ.Field(0),
-			want:  true,
-		},
-		{
-			name:  "does not have omitzero",
-			field: typ.Field(1),
-			want:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := hasOmitzero(tt.field); got != tt.want {
-				t.Errorf("hasOmitzero() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_getJsonFieldName(t *testing.T) {
-	type testStruct struct {
-		Normal          string `json:"field"`
-		WithoutOmitzero string `json:"field2,omitzero"`
-		NoTag           string
-		Ignore          string `json:"-"`
-		EmptyName       string `json:",omitzero"`
+		Normal    string `encrypt:"field"`
+		NoTag     string
+		Ignore    string `encrypt:"-"`
+		EmptyName string `encrypt:""`
 	}
 	typ := reflect.TypeOf(testStruct{})
 
@@ -59,31 +25,26 @@ func Test_getJsonFieldName(t *testing.T) {
 			want:  "field",
 		},
 		{
-			name:  "name with option",
-			field: typ.Field(1),
-			want:  "field2",
-		},
-		{
 			name:  "no tag uses field name",
-			field: typ.Field(2),
+			field: typ.Field(1),
 			want:  "NoTag",
 		},
 		{
 			name:  "ignored field",
-			field: typ.Field(3),
-			want:  "",
+			field: typ.Field(2),
+			want:  "-",
 		},
 		{
 			name:  "empty name in tag falls back to field name",
-			field: typ.Field(4),
+			field: typ.Field(3),
 			want:  "EmptyName",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getJsonFieldName(tt.field); got != tt.want {
-				t.Errorf("getJsonFieldName() = %v, want %v", got, tt.want)
+			if got := getFieldName(tt.field); got != tt.want {
+				t.Errorf("getFieldName() = %v, want %v", got, tt.want)
 			}
 		})
 	}

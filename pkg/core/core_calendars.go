@@ -1,9 +1,9 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/url"
 	"slices"
@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/google/uuid"
 )
 
 // Creates a new calendar.
@@ -71,15 +72,27 @@ func (c *Core) LoadCalendars() error {
 			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
 			file, err := wt.Filesystem.Open(fileName)
 			if err != nil {
-				fmt.Printf("failed to open file '%s': %v", fileName, err)
+				fmt.Printf("failed to open file '%s': %v\n", fileName, err)
 				continue
 			}
 			defer file.Close()
 
-			var event Event
-			err = json.NewDecoder(file).Decode(&event)
+			data, err := io.ReadAll(file)
 			if err != nil {
-				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
+				fmt.Printf("failed to read file '%s': %v\n", fileName, err)
+				continue
+			}
+
+			var event Event
+			event.Id, err = uuid.Parse(strings.Split(entry.Name(), ".")[0]) // the id is needed for decryption TODO: rethink where to put this
+			if err != nil {
+				fmt.Printf("file name is not UUID.json but '%s': %v\n", fileName, err)
+				continue
+			}
+
+			err = event.DecryptFromJSON(data)
+			if err != nil {
+				fmt.Printf("failed to decode event from file '%s': %v\n", fileName, err)
 				continue
 			}
 
@@ -87,7 +100,7 @@ func (c *Core) LoadCalendars() error {
 
 			err = c.intervalTree.InsertEvent(event)
 			if err != nil {
-				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
+				fmt.Printf("failed to insert event '%s' into index tree: %v\n", event.Id, err)
 				continue
 			}
 		}

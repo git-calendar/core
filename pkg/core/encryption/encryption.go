@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
+
+const tagName string = "encrypt"
 
 var siv *aessiv.AESSIV
 
@@ -25,7 +26,7 @@ func SetPassword(password string) error {
 	return nil
 }
 
-func EncryptFields(v any) (any, error) {
+func EncryptFields(v any, ad []byte) (any, error) {
 	if siv == nil {
 		return v, nil // skip if no key/instance
 	}
@@ -42,50 +43,43 @@ func EncryptFields(v any) (any, error) {
 
 	out := make(map[string]any)
 
-	// iterate through fields
+	// iterate through fields and encrypt each one
 	for i := 0; i < val.NumField(); i++ {
 		fieldValue := val.Field(i)
 		fieldType := typ.Field(i)
 		fieldName := fieldType.Name
+		jsonFieldName := getFieldName(fieldType)
 		fieldKind := fieldValue.Kind()
 
-		// respect the `json:"-"`
-		if fieldType.Tag.Get("json") == "-" {
-			continue
+		if jsonFieldName == "-" || fieldValue.IsZero() {
+			continue // skip if zero or "-" as name
 		}
 
-		// respect the `json:"omitempty"`
-		if fieldValue.IsZero() && hasOmitzero(fieldType) {
-			continue
-		}
-
-		// recursively for structs (or pointer to struct)
+		// --- recursively for structs (or pointer to struct) ---
 		if fieldKind == reflect.Struct || (fieldKind == reflect.Pointer && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
 			// we only recurse if it's NOT a time.Time
 			if _, ok := fieldValue.Interface().(time.Time); !ok {
-				nested, err := EncryptFields(fieldValue.Interface())
+				nested, err := EncryptFields(fieldValue.Interface(), ad)
 				if err != nil {
 					return nil, err
 				}
-				out[fieldName] = nested
+				out[jsonFieldName] = nested
 				continue
 			}
 		}
 
-		// encrypt basic types
-		plaintext, err := encodeValue(fieldValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode field %s to string: %w", fieldName, err)
-		}
-		ciphertext := siv.Seal(nil, nil, []byte(plaintext), []byte(fieldName))
-		out[fieldName] = base64.StdEncoding.EncodeToString(ciphertext)
+		// --- encrypt basic types ---
+		plaintext := encodeValue(fieldValue)
+		additionalData := append([]byte(fieldName), ad...)
+		ciphertext := siv.Seal(nil, nil, []byte(plaintext), additionalData)
+		out[jsonFieldName] = base64.StdEncoding.EncodeToString(ciphertext)
 	}
 
 	return out, nil
 }
 
 // Decrypts everything from raw map to v. v has to be a pointer to struct.
-func DecryptFields(v any, raw map[string]any) error {
+func DecryptFields(v any, raw map[string]any, ad []byte) error {
 	if siv == nil {
 		return nil // skip if no key/instance
 	}
@@ -101,22 +95,22 @@ func DecryptFields(v any, raw map[string]any) error {
 	for i := 0; i < val.NumField(); i++ {
 		fieldValue := val.Field(i)
 		fieldType := typ.Field(i)
+		jsonFieldName := getFieldName(fieldType)
 		fieldName := fieldType.Name
 
-		// skip if field is unexported or marked to be ignored
-		if !fieldValue.CanSet() || fieldType.Tag.Get("json") == "-" {
-			continue
+		if !fieldValue.CanSet() || jsonFieldName == "-" {
+			continue // skip if field is unexported or marked to be ignored
 		}
 
 		// get the value from the map using the struct field name
-		data, ok := raw[getJsonFieldName(fieldType)]
+		data, ok := raw[jsonFieldName]
 		if !ok || data == nil {
-			continue
+			continue // no data => nothing to decrypt
 		}
 
-		// recursive structs
+		// --- recursively for structs (or pointer to struct) ---
 		if fieldValue.Kind() == reflect.Struct || (fieldValue.Kind() == reflect.Pointer && fieldType.Type.Elem().Kind() == reflect.Struct) {
-			// don't recurse time.Time
+			// do not recurse time.Time
 			if _, isTime := fieldValue.Interface().(time.Time); !isTime {
 				nestedMap, isMap := data.(map[string]any)
 				if isMap {
@@ -124,7 +118,7 @@ func DecryptFields(v any, raw map[string]any) error {
 					if fieldValue.Kind() == reflect.Pointer && fieldValue.IsNil() {
 						fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 					}
-					if err := DecryptFields(fieldValue.Addr().Interface(), nestedMap); err != nil {
+					if err := DecryptFields(fieldValue.Addr().Interface(), nestedMap, ad); err != nil {
 						return err
 					}
 					continue
@@ -132,22 +126,24 @@ func DecryptFields(v any, raw map[string]any) error {
 			}
 		}
 
-		// decrypt encrypted fields
+		// --- decrypt basic types ---
 		cipherStr, ok := data.(string)
 		if !ok {
-			continue
+			continue // the value (still encrypted) is not string => skip?
 		}
 
 		ciphertext, err := base64.StdEncoding.DecodeString(cipherStr)
 		if err != nil {
 			return fmt.Errorf("failed to decode base64 string of field %s: %w", fieldName, err)
 		}
-		plaintext, err := siv.Open(nil, nil, ciphertext, []byte(fieldName))
+
+		additionalData := append([]byte(fieldName), ad...)
+		plaintext, err := siv.Open(nil, nil, ciphertext, additionalData)
 		if err != nil {
 			return fmt.Errorf("failed to decrypt field %s: %w", fieldName, err)
 		}
 
-		// convert decrypted string back to the field's actual type
+		// convert decrypted string back to the field type
 		if err := decodeValue(fieldValue, string(plaintext)); err != nil {
 			return fmt.Errorf("failed to parse field %s: %w", fieldName, err)
 		}
@@ -156,74 +152,116 @@ func DecryptFields(v any, raw map[string]any) error {
 	return nil
 }
 
-// Helper that returns the string representation of field type.
-func encodeValue(field reflect.Value) (string, error) {
-	// dereference pointer if necessary
-	for field.Kind() == reflect.Pointer {
+// encodeValue returns a simple string representation of the value.
+func encodeValue(v reflect.Value) string {
+	// dereference pointers
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return ""
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.String:
+		return v.String()
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(v.Int(), 10)
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(v.Uint(), 10)
+
+	case reflect.Float32, reflect.Float64:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 64)
+
+	case reflect.Bool:
+		return strconv.FormatBool(v.Bool())
+
+	case reflect.Struct:
+		if t, ok := v.Interface().(time.Time); ok {
+			return t.UTC().Format(time.RFC3339)
+		}
+		fallthrough // for other structs, fall through to fmt
+
+	default:
+		return fmt.Sprintf("%v", v.Interface())
+	}
+}
+
+// decodeValue sets the value from its string representation.
+func decodeValue(field reflect.Value, val string) error {
+	// handle pointers
+	if field.Kind() == reflect.Pointer {
+		if val == "" {
+			field.Set(reflect.Zero(field.Type()))
+			return nil
+		}
 		if field.IsNil() {
-			return "", nil
+			field.Set(reflect.New(field.Type().Elem()))
 		}
 		field = field.Elem()
 	}
 
 	switch field.Kind() {
 	case reflect.String:
-		return field.String(), nil
-	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
-		return strconv.FormatInt(field.Int(), 10), nil
-	case reflect.Struct:
-		if t, ok := field.Interface().(time.Time); ok {
-			return t.UTC().Format(time.RFC3339), nil
-		}
-		return "", nil
-	default:
-		return fmt.Sprintf("%v", field.Interface()), nil
-	}
-}
-
-// Helper that converts string representation of a value back into its field type.
-func decodeValue(field reflect.Value, val string) error {
-	switch field.Kind() {
-	case reflect.String:
 		field.SetString(val)
-	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
 			return err
 		}
 		field.SetInt(i)
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u, err := strconv.ParseUint(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		field.SetUint(u)
+
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return err
+		}
+		field.SetFloat(f)
+
+	case reflect.Bool:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return err
+		}
+		field.SetBool(b)
+
 	case reflect.Struct:
-		if _, ok := field.Interface().(time.Time); ok {
+		if field.Type() == reflect.TypeOf(time.Time{}) {
 			t, err := time.Parse(time.RFC3339, val)
 			if err != nil {
 				return err
 			}
 			field.Set(reflect.ValueOf(t))
+			return nil
 		}
+		fallthrough // for other structs fall through to unsupported error
+
+	default:
+		return fmt.Errorf("unsupported kind/type %s", field.Kind())
 	}
 	return nil
 }
 
-// Returns true if `json:"field_name,omitzero"` and false if `json:"field_name"`.
-func hasOmitzero(field reflect.StructField) bool {
-	tag := field.Tag.Get("json")
-	tagParts := strings.Split(tag, ",")
-	return slices.Contains(tagParts, "omitzero")
-}
-
 // Returns the "field_name" from:
 //
-//	FieldName `json:"field_name"`
+//	FieldName `encrypt:"field_name"`
 //
 // Returns "FieldName" if not present.
-func getJsonFieldName(field reflect.StructField) string {
-	tag := field.Tag.Get("json")
+func getFieldName(field reflect.StructField) string {
+	tag := field.Tag.Get(tagName)
 	tagParts := strings.Split(tag, ",") // always len > 0
-	if tagParts[0] == "-" {
-		return ""
+	if len(tagParts[0]) == 0 {          // if empty string
+		return field.Name // fallback to struct field name instead of the one from tag
 	}
-	if len(tagParts[0]) != 0 {
-		return tagParts[0]
-	}
-	return field.Name // fallback to struct field name instead of json name
+	return tagParts[0]
 }
