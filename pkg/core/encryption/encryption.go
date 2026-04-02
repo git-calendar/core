@@ -2,6 +2,7 @@ package encryption
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
@@ -68,11 +70,22 @@ func EncryptFields(v any, ad []byte) (any, error) {
 			}
 		}
 
+		if fieldKind == reflect.Array || fieldKind == reflect.Slice {
+			var final []string
+			for i := 0; i < fieldValue.Len(); i++ {
+				elValue := fieldValue.Index(i)
+
+				additionalData := append([]byte(fieldName), ad...)
+				final = append(final, encryptToString(elValue, additionalData))
+			}
+
+			out[jsonFieldName] = final
+			continue
+		}
+
 		// --- encrypt basic types ---
-		plaintext := encodeValue(fieldValue)
 		additionalData := append([]byte(fieldName), ad...)
-		ciphertext := siv.Seal(nil, nil, []byte(plaintext), additionalData)
-		out[jsonFieldName] = base64.StdEncoding.EncodeToString(ciphertext)
+		out[jsonFieldName] = encryptToString(fieldValue, additionalData)
 	}
 
 	return out, nil
@@ -118,7 +131,7 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 					if fieldValue.Kind() == reflect.Pointer && fieldValue.IsNil() {
 						fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 					}
-					if err := DecryptFields(fieldValue.Addr().Interface(), nestedMap, ad); err != nil {
+					if err := DecryptFields(fieldValue.Interface(), nestedMap, ad); err != nil {
 						return err
 					}
 					continue
@@ -126,130 +139,184 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 			}
 		}
 
-		// --- decrypt basic types ---
+		// --- handle slices and arrays ---
+		if fieldValue.Kind() == reflect.Array || fieldValue.Kind() == reflect.Slice {
+			encryptedSlice, ok := data.([]any) // arrays are always []any after json.Unmarshal (not []string etc.)
+			if !ok {
+				continue // this should not happen ever
+			}
+
+			if len(encryptedSlice) == 0 {
+				fieldValue.Set(reflect.MakeSlice(fieldValue.Type(), 0, 0))
+				continue
+			}
+
+			elemType := fieldValue.Type().Elem() // type of elements in array
+			newSlice := reflect.MakeSlice(fieldValue.Type(), len(encryptedSlice), len(encryptedSlice))
+
+			for i, ciphertextB64 := range encryptedSlice {
+				ciphertext, ok := ciphertextB64.(string)
+				if !ok {
+					fmt.Printf("unexpected type of element in encrypted array %s\n", fieldName)
+					continue
+				}
+				plaintext, err := decryptString(ciphertext, fieldName, ad)
+				if err != nil {
+					fmt.Printf("failed to decrypt element of field %s\n", fieldName)
+					continue
+				}
+
+				originalValue := decodeValue(plaintext, elemType)
+				newSlice.Index(i).Set(originalValue)
+			}
+
+			fieldValue.Set(newSlice)
+			continue
+		}
+
 		cipherStr, ok := data.(string)
 		if !ok {
-			continue // the value (still encrypted) is not string => skip?
+			continue // the value (still encrypted) is not string => skip ig?
 		}
 
-		ciphertext, err := base64.StdEncoding.DecodeString(cipherStr)
-		if err != nil {
-			return fmt.Errorf("failed to decode base64 string of field %s: %w", fieldName, err)
-		}
-
-		additionalData := append([]byte(fieldName), ad...)
-		plaintext, err := siv.Open(nil, nil, ciphertext, additionalData)
+		// --- decrypt basic types ---
+		plaintext, err := decryptString(cipherStr, fieldName, ad)
 		if err != nil {
 			return fmt.Errorf("failed to decrypt field %s: %w", fieldName, err)
 		}
 
 		// convert decrypted string back to the field type
-		if err := decodeValue(fieldValue, string(plaintext)); err != nil {
-			return fmt.Errorf("failed to parse field %s: %w", fieldName, err)
-		}
+		originalValue := decodeValue(plaintext, fieldType.Type)
+		fieldValue.Set(originalValue)
 	}
 
 	return nil
 }
 
-// encodeValue returns a simple string representation of the value.
-func encodeValue(v reflect.Value) string {
-	// dereference pointers
-	for v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return ""
-		}
-		v = v.Elem()
+// Decodes ciphertext from Base64 and decrypts it to plaintext
+func decryptString(cipherStr, fieldName string, ad []byte) (string, error) {
+	ciphertext, err := base64.StdEncoding.DecodeString(cipherStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64 for field %s: %w", fieldName, err)
 	}
 
-	switch v.Kind() {
-	case reflect.String:
-		return v.String()
+	additionalData := append([]byte(fieldName), ad...)
+	plaintext, err := siv.Open(nil, nil, ciphertext, additionalData)
+	if err != nil {
+		return "", fmt.Errorf("siv decryption failed for field %s: %w", fieldName, err)
+	}
 
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.FormatInt(v.Int(), 10)
+	return string(plaintext), nil
+}
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return strconv.FormatUint(v.Uint(), 10)
+func encryptToString(val reflect.Value, ad []byte) string {
+	plaintext := encodeValue(val)
+	ciphertext := siv.Seal(nil, nil, []byte(plaintext), ad)
+	return base64.StdEncoding.EncodeToString(ciphertext)
+}
 
-	case reflect.Float32, reflect.Float64:
-		return strconv.FormatFloat(v.Float(), 'f', -1, 64)
+// encodeValue returns a deterministic string representation for encryption
+func encodeValue(v any) string {
+	if v == nil {
+		return ""
+	}
 
-	case reflect.Bool:
-		return strconv.FormatBool(v.Bool())
+	// Handle reflect.Value
+	if rv, ok := v.(reflect.Value); ok {
+		v = rv.Interface()
+	}
 
-	case reflect.Struct:
-		if t, ok := v.Interface().(time.Time); ok {
-			return t.UTC().Format(time.RFC3339)
-		}
-		fallthrough // for other structs, fall through to fmt
+	switch val := v.(type) {
+	case string:
+		return val
+
+	case []byte:
+		return string(val)
+
+	case int, int8, int16, int32, int64:
+		return strconv.FormatInt(reflect.ValueOf(val).Int(), 10)
+
+	case uint, uint8, uint16, uint32, uint64:
+		return strconv.FormatUint(reflect.ValueOf(val).Uint(), 10)
+
+	case float32, float64:
+		return strconv.FormatFloat(reflect.ValueOf(val).Float(), 'f', -1, 64)
+
+	case bool:
+		return strconv.FormatBool(val)
+
+	case time.Time:
+		return val.UTC().Format(time.RFC3339)
+
+	case uuid.UUID: // ← Important for your case
+		return val.String()
+
+	case fmt.Stringer:
+		return val.String()
 
 	default:
-		return fmt.Sprintf("%v", v.Interface())
+		// Fallback - be careful with this (order can affect determinism)
+		if b, err := json.Marshal(val); err == nil {
+			return string(b)
+		}
+		return fmt.Sprintf("%v", val)
 	}
 }
 
-// decodeValue sets the value from its string representation.
-func decodeValue(field reflect.Value, val string) error {
-	// handle pointers
-	if field.Kind() == reflect.Pointer {
-		if val == "" {
-			field.Set(reflect.Zero(field.Type()))
-			return nil
-		}
-		if field.IsNil() {
-			field.Set(reflect.New(field.Type().Elem()))
-		}
-		field = field.Elem()
+// decodeValue tries sets the value from its string representation.
+func decodeValue(plain string, targetType reflect.Type) reflect.Value {
+	// unwrap pointer
+	if targetType.Kind() == reflect.Pointer {
+		targetType = targetType.Elem()
 	}
 
-	switch field.Kind() {
-	case reflect.String:
-		field.SetString(val)
+	switch targetType {
 
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return err
-		}
-		field.SetInt(i)
+	case reflect.TypeOf(""):
+		return reflect.ValueOf(plain)
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		u, err := strconv.ParseUint(val, 10, 64)
-		if err != nil {
-			return err
-		}
-		field.SetUint(u)
+	case reflect.TypeOf(true):
+		b, _ := strconv.ParseBool(plain)
+		return reflect.ValueOf(b)
 
-	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return err
-		}
-		field.SetFloat(f)
+	case reflect.TypeOf(float32(0)), reflect.TypeOf(float64(0)):
+		f, _ := strconv.ParseFloat(plain, 64)
+		return reflect.ValueOf(f).Convert(targetType)
 
-	case reflect.Bool:
-		b, err := strconv.ParseBool(val)
-		if err != nil {
-			return err
-		}
-		field.SetBool(b)
+	case reflect.TypeOf(time.Time{}):
+		t, _ := time.Parse(time.RFC3339, plain)
+		return reflect.ValueOf(t)
 
-	case reflect.Struct:
-		if field.Type() == reflect.TypeOf(time.Time{}) {
-			t, err := time.Parse(time.RFC3339, val)
-			if err != nil {
-				return err
-			}
-			field.Set(reflect.ValueOf(t))
-			return nil
-		}
-		fallthrough // for other structs fall through to unsupported error
+	case reflect.TypeOf(uuid.UUID{}):
+		u, _ := uuid.Parse(plain)
+		return reflect.ValueOf(u)
 
 	default:
-		return fmt.Errorf("unsupported kind/type %s", field.Kind())
+		// 👇 fallback to Kind for custom types like: type Frequency int
+		switch targetType.Kind() {
+
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			i, _ := strconv.ParseInt(plain, 10, 64)
+			return reflect.ValueOf(i).Convert(targetType)
+
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			u, _ := strconv.ParseUint(plain, 10, 64)
+			return reflect.ValueOf(u).Convert(targetType)
+
+		case reflect.String:
+			return reflect.ValueOf(plain).Convert(targetType)
+
+		case reflect.Bool:
+			b, _ := strconv.ParseBool(plain)
+			return reflect.ValueOf(b).Convert(targetType)
+
+		case reflect.Float32, reflect.Float64:
+			f, _ := strconv.ParseFloat(plain, 64)
+			return reflect.ValueOf(f).Convert(targetType)
+		}
 	}
-	return nil
+
+	return reflect.Zero(targetType)
 }
 
 // Returns the "field_name" from:

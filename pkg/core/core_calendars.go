@@ -72,27 +72,33 @@ func (c *Core) LoadCalendars() error {
 			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
 			file, err := wt.Filesystem.Open(fileName)
 			if err != nil {
-				fmt.Printf("failed to open file '%s': %v\n", fileName, err)
+				fmt.Printf("failed to open file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 			defer file.Close()
 
 			data, err := io.ReadAll(file)
 			if err != nil {
-				fmt.Printf("failed to read file '%s': %v\n", fileName, err)
+				fmt.Printf("failed to read file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 
 			var event Event
 			event.Id, err = uuid.Parse(strings.Split(entry.Name(), ".")[0]) // the id is needed for decryption TODO: rethink where to put this
 			if err != nil {
-				fmt.Printf("file name is not UUID.json but '%s': %v\n", fileName, err)
+				fmt.Printf("file name is not UUID.json but '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 
 			err = event.DecryptFromJSON(data)
 			if err != nil {
-				fmt.Printf("failed to decode event from file '%s': %v\n", fileName, err)
+				fmt.Printf("failed to decode event from file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
+				continue
+			}
+
+			err = event.Validate()
+			if err != nil {
+				fmt.Printf("invalid event: %v\n", err)
 				continue
 			}
 

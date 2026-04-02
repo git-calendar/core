@@ -130,12 +130,15 @@ func (e *Event) EncryptToIndentedJSON() ([]byte, error) {
 
 // Unmarshals and decrypts (if key was set) JSON.
 func (e *Event) DecryptFromJSON(data []byte) error {
-	idBytes, _ := e.Id.MarshalBinary() // err always nil
-
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
+	if e.Id == uuid.Nil {
+		return errors.New("event Id has to be set for decryption")
+	}
+
+	idBytes, _ := e.Id.MarshalBinary() // err always nil
 	return encryption.DecryptFields(e, raw, idBytes)
 }
