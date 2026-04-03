@@ -20,7 +20,7 @@ import (
 type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
-	repos        map[string]*gogit.Repository
+	calendars    map[string]*Calendar
 	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
 	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 	// tags      map[string][]string // might not be needed to "cache" it like this
@@ -59,8 +59,8 @@ func (c *Core) PushAll() error {
 	// TODO idk if it works
 
 	var err error
-	for _, repo := range c.repos {
-		errx := repo.Push(&gogit.PushOptions{})
+	for _, cal := range c.calendars {
+		errx := cal.Repository.Push(&gogit.PushOptions{})
 		if errx == gogit.NoErrAlreadyUpToDate {
 			continue // this is ok
 		}
@@ -76,8 +76,8 @@ func (c *Core) PullAll() error {
 	// TODO idk if it works
 
 	var err error
-	for _, repo := range c.repos {
-		wt, errx := repo.Worktree()
+	for _, cal := range c.calendars {
+		wt, errx := cal.Repository.Worktree()
 		if errx != nil || wt == nil { // only fails if repo is bare (aka. only .git/ folder exists, no files) which should not happen ever haha
 			continue
 		}
@@ -99,7 +99,7 @@ func (c *Core) PullAll() error {
 func (c *Core) resetCore() {
 	c.intervalTree = NewIntervalTree()
 	c.events = make(map[uuid.UUID]*Event)
-	c.repos = make(map[string]*gogit.Repository)
+	c.calendars = make(map[string]*Calendar)
 }
 
 // Loads, if exists, or creates new repository with the given name.

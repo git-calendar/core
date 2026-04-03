@@ -117,10 +117,10 @@ func (e Event) getTreeEndTime() time.Time {
 }
 
 // Returns the marshaled and encrypted (if key was set) JSON.
-func (e *Event) EncryptToIndentedJSON() ([]byte, error) {
+func (e *Event) EncryptToIndentedJSON(key []byte) ([]byte, error) {
 	idBytes, _ := e.Id.MarshalBinary() // err always nil
 
-	enc, err := encryption.EncryptFields(e, idBytes)
+	enc, err := encryption.EncryptFields(e, key, idBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (e *Event) EncryptToIndentedJSON() ([]byte, error) {
 }
 
 // Unmarshals and decrypts (if key was set) JSON.
-func (e *Event) DecryptFromJSON(data []byte) error {
+func (e *Event) DecryptFromJSON(data []byte, key []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -140,5 +140,5 @@ func (e *Event) DecryptFromJSON(data []byte) error {
 	}
 
 	idBytes, _ := e.Id.MarshalBinary() // err always nil
-	return encryption.DecryptFields(e, raw, idBytes)
+	return encryption.DecryptFields(e, raw, key, idBytes)
 }

@@ -46,12 +46,12 @@ func (a *Api) PushAll() error                     { return a.inner.PushAll() }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 
-func (a *Api) CloneCalendar(repoUrl string) error {
+func (a *Api) CloneCalendar(repoUrl, password string) error {
 	parsedUrl, err := url.Parse(repoUrl)
 	if err != nil {
 		return fmt.Errorf("repoUrl is invalid: %w", err)
 	}
-	return a.inner.CloneCalendar(*parsedUrl)
+	return a.inner.CloneCalendar(*parsedUrl, password)
 }
 
 func (a *Api) ListCalendars() (string, error) {

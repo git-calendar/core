@@ -16,21 +16,10 @@ import (
 
 const tagName string = "encrypt"
 
-var siv *aessiv.AESSIV
-
-func SetPassword(password string) error {
-	var err error
-	key := deriveKey(password, []byte("some aditional data"), aessiv.KeySize256)
-	siv, err = aessiv.New(key)
+func EncryptFields(v any, key, ad []byte) (any, error) {
+	siv, err := aessiv.New(key)
 	if err != nil {
-		return fmt.Errorf("failed to create encryption instance from password: %w", err)
-	}
-	return nil
-}
-
-func EncryptFields(v any, ad []byte) (any, error) {
-	if siv == nil {
-		return v, nil // skip if no key/instance
+		return v, fmt.Errorf("failed to create encryption instance from password: %w", err)
 	}
 
 	val := reflect.ValueOf(v)
@@ -61,7 +50,7 @@ func EncryptFields(v any, ad []byte) (any, error) {
 		if fieldKind == reflect.Struct || (fieldKind == reflect.Pointer && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
 			// we only recurse if it's NOT a time.Time
 			if _, ok := fieldValue.Interface().(time.Time); !ok {
-				nested, err := EncryptFields(fieldValue.Interface(), ad)
+				nested, err := EncryptFields(fieldValue.Interface(), key, ad)
 				if err != nil {
 					return nil, err
 				}
@@ -76,7 +65,7 @@ func EncryptFields(v any, ad []byte) (any, error) {
 				elValue := fieldValue.Index(i)
 
 				additionalData := append([]byte(fieldName), ad...)
-				final = append(final, encryptToString(elValue, additionalData))
+				final = append(final, encryptToString(elValue, siv, additionalData))
 			}
 
 			out[jsonFieldName] = final
@@ -85,16 +74,17 @@ func EncryptFields(v any, ad []byte) (any, error) {
 
 		// --- encrypt basic types ---
 		additionalData := append([]byte(fieldName), ad...)
-		out[jsonFieldName] = encryptToString(fieldValue, additionalData)
+		out[jsonFieldName] = encryptToString(fieldValue, siv, additionalData)
 	}
 
 	return out, nil
 }
 
 // Decrypts everything from raw map to v. v has to be a pointer to struct.
-func DecryptFields(v any, raw map[string]any, ad []byte) error {
-	if siv == nil {
-		return nil // skip if no key/instance
+func DecryptFields(v any, raw map[string]any, key, ad []byte) error {
+	siv, err := aessiv.New(key)
+	if err != nil {
+		return fmt.Errorf("failed to create encryption instance from password: %w", err)
 	}
 
 	val := reflect.ValueOf(v)
@@ -131,7 +121,7 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 					if fieldValue.Kind() == reflect.Pointer && fieldValue.IsNil() {
 						fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 					}
-					if err := DecryptFields(fieldValue.Interface(), nestedMap, ad); err != nil {
+					if err := DecryptFields(fieldValue.Interface(), nestedMap, key, ad); err != nil {
 						return err
 					}
 					continue
@@ -160,7 +150,7 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 					fmt.Printf("unexpected type of element in encrypted array %s\n", fieldName)
 					continue
 				}
-				plaintext, err := decryptString(ciphertext, fieldName, ad)
+				plaintext, err := decryptString(ciphertext, fieldName, siv, ad)
 				if err != nil {
 					fmt.Printf("failed to decrypt element of field %s\n", fieldName)
 					continue
@@ -180,7 +170,7 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 		}
 
 		// --- decrypt basic types ---
-		plaintext, err := decryptString(cipherStr, fieldName, ad)
+		plaintext, err := decryptString(cipherStr, fieldName, siv, ad)
 		if err != nil {
 			return fmt.Errorf("failed to decrypt field %s: %w", fieldName, err)
 		}
@@ -194,7 +184,7 @@ func DecryptFields(v any, raw map[string]any, ad []byte) error {
 }
 
 // Decodes ciphertext from Base64 and decrypts it to plaintext
-func decryptString(cipherStr, fieldName string, ad []byte) (string, error) {
+func decryptString(cipherStr, fieldName string, siv *aessiv.AESSIV, ad []byte) (string, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(cipherStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64 for field %s: %w", fieldName, err)
@@ -209,7 +199,7 @@ func decryptString(cipherStr, fieldName string, ad []byte) (string, error) {
 	return string(plaintext), nil
 }
 
-func encryptToString(val reflect.Value, ad []byte) string {
+func encryptToString(val reflect.Value, siv *aessiv.AESSIV, ad []byte) string {
 	plaintext := encodeValue(val)
 	ciphertext := siv.Seal(nil, nil, []byte(plaintext), ad)
 	return base64.StdEncoding.EncodeToString(ciphertext)
@@ -221,7 +211,7 @@ func encodeValue(v any) string {
 		return ""
 	}
 
-	// Handle reflect.Value
+	// handle reflect.Value
 	if rv, ok := v.(reflect.Value); ok {
 		v = rv.Interface()
 	}
@@ -255,7 +245,8 @@ func encodeValue(v any) string {
 		return val.String()
 
 	default:
-		// Fallback - be careful with this (order can affect determinism)
+		// ehhh
+		fmt.Println("encodeValue() fallback")
 		if b, err := json.Marshal(val); err == nil {
 			return string(b)
 		}
@@ -271,7 +262,6 @@ func decodeValue(plain string, targetType reflect.Type) reflect.Value {
 	}
 
 	switch targetType {
-
 	case reflect.TypeOf(""):
 		return reflect.ValueOf(plain)
 
@@ -292,7 +282,6 @@ func decodeValue(plain string, targetType reflect.Type) reflect.Value {
 		return reflect.ValueOf(u)
 
 	default:
-		// 👇 fallback to Kind for custom types like: type Frequency int
 		switch targetType.Kind() {
 
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

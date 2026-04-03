@@ -7,7 +7,7 @@ import (
 )
 
 // Creates a key of length 'size' based on the provided 'password' plus 'salt'.
-func deriveKey(password string, salt []byte, size uint32) []byte {
+func DeriveKey(password string, salt []byte) []byte {
 	return argon2.IDKey(
 		[]byte(password),
 		salt,

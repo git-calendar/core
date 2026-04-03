@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -372,9 +373,27 @@ func (c *Core) removeCurrentChild(event *Event) error {
 // Serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	// marshal event
-	data, err := event.EncryptToIndentedJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
+	var data []byte
+	var err error
+
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return fmt.Errorf("the specified event.Calendar doesn't exist")
+	}
+	if cal.Repository == nil {
+		return fmt.Errorf("calendar repo not initialized")
+	}
+
+	if cal.IsEncrypted() {
+		data, err = event.EncryptToIndentedJSON(cal.EncryptionKey)
+		if err != nil {
+			return fmt.Errorf("failed to marshal event: %w", err)
+		}
+	} else {
+		data, err = json.MarshalIndent(event, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal event: %w", err)
+		}
 	}
 
 	// ensure events directory exists
@@ -401,12 +420,8 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 		return fmt.Errorf("failed to close file: %w", err)
 	}
 
-	if c.repos[event.Calendar] == nil {
-		return fmt.Errorf("calendar repo not initialized")
-	}
-
 	// -------- add to git repo --------
-	w, err := c.repos[event.Calendar].Worktree()
+	w, err := cal.Repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
@@ -448,12 +463,15 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	}
 
 	// -------- remove from git --------
-	repo, ok := c.repos[event.Calendar]
+	cal, ok := c.calendars[event.Calendar]
 	if !ok {
+		return fmt.Errorf("calendar doesn't exist")
+	}
+	if cal.Repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	w, err := repo.Worktree()
+	w, err := cal.Repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
