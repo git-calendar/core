@@ -10,12 +10,12 @@ import (
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
-func DecryptFields(v any, key, ad []byte) (map[string]any, error) {
+func DecryptFields(v any, key, aad []byte) (map[string]any, error) {
 	siv, err := aessiv.New(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
 	}
-	dec, err := decryptAll(v, ad, siv)
+	dec, err := decryptAll(v, aad, siv)
 	if err != nil {
 		return nil, err
 	}
@@ -26,14 +26,14 @@ func DecryptFields(v any, key, ad []byte) (map[string]any, error) {
 	return decMap, nil
 }
 
-func decryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
+func decryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {
 	switch val := v.(type) {
 
 	case map[string]any:
 		// recursively for nested objects
 		out := make(map[string]any)
 		for k, nestedVal := range val {
-			nestedAD := appendPath(ad, k) // uuid|...|fieldname
+			nestedAD := appendPath(aad, k) // uuid|...|fieldname
 			dv, err := decryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
@@ -45,7 +45,7 @@ func decryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 	case []any:
 		// recursively for arrays/slices
 		for i, nestedVal := range val {
-			nestedAD := appendPath(ad, strconv.Itoa(i)) // uuid|...|fieldname|i
+			nestedAD := appendPath(aad, strconv.Itoa(i)) // uuid|...|fieldname|i
 			dv, err := decryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
@@ -56,7 +56,7 @@ func decryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 
 	case string:
 		// leaf value
-		pt, err := decryptValue(val, ad, siv)
+		pt, err := decryptValue(val, aad, siv)
 		if err != nil {
 			return nil, err
 		}
@@ -74,10 +74,10 @@ func decryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 	}
 }
 
-func decryptValue(ciphertext string, ad []byte, siv *aessiv.AESSIV) ([]byte, error) {
+func decryptValue(ciphertext string, aad []byte, siv *aessiv.AESSIV) ([]byte, error) {
 	ct, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base64 value: %w", err)
 	}
-	return siv.Open(nil, nil, ct, ad)
+	return siv.Open(nil, nil, ct, aad)
 }

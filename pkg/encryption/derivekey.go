@@ -17,10 +17,10 @@ func DeriveKey(password string, salt []byte) []byte {
 	)
 }
 
-// Helper to build new AD (additional data)
-func appendPath(ad []byte, suffix string) []byte {
-	newAd := make([]byte, 0, len(ad)+len(suffix))
-	newAd = append(newAd, ad...)
+// Helper to build new AAD (additional authenticated data)
+func appendPath(aad []byte, suffix string) []byte {
+	newAd := make([]byte, 0, len(aad)+len(suffix))
+	newAd = append(newAd, aad...)
 	newAd = append(newAd, suffix...)
 	return newAd
 }

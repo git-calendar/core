@@ -9,22 +9,22 @@ import (
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
-func EncryptFields(v any, key, ad []byte) (any, error) {
+func EncryptFields(v any, key, aad []byte) (any, error) {
 	siv, err := aessiv.New(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
 	}
-	return encryptAll(v, ad, siv)
+	return encryptAll(v, aad, siv)
 }
 
-func encryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
+func encryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {
 	switch val := v.(type) {
 
 	case map[string]any:
 		// recursively for nested objects
 		out := make(map[string]any)
 		for k, nestedVal := range val {
-			nestedAD := appendPath(ad, k) // uuid|...|fieldname
+			nestedAD := appendPath(aad, k) // uuid|...|fieldname
 			ev, err := encryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
@@ -36,7 +36,7 @@ func encryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 	case []any:
 		// recursively for arrays/slices
 		for i, nestedVal := range val {
-			nestedAD := appendPath(ad, strconv.Itoa(i)) // uuid|...|fieldname|i
+			nestedAD := appendPath(aad, strconv.Itoa(i)) // uuid|...|fieldname|i
 			ev, err := encryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
@@ -52,11 +52,11 @@ func encryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 			return nil, err
 		}
 
-		return encryptValue(b, ad, siv), nil
+		return encryptValue(b, aad, siv), nil
 	}
 }
 
-func encryptValue(v []byte, ad []byte, siv *aessiv.AESSIV) string {
-	ciphertext := siv.Seal(nil, nil, v, ad)
+func encryptValue(v []byte, aad []byte, siv *aessiv.AESSIV) string {
+	ciphertext := siv.Seal(nil, nil, v, aad)
 	return base64.StdEncoding.EncodeToString(ciphertext)
 }
