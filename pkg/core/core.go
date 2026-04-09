@@ -50,7 +50,7 @@ func NewCore() *Core {
 func (c *Core) SetCorsProxy(proxyUrl string) error {
 	var err error
 	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
-	c.proxyUrl, err = url.Parse(trimmed)
+	c.proxyUrl, err = url.ParseRequestURI(trimmed)
 	return err
 }
 
