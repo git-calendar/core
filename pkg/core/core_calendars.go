@@ -16,19 +16,39 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
-	"github.com/google/uuid"
 )
 
 // Creates a new calendar.
-func (c *Core) CreateCalendar(name string) error {
+func (c *Core) CreateCalendar(name, password string) error {
 	repo, err := c.initCalendarRepo(name)
 	if err != nil {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
 	}
+
+	var key []byte = nil
+	if len(password) != 0 {
+		key = encryption.DeriveKey(password, []byte(name))
+
+		wt, err := repo.Worktree()
+		if err != nil {
+			return fmt.Errorf("failed get worktree from repo: %w", err)
+		}
+
+		keyFile, err := wt.Filesystem.Create(EncryptionKeyFileName)
+		if err != nil {
+			return fmt.Errorf("failed to create key file: %w", err)
+		}
+		defer keyFile.Close()
+
+		if _, err = keyFile.Write(key); err != nil {
+			return fmt.Errorf("failed to write key to key file: %w", err)
+		}
+	}
+
 	c.calendars[name] = &Calendar{
 		Repository:    repo,
 		Tags:          []string{},
-		EncryptionKey: nil, // TODO
+		EncryptionKey: key,
 	}
 	return nil
 }
@@ -61,10 +81,20 @@ func (c *Core) LoadCalendars() error {
 			fmt.Printf("failed to init/load '%s' repository: %v", entry.Name(), err)
 			continue
 		}
+
+		var key []byte = nil
+		keyFile, err := c.fs.Open(c.fs.Join(filesystem.DirName, entry.Name(), EncryptionKeyFileName))
+		if err == nil {
+			key, err = io.ReadAll(keyFile)
+			if err != nil {
+				fmt.Printf("failed to read encryption key for '%s' repository: %v", entry.Name(), err)
+			}
+		}
+
 		c.calendars[entry.Name()] = &Calendar{
 			Repository:    repo,
 			Tags:          nil, // TODO: load tags
-			EncryptionKey: nil, // TODO
+			EncryptionKey: key,
 		}
 	}
 
@@ -72,36 +102,24 @@ func (c *Core) LoadCalendars() error {
 	// TODO do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
 		wt, _ := cal.Repository.Worktree()
-		entries, _ := wt.Filesystem.ReadDir(EventsDirName)
-		for _, entry := range entries {
-			if entry.IsDir() {
+		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
+		eventEntries, _ := eventsDir.ReadDir("/")
+		for _, eventEntry := range eventEntries {
+			if eventEntry.IsDir() {
 				continue
 			}
 
-			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
-			file, err := wt.Filesystem.Open(fileName)
+			file, err := eventsDir.Open(eventEntry.Name())
 			if err != nil {
-				fmt.Printf("failed to open file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
+				fmt.Printf("failed to open file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 			defer file.Close()
 
-			data, err := io.ReadAll(file)
-			if err != nil {
-				fmt.Printf("failed to read file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
-				continue
-			}
-
 			var event Event
-			event.Id, err = uuid.Parse(strings.Split(entry.Name(), ".")[0]) // the id is needed for decryption TODO: rethink where to put this
+			err = event.LoadFromFile(file, cal.EncryptionKey)
 			if err != nil {
-				fmt.Printf("file name is not UUID.json but '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
-				continue
-			}
-
-			err = event.DecryptFromJSON(data, cal.EncryptionKey)
-			if err != nil {
-				fmt.Printf("failed to decode event from file '%s' from cal %s: %v\n", entry.Name(), wt.Filesystem.Root(), err)
+				fmt.Printf("failed to decode event from file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 

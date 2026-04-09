@@ -14,7 +14,7 @@ func Test_AddRemote_Works(t *testing.T) {
 		t.Errorf("failed to delete existing repo: %v", err)
 	}
 
-	err = c.CreateCalendar(TestCalendarName)
+	err = c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Errorf("failed to init repo: %v", err)
 	}

@@ -16,9 +16,9 @@ import (
 )
 
 func Test_AddEvent_CreatesJsonFile(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -32,7 +32,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		To:       time.Now().Add(2 * time.Hour),
 	}
 
-	_, err = a.CreateEvent(eventIn)
+	_, err = c.CreateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
@@ -65,9 +65,9 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 }
 
 func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -82,12 +82,12 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 		To:       startTime.Add(1 * time.Hour),
 	}
 
-	_, err = a.CreateEvent(eventIn)
+	_, err = c.CreateEvent(eventIn)
 	if err != nil {
 		t.Fatalf("failed to create an event: %v", err)
 	}
 
-	out, err := a.GetEvent(id)
+	out, err := c.GetEvent(id)
 	if err != nil || out == nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
@@ -110,7 +110,7 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 		}
 	}
 
-	err = a.RemoveEvent(eventIn)
+	err = c.RemoveEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to remove event: %v", err)
 	}
@@ -121,9 +121,9 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 }
 
 func Test_AddEventAndGetEvent_Works(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -137,12 +137,12 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 		To:       date.Add(2 * time.Hour),
 	}
 
-	_, err = a.CreateEvent(eventIn)
+	_, err = c.CreateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
 
-	eventOut, err := a.GetEvent(eventIn.Id)
+	eventOut, err := c.GetEvent(eventIn.Id)
 	if err != nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
@@ -153,9 +153,9 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 }
 
 func Test_AddEventsAndGetThemByInterval(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -170,13 +170,13 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 			From:     date.AddDate(0, 0, i),
 			To:       date.AddDate(0, 0, i).Add(time.Hour),
 		}
-		_, err = a.CreateEvent(eventIn)
+		_, err = c.CreateEvent(eventIn)
 		if err != nil {
 			t.Errorf("failed to create an event: %v", err)
 		}
 	}
 
-	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -184,9 +184,9 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 }
 
 func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -201,24 +201,24 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 			From:     date.AddDate(0, 0, i),
 			To:       date.AddDate(0, 0, i).Add(time.Hour),
 		}
-		_, err = a.CreateEvent(eventIn)
+		_, err = c.CreateEvent(eventIn)
 		if err != nil {
 			t.Errorf("failed to create an event: %v", err)
 		}
 	}
 
-	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
 	}
 
-	err = a.RemoveEvent(eventsOut[0])
+	err = c.RemoveEvent(eventsOut[0])
 	if err != nil {
 		t.Errorf("failed to remove event: %v", err)
 	}
 
-	eventsOut = a.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut = c.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != numEvents-1 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -226,9 +226,9 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 }
 
 func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -246,17 +246,17 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 
 		events = append(events, eventIn)
 
-		_, err = a.CreateEvent(eventIn)
+		_, err = c.CreateEvent(eventIn)
 		if err != nil {
 			t.Errorf("failed to create an event: %v", err)
 		}
 	}
 
 	for i := range events {
-		a.RemoveEvent(events[i])
+		c.RemoveEvent(events[i])
 	}
 
-	eventsOut := a.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
 	if len(eventsOut) != 0 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), 0)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -264,9 +264,9 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 }
 
 func Test_UpdateStandardEvent_Works(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -280,7 +280,7 @@ func Test_UpdateStandardEvent_Works(t *testing.T) {
 		To:       startTime.Add(time.Hour),
 	}
 
-	_, err = a.CreateEvent(eventIn)
+	_, err = c.CreateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to create an event: %v", err)
 	}
@@ -288,12 +288,12 @@ func Test_UpdateStandardEvent_Works(t *testing.T) {
 	eventIn.Title = "Updated Title"
 	eventIn.To = startTime.Add(2 * time.Hour)
 
-	updatedEvent, err := a.UpdateEvent(eventIn)
+	updatedEvent, err := c.UpdateEvent(eventIn)
 	if err != nil {
 		t.Errorf("failed to update event: %v", err)
 	}
 
-	eventOut, err := a.GetEvent(eventIn.Id)
+	eventOut, err := c.GetEvent(eventIn.Id)
 	if err != nil {
 		t.Fatalf("failed to get updated event: %v", err)
 	}

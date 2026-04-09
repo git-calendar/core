@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/git-calendar/core/pkg/core/encryption"
+	"github.com/go-git/go-billy/v5"
 	"github.com/google/uuid"
 )
 
@@ -100,7 +103,7 @@ func (e Event) IsParent() bool {
 	return e.ParentId == uuid.Nil && e.Repeat != nil
 }
 
-// Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of Parent event and returns its To.
+// Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of a repeating Parent event and returns its To.
 func (e Event) getTreeEndTime() time.Time {
 	if e.Repeat == nil {
 		return e.To
@@ -129,7 +132,7 @@ func (e *Event) EncryptToIndentedJSON(key []byte) ([]byte, error) {
 }
 
 // Unmarshals and decrypts (if key was set) JSON.
-func (e *Event) DecryptFromJSON(data []byte, key []byte) error {
+func (e *Event) DecryptFromJSON(data, key []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -141,4 +144,21 @@ func (e *Event) DecryptFromJSON(data []byte, key []byte) error {
 
 	idBytes, _ := e.Id.MarshalBinary() // err always nil
 	return encryption.DecryptFields(e, raw, key, idBytes)
+}
+
+func (e *Event) LoadFromFile(file billy.File, decryptionKey []byte) error {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("failed to read file '%s': %w\n", file.Name(), err)
+	}
+
+	if len(decryptionKey) == 0 { // no encryption
+		return json.Unmarshal(data, e)
+	}
+
+	e.Id, err = uuid.Parse(strings.Split(file.Name(), ".")[0]) // the id is needed for decryption
+	if err != nil {
+		return fmt.Errorf("file name is not UUID.json but '%s': %w\n", file.Name(), err)
+	}
+	return e.DecryptFromJSON(data, decryptionKey)
 }

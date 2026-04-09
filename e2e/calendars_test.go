@@ -10,9 +10,9 @@ import (
 )
 
 func Test_CreateCalendar_Works(t *testing.T) {
-	a := core.NewCore()
+	c := core.NewCore()
 
-	err := a.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
