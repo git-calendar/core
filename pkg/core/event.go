@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/git-calendar/core/pkg/core/encryption"
+	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/go-git/go-billy/v5"
 	"github.com/google/uuid"
 )
@@ -20,16 +20,16 @@ import (
 //  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
 //  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
-	Id          uuid.UUID   `json:"id" encrypt:"-"`              // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
-	Title       string      `json:"title" encrypt:"title"`       // Should not be empty.
-	Location    string      `json:"location" encrypt:"location"` // Physical or virtual location (e.g., URL).
-	Description string      `json:"description" encrypt:"description"`
-	From        time.Time   `json:"from" encrypt:"from"`
-	To          time.Time   `json:"to" encrypt:"to"`
-	Calendar    string      `json:"calendar" encrypt:"calendar"` // The name of the calendar the event belongs to.
-	Tag         string      `json:"tag" encrypt:"tag"`           // User-defined category or label.
-	ParentId    uuid.UUID   `json:"parent_id" encrypt:"-"`       // Specific for child events. It is uuid.Nil if the event is basic or parent.
-	Repeat      *Repetition `json:"repeat" encrypt:"repeat"`     // nil if child
+	Id          uuid.UUID   `json:"id,omitzero"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
+	Title       string      `json:"title,omitzero"`    // Should not be empty.
+	Location    string      `json:"location,omitzero"` // Physical or virtual location (e.g., URL).
+	Description string      `json:"description,omitzero"`
+	From        time.Time   `json:"from,omitzero"`
+	To          time.Time   `json:"to,omitzero"`
+	Calendar    string      `json:"calendar,omitzero"`  // The name of the calendar the event belongs to.
+	Tag         string      `json:"tag,omitzero"`       // User-defined category or label.
+	ParentId    uuid.UUID   `json:"parent_id,omitzero"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
+	Repeat      *Repetition `json:"repeat,omitzero"`    // nil if child
 }
 
 // Repetition defines the recurrence rules for a Parent event.
@@ -37,11 +37,11 @@ type Event struct {
 // A Repetition object exists only on Parent events to generate Children.
 // A series must be capped by either Until (date) or Count (occurrences). Not both.
 type Repetition struct {
-	Frequency  Freq        `json:"frequency" encrypt:"frequency"`   // The unit of time for recurrence (Day, Week, Month, etc.).
-	Interval   int         `json:"interval" encrypt:"interval"`     // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
-	Until      time.Time   `json:"until" encrypt:"until"`           // Hard stop date for the series.
-	Count      int         `json:"count" encrypt:"count"`           // Total number of occurrences to generate.
-	Exceptions []uuid.UUID `json:"exceptions" encrypt:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
+	Frequency  Freq        `json:"frequency,omitzero"`  // The unit of time for recurrence (Day, Week, Month, etc.).
+	Interval   int         `json:"interval,omitzero"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
+	Until      time.Time   `json:"until,omitzero"`      // Hard stop date for the series.
+	Count      int         `json:"count,omitzero"`      // Total number of occurrences to generate.
+	Exceptions []uuid.UUID `json:"exceptions,omitzero"` // List of Child IDs that deviate from the base rule (edited or cancelled).
 }
 
 func (e *Event) Validate() error {
@@ -119,46 +119,76 @@ func (e Event) getTreeEndTime() time.Time {
 	return eventEnd
 }
 
-// Returns the marshaled and encrypted (if key was set) JSON.
-func (e *Event) EncryptToIndentedJSON(key []byte) ([]byte, error) {
-	idBytes, _ := e.Id.MarshalBinary() // err always nil
+func (e *Event) WriteToFile(file billy.File, key []byte) error {
+	// not needed to be stored in the file
+	id := e.Id
+	e.Id = uuid.Nil
 
-	enc, err := encryption.EncryptFields(e, key, idBytes)
+	// marshal normally
+	raw, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return nil, err
-	}
-
-	return json.MarshalIndent(enc, "", "  ")
-}
-
-// Unmarshals and decrypts (if key was set) JSON.
-func (e *Event) DecryptFromJSON(data, key []byte) error {
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	if e.Id == uuid.Nil {
-		return errors.New("event Id has to be set for decryption")
+	if len(key) == 0 { // no encryption, just use the plaintext
+		_, err = file.Write(raw)
+		return err
 	}
 
-	idBytes, _ := e.Id.MarshalBinary() // err always nil
-	return encryption.DecryptFields(e, raw, key, idBytes)
+	if id == uuid.Nil {
+		return errors.New("event Id has to be set for encryption")
+	}
+
+	// unmarshal into generic map
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return err
+	}
+
+	// encrypt everything recursively
+	encData, err := encryption.EncryptFields(data, key, e.Id[:])
+	if err != nil {
+		return err
+	}
+
+	// marshal again
+	finalRaw, err := json.MarshalIndent(encData, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	_, err = file.Write(finalRaw)
+	return err
 }
 
 func (e *Event) LoadFromFile(file billy.File, decryptionKey []byte) error {
-	data, err := io.ReadAll(file)
+	raw, err := io.ReadAll(file)
 	if err != nil {
 		return fmt.Errorf("failed to read file '%s': %w\n", file.Name(), err)
 	}
 
-	if len(decryptionKey) == 0 { // no encryption
-		return json.Unmarshal(data, e)
-	}
-
-	e.Id, err = uuid.Parse(strings.Split(file.Name(), ".")[0]) // the id is needed for decryption
+	e.Id, err = uuid.Parse(strings.Split(file.Name(), ".")[0]) // get event id from the name
 	if err != nil {
 		return fmt.Errorf("file name is not UUID.json but '%s': %w\n", file.Name(), err)
 	}
-	return e.DecryptFromJSON(data, decryptionKey)
+
+	if len(decryptionKey) == 0 { // no encryption, just use the plaintext
+		return json.Unmarshal(raw, e)
+	}
+
+	var encryptedData map[string]any
+	if err := json.Unmarshal(raw, &encryptedData); err != nil {
+		return err
+	}
+
+	decryptedData, err := encryption.DecryptFields(encryptedData, decryptionKey, e.Id[:])
+	if err != nil {
+		return err
+	}
+
+	// eww (map to struct)
+	tmp, err1 := json.Marshal(decryptedData)
+	err2 := json.Unmarshal(tmp, e)
+
+	return errors.Join(err1, err2)
 }

@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/git-calendar/core/pkg/core/encryption"
+	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/git-calendar/core/pkg/filesystem"
 	gogitutil "github.com/go-git/go-billy/v5/util"
 	gogit "github.com/go-git/go-git/v5"
@@ -119,7 +119,7 @@ func (c *Core) LoadCalendars() error {
 			var event Event
 			err = event.LoadFromFile(file, cal.EncryptionKey)
 			if err != nil {
-				fmt.Printf("failed to decode event from file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+				fmt.Printf("failed to load event from file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 
