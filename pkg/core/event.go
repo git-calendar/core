@@ -119,7 +119,7 @@ func (e Event) getTreeEndTime() time.Time {
 	return eventEnd
 }
 
-func (e *Event) WriteToFile(file billy.File, key []byte) error {
+func (e Event) WriteToFile(file billy.File, key []byte) error {
 	// not needed to be stored in the file
 	id := e.Id
 	e.Id = uuid.Nil

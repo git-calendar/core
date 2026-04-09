@@ -48,17 +48,13 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	}
 
 	var parsedEvent struct {
-		Id    uuid.UUID `json:"id"`
-		Title string    `json:"title"`
+		Title string `json:"title"`
 	}
 	err = json.Unmarshal(b, &parsedEvent)
 	if err != nil {
 		t.Fatalf("failed to parse event json file: %v", err)
 	}
 
-	if parsedEvent.Id != id {
-		t.Errorf("id is not the same as input: \nin:   %d\n!=\nfile: %v", 1, parsedEvent.Id)
-	}
 	if parsedEvent.Title != "Foo Event" {
 		t.Errorf("id is not the same as input: \nin:   %s\n!=\nfile: %s", "Foo Event", parsedEvent.Title)
 	}
