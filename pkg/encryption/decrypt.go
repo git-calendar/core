@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
@@ -14,7 +15,7 @@ func DecryptFields(v any, key, ad []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
 	}
-	dec, err := decryptAll(v, "", siv)
+	dec, err := decryptAll(v, ad, siv)
 	if err != nil {
 		return nil, err
 	}
@@ -25,17 +26,15 @@ func DecryptFields(v any, key, ad []byte) (map[string]any, error) {
 	return decMap, nil
 }
 
-func decryptAll(v any, path string, siv *aessiv.AESSIV) (any, error) {
+func decryptAll(v any, ad []byte, siv *aessiv.AESSIV) (any, error) {
 	switch val := v.(type) {
 
 	case map[string]any:
+		// recursively for nested objects
 		out := make(map[string]any)
 		for k, nestedVal := range val {
-			newPath := k
-			if path != "" {
-				newPath = path + "." + k
-			}
-			dv, err := decryptAll(nestedVal, newPath, siv)
+			nestedAD := appendPath(ad, k) // uuid|...|fieldname
+			dv, err := decryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
 			}
@@ -44,9 +43,10 @@ func decryptAll(v any, path string, siv *aessiv.AESSIV) (any, error) {
 		return out, nil
 
 	case []any:
+		// recursively for arrays/slices
 		for i, nestedVal := range val {
-			newPath := fmt.Sprintf("%s[%d]", path, i)
-			dv, err := decryptAll(nestedVal, newPath, siv)
+			nestedAD := appendPath(ad, strconv.Itoa(i)) // uuid|...|fieldname|i
+			dv, err := decryptAll(nestedVal, nestedAD, siv)
 			if err != nil {
 				return nil, err
 			}
@@ -55,7 +55,8 @@ func decryptAll(v any, path string, siv *aessiv.AESSIV) (any, error) {
 		return val, nil
 
 	case string:
-		pt, err := decryptValue(val, []byte(path), siv)
+		// leaf value
+		pt, err := decryptValue(val, ad, siv)
 		if err != nil {
 			return nil, err
 		}
@@ -63,13 +64,13 @@ func decryptAll(v any, path string, siv *aessiv.AESSIV) (any, error) {
 		// unmarshal JSON to get the original type
 		var orig any
 		if err := json.Unmarshal(pt, &orig); err != nil {
-			return nil, fmt.Errorf("json unmarshal failed at %s: %w", path, err)
+			return nil, fmt.Errorf("json unmarshal failed: %w", err)
 		}
 
 		return orig, nil
 
 	default:
-		return nil, fmt.Errorf("unexpected type at %s: %T", path, val)
+		return nil, fmt.Errorf("unexpected type: %T", val)
 	}
 }
 

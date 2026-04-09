@@ -146,7 +146,7 @@ func (e *Event) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// encrypt everything recursively
-	encData, err := encryption.EncryptFields(data, key, e.Id[:])
+	encData, err := encryption.EncryptFields(data, key, id[:])
 	if err != nil {
 		return err
 	}

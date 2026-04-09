@@ -16,3 +16,11 @@ func DeriveKey(password string, salt []byte) []byte {
 		aessiv.KeySize256,
 	)
 }
+
+// Helper to build new AD (additional data)
+func appendPath(ad []byte, suffix string) []byte {
+	newAd := make([]byte, 0, len(ad)+len(suffix))
+	newAd = append(newAd, ad...)
+	newAd = append(newAd, suffix...)
+	return newAd
+}
