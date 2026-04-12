@@ -24,10 +24,11 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	}
 
 	id := uuid.New()
+	title := "Foo Event"
 	eventIn := core.Event{
 		Id:       id,
 		Calendar: TestCalendarName,
-		Title:    "Foo Event",
+		Title:    title,
 		From:     time.Now(),
 		To:       time.Now().Add(2 * time.Hour),
 	}
@@ -55,8 +56,8 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 		t.Fatalf("failed to parse event json file: %v", err)
 	}
 
-	if parsedEvent.Title != "Foo Event" {
-		t.Errorf("id is not the same as input: \nin:   %s\n!=\nfile: %s", "Foo Event", parsedEvent.Title)
+	if parsedEvent.Title != title {
+		t.Errorf("title is not the same as input: \nin:   %s\n!=\nfile: %s", title, parsedEvent.Title)
 	}
 }
 
