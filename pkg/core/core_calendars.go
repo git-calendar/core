@@ -89,6 +89,7 @@ func (c *Core) LoadCalendars() error {
 			if err != nil {
 				fmt.Printf("failed to read encryption key for '%s' repository: %v", entry.Name(), err)
 			}
+			keyFile.Close()
 		}
 
 		c.calendars[entry.Name()] = &Calendar{
@@ -185,7 +186,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	err = newRepo.DeleteRemote("origin")
 	c.AddRemote(calendarName, "origin", repoUrl.String())
 
-	var key []byte
+	var key []byte = nil
 	if len(password) != 0 {
 		key = encryption.DeriveKey(password, []byte(calendarName))
 
