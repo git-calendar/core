@@ -4,7 +4,7 @@ package filesystem
 
 import "testing"
 
-func Test_normalizePath(t *testing.T) {
+func TestNormalizePath(t *testing.T) {
 	tests := []struct {
 		name string
 		path string

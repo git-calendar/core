@@ -186,8 +186,8 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 				continue // no occurrences >= from
 			}
 
-			for firstStart.Before(to) { // while generated event fits in the wanted interval
-				if firstStart.Add(eventDuration).Before(from) { // if the generated event ends before our wanted interval -> skip
+			for firstStart.Before(to) { // while child event fits in the wanted interval
+				if firstStart.Add(eventDuration).Before(from) { // if the child event ends before our wanted interval -> skip
 					firstStart = addUnit(firstStart, curEvent.Repeat.Interval, curEvent.Repeat.Frequency) // next occurrence
 					continue
 				}
@@ -197,11 +197,11 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 				}
 				// logic for repeating only N times (count)
 				if curEvent.Repeat.Count != 0 && index >= curEvent.Repeat.Count {
-					break // new event exceeded the max count of generated events
+					break // new event exceeded the max count of child events
 				}
 
 				index++
-				generatedEvent := Event{
+				child := Event{
 					Id:          generateCustomUUID(curEvent.Id, firstStart),
 					Title:       curEvent.Title,
 					Location:    curEvent.Location,
@@ -214,8 +214,8 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					Repeat:      curEvent.Repeat,
 				}
 				// ignore exceptions
-				if !slices.Contains(curEvent.Repeat.Exceptions, generatedEvent.Id) {
-					result = append(result, generatedEvent)
+				if !slices.Contains(curEvent.Repeat.Exceptions, child.Id) {
+					result = append(result, child)
 				}
 
 				firstStart = addUnit(firstStart, curEvent.Repeat.Interval, curEvent.Repeat.Frequency) // next occurrence

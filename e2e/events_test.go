@@ -14,7 +14,7 @@ import (
 
 const TestCalendarName = "test"
 
-func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
+func TestAddInfinitelyRepeatingEventAndGetEvents(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -56,7 +56,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	}
 }
 
-func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
+func TestAddCountRepeatingEventAndGetEvents(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -100,7 +100,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 	}
 }
 
-func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
+func TestAddRepeatingEventsAndRemoveRepeatingEvent(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -154,7 +154,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	}
 }
 
-func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
+func TestUpdateRepeatingEvent_Current(t *testing.T) {
 	c := core.NewCore()
 	_ = c.CreateCalendar(TestCalendarName, "")
 
@@ -176,7 +176,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 
 	eventsOut := c.GetEvents(startTime, startTime.AddDate(0, 0, 5))
 	if len(eventsOut) != 5 {
-		t.Fatalf("expected generated events, got %d", len(eventsOut))
+		t.Fatalf("expected child events, got %d", len(eventsOut))
 	}
 
 	targetEvent := eventsOut[2]
@@ -189,7 +189,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 
 	_, err := c.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Current)
 	if err != nil {
-		t.Errorf("failed to update generated event (Current): %v", err)
+		t.Errorf("failed to update child event (Current): %v", err)
 	}
 
 	parentOut, _ := c.GetEvent(parentId)
@@ -217,7 +217,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	}
 }
 
-func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
+func TestUpdateRepeatingEvent_Following(t *testing.T) {
 	c := core.NewCore()
 	_ = c.CreateCalendar(TestCalendarName, "")
 
@@ -250,7 +250,7 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 	}
 	newParentOut, err := c.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Following)
 	if err != nil {
-		t.Errorf("failed to update generated event (Following): %v", err)
+		t.Errorf("failed to update child event (Following): %v", err)
 	}
 	if newParentOut.ParentId != uuid.Nil {
 		t.Errorf("new event should be a parent, but ParentId is %s", newParentOut.ParentId)
@@ -271,7 +271,7 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 	}
 }
 
-func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
+func TestUpdateRepeatingEvent_All(t *testing.T) {
 	c := core.NewCore()
 	_ = c.CreateCalendar(TestCalendarName, "")
 
@@ -307,7 +307,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 
 	_, err := c.UpdateEvent(*targetEvent)
 	if err != nil {
-		t.Errorf("failed to update generated event (All): %v", err)
+		t.Errorf("failed to update child event (All): %v", err)
 	}
 
 	parentOut, _ := c.GetEvent(parentId)
@@ -320,7 +320,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 	}
 }
 
-func Test_UpdateEvent_FromStandardToRepeating_Works(t *testing.T) {
+func TestUpdateEvent_FromStandardToRepeating(t *testing.T) {
 	c := core.NewCore()
 	_ = c.CreateCalendar(TestCalendarName, "")
 

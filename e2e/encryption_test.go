@@ -14,7 +14,7 @@ import (
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
-func Test_CreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
+func TestCreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "somepassword")
@@ -37,7 +37,7 @@ func Test_CreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 	}
 }
 
-func Test_CreateCalendarWithPasswordAndCreateEvent_CreatesJsonFile(t *testing.T) {
+func TestCreateCalendarWithPasswordAndCreateEvent_CreatesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "somepassword")

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func Test_addUnit(t *testing.T) {
+func TestAddUnit(t *testing.T) {
 	type args struct {
 		t     time.Time
 		value int
@@ -33,7 +33,7 @@ func Test_addUnit(t *testing.T) {
 	}
 }
 
-func Test_firstOccurrenceAtOrAfter(t *testing.T) {
+func TestFirstOccurrenceAtOrAfter(t *testing.T) {
 	type args struct {
 		searchStart time.Time
 		event       *Event
@@ -59,7 +59,7 @@ func Test_firstOccurrenceAtOrAfter(t *testing.T) {
 	}
 }
 
-func Test_containsTime(t *testing.T) {
+func TestContainsTime(t *testing.T) {
 	type args struct {
 		exceptions []uuid.UUID
 		t          time.Time
@@ -80,7 +80,7 @@ func Test_containsTime(t *testing.T) {
 	}
 }
 
-func Test_prepareRepoUrl(t *testing.T) {
+func TestPrepareRepoUrl(t *testing.T) {
 	someProxyUrl := mustParseUrl("https://cors-proxy.abc")
 	tests := []struct {
 		name     string
@@ -131,7 +131,7 @@ func Test_prepareRepoUrl(t *testing.T) {
 	}
 }
 
-func Test_useCorsProxy(t *testing.T) {
+func TestUseCorsProxy(t *testing.T) {
 	tests := []struct {
 		name     string
 		original url.URL
@@ -179,7 +179,7 @@ func Test_useCorsProxy(t *testing.T) {
 	}
 }
 
-func Test_authFromUrl(t *testing.T) {
+func TestAuthFromUrl(t *testing.T) {
 	tests := []struct {
 		name string
 		url  url.URL
@@ -210,7 +210,7 @@ func Test_authFromUrl(t *testing.T) {
 	}
 }
 
-func Test_calendarNameFromUrl(t *testing.T) {
+func TestCalendarNameFromUrl(t *testing.T) {
 	tests := []struct {
 		name string
 		url  url.URL
@@ -256,7 +256,7 @@ func Test_calendarNameFromUrl(t *testing.T) {
 	}
 }
 
-func Test_generateCustomUUID(t *testing.T) {
+func TestGenerateCustomUUID(t *testing.T) {
 	type args struct {
 		parentId uuid.UUID
 		t        time.Time
@@ -277,7 +277,7 @@ func Test_generateCustomUUID(t *testing.T) {
 	}
 }
 
-func Test_getTimeFromUUID(t *testing.T) {
+func TestGetTimeFromUUID(t *testing.T) {
 	type args struct {
 		id uuid.UUID
 	}
@@ -305,7 +305,7 @@ func Test_getTimeFromUUID(t *testing.T) {
 	}
 }
 
-func Test_getShiftedUUID(t *testing.T) {
+func TestGetShiftedUUID(t *testing.T) {
 	type args struct {
 		id       uuid.UUID
 		duration time.Duration

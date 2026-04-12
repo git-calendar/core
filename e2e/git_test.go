@@ -6,7 +6,7 @@ import (
 	"github.com/git-calendar/core/pkg/core"
 )
 
-func Test_AddRemote_Works(t *testing.T) {
+func TestAddRemote(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.RemoveCalendar(TestCalendarName)

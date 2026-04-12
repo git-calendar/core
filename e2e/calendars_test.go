@@ -9,7 +9,7 @@ import (
 	"github.com/git-calendar/core/pkg/filesystem"
 )
 
-func Test_CreateCalendar_Works(t *testing.T) {
+func TestCreateCalendar(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")

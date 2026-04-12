@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func Test_AddEvent_CreatesJsonFile(t *testing.T) {
+func TestAddEvent_CreatesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -61,7 +61,7 @@ func Test_AddEvent_CreatesJsonFile(t *testing.T) {
 	}
 }
 
-func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
+func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -117,7 +117,7 @@ func Test_RemoveEvent_DeletesJsonFile(t *testing.T) {
 	}
 }
 
-func Test_AddEventAndGetEvent_Works(t *testing.T) {
+func TestAddEventAndGetEvent(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -149,7 +149,7 @@ func Test_AddEventAndGetEvent_Works(t *testing.T) {
 	}
 }
 
-func Test_AddEventsAndGetThemByInterval(t *testing.T) {
+func TestAddEventsAndGetThemByInterval(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -180,7 +180,7 @@ func Test_AddEventsAndGetThemByInterval(t *testing.T) {
 	}
 }
 
-func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
+func TestAddNormalEventsAndRemoveEvent(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -222,7 +222,7 @@ func Test_AddNormalEventsAndRemoveEvent_Works(t *testing.T) {
 	}
 }
 
-func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
+func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -260,7 +260,7 @@ func Test_AddNormalEventsInSameIntervalAndRemoveEvents_Works(t *testing.T) {
 	}
 }
 
-func Test_UpdateStandardEvent_Works(t *testing.T) {
+func TestUpdateStandardEvent(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
