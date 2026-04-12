@@ -5,7 +5,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Creates a key of length 'size' based on the provided 'password' plus 'salt'.
+// Creates a key based on the provided 'password' plus 'salt'.
 func DeriveKey(password string, salt []byte) []byte {
 	return argon2.IDKey(
 		[]byte(password),
@@ -17,7 +17,7 @@ func DeriveKey(password string, salt []byte) []byte {
 	)
 }
 
-// Helper to build new AAD (additional authenticated data)
+// Helper to build new AAD (additional authenticated data).
 func appendPath(aad []byte, suffix string) []byte {
 	newAd := make([]byte, 0, len(aad)+len(suffix))
 	newAd = append(newAd, aad...)

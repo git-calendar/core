@@ -9,6 +9,7 @@ import (
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
+// EncryptFields accepts anything and returns a new any with values encrypted using key+add and base64 encoded. It works recursively.
 func EncryptFields(v any, key, aad []byte) (any, error) {
 	siv, err := aessiv.New(key)
 	if err != nil {

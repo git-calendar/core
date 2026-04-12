@@ -3,14 +3,15 @@ package encryption
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 
-func DecryptFields(v any, key, aad []byte) (map[string]any, error) {
+// DecryptField accepts a map[string]any, []any or pure string and returns a the same type with decrypted values using the key+aad.
+// The encrypted text is expected to be base64 encoded. It works recursively.
+func DecryptFields(v any, key, aad []byte) (any, error) {
 	siv, err := aessiv.New(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
@@ -19,11 +20,7 @@ func DecryptFields(v any, key, aad []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	decMap, ok := dec.(map[string]any)
-	if !ok {
-		return nil, errors.New("HUH")
-	}
-	return decMap, nil
+	return dec, nil
 }
 
 func decryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {
