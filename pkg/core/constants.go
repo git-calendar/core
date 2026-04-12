@@ -1,9 +1,8 @@
 package core
 
 const (
-	IndexFileName         string = "index.json"
-	RichIndexFileName     string = "index-rich.json"
-	EncryptionKeyFileName string = "encryption.key"
+	IndexFileName     string = "index.json"
+	RichIndexFileName string = "index-rich.json"
 
 	EventsDirName string = "events"
 

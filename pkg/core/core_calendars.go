@@ -29,12 +29,7 @@ func (c *Core) CreateCalendar(name, password string) error {
 	if len(password) != 0 {
 		key = encryption.DeriveKey(password, []byte(name))
 
-		wt, err := repo.Worktree()
-		if err != nil {
-			return fmt.Errorf("failed get worktree from repo: %w", err)
-		}
-
-		keyFile, err := wt.Filesystem.Create(EncryptionKeyFileName)
+		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
 		if err != nil {
 			return fmt.Errorf("failed to create key file: %w", err)
 		}
@@ -75,24 +70,25 @@ func (c *Core) LoadCalendars() error {
 		if !entry.IsDir() {
 			continue
 		}
+		name := entry.Name()
 
-		repo, err := c.initCalendarRepo(entry.Name())
+		repo, err := c.initCalendarRepo(name)
 		if err != nil {
-			fmt.Printf("failed to init/load '%s' repository: %v", entry.Name(), err)
+			fmt.Printf("failed to init/load '%s' repository: %v", name, err)
 			continue
 		}
 
 		var key []byte = nil
-		keyFile, err := c.fs.Open(c.fs.Join(filesystem.DirName, entry.Name(), EncryptionKeyFileName))
+		keyFile, err := c.fs.Open(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
 		if err == nil {
 			key, err = io.ReadAll(keyFile)
 			if err != nil {
-				fmt.Printf("failed to read encryption key for '%s' repository: %v", entry.Name(), err)
+				fmt.Printf("failed to read encryption key for '%s' repository: %v", name, err)
 			}
 			keyFile.Close()
 		}
 
-		c.calendars[entry.Name()] = &Calendar{
+		c.calendars[name] = &Calendar{
 			Repository:    repo,
 			Tags:          nil, // TODO: load tags
 			EncryptionKey: key,
@@ -190,7 +186,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	if len(password) != 0 {
 		key = encryption.DeriveKey(password, []byte(calendarName))
 
-		keyFile, err := repoFS.Create(EncryptionKeyFileName)
+		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", calendarName)))
 		if err != nil {
 			return fmt.Errorf("failed to create key file: %w", err)
 		}
