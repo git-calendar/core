@@ -185,10 +185,24 @@ func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	err = newRepo.DeleteRemote("origin")
 	c.AddRemote(calendarName, "origin", repoUrl.String())
 
+	var key []byte
+	if len(password) != 0 {
+		key = encryption.DeriveKey(password, []byte(calendarName))
+
+		keyFile, err := repoFS.Create(EncryptionKeyFileName)
+		if err != nil {
+			return fmt.Errorf("failed to create key file: %w", err)
+		}
+		defer keyFile.Close()
+
+		if _, err = keyFile.Write(key); err != nil {
+			return fmt.Errorf("failed to write key to key file: %w", err)
+		}
+	}
 	c.calendars[calendarName] = &Calendar{
 		Repository:    newRepo,
 		Tags:          nil, // TODO: load tags
-		EncryptionKey: encryption.DeriveKey(password, []byte(calendarName)),
+		EncryptionKey: key,
 	}
 
 	return err
