@@ -1,14 +1,15 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/url"
 	"slices"
 	"strings"
 
+	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/git-calendar/core/pkg/filesystem"
 	gogitutil "github.com/go-git/go-billy/v5/util"
 	gogit "github.com/go-git/go-git/v5"
@@ -18,19 +19,39 @@ import (
 )
 
 // Creates a new calendar.
-func (c *Core) CreateCalendar(name string) error {
+func (c *Core) CreateCalendar(name, password string) error {
 	repo, err := c.initCalendarRepo(name)
 	if err != nil {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
 	}
-	c.repos[name] = repo
+
+	var key []byte = nil
+	if len(password) != 0 {
+		key = encryption.DeriveKey(password, []byte(name))
+
+		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
+		if err != nil {
+			return fmt.Errorf("failed to create key file: %w", err)
+		}
+		defer keyFile.Close()
+
+		if _, err = keyFile.Write(key); err != nil {
+			return fmt.Errorf("failed to write key to key file: %w", err)
+		}
+	}
+
+	c.calendars[name] = &Calendar{
+		Repository:    repo,
+		Tags:          []string{},
+		EncryptionKey: key,
+	}
 	return nil
 }
 
 // Returns a list of calendar names loaded.
 func (c *Core) ListCalendars() []string {
 	// TODO list tags too
-	calendars := slices.Collect(maps.Keys(c.repos))
+	calendars := slices.Collect(maps.Keys(c.calendars))
 	slices.Sort(calendars)
 	return calendars
 }
@@ -49,37 +70,59 @@ func (c *Core) LoadCalendars() error {
 		if !entry.IsDir() {
 			continue
 		}
+		name := entry.Name()
 
-		repo, err := c.initCalendarRepo(entry.Name())
+		repo, err := c.initCalendarRepo(name)
 		if err != nil {
-			fmt.Printf("failed to init/load '%s' repository: %v", entry.Name(), err)
+			fmt.Printf("failed to init/load '%s' repository: %v", name, err)
 			continue
 		}
-		c.repos[entry.Name()] = repo
+
+		var key []byte = nil
+		keyFile, err := c.fs.Open(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
+		if err == nil {
+			key, err = io.ReadAll(keyFile)
+			if err != nil {
+				fmt.Printf("failed to read encryption key for '%s' repository: %v", name, err)
+			}
+			keyFile.Close()
+		}
+
+		c.calendars[name] = &Calendar{
+			Repository:    repo,
+			Tags:          nil, // TODO: load tags
+			EncryptionKey: key,
+		}
 	}
 
 	// load tree + events
 	// TODO do not load files, but build tree from index.json
-	for _, repo := range c.repos {
-		wt, _ := repo.Worktree()
-		entries, _ := wt.Filesystem.ReadDir(EventsDirName)
-		for _, entry := range entries {
-			if entry.IsDir() {
+	for _, cal := range c.calendars {
+		wt, _ := cal.Repository.Worktree()
+		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
+		eventEntries, _ := eventsDir.ReadDir("/")
+		for _, eventEntry := range eventEntries {
+			if eventEntry.IsDir() {
 				continue
 			}
 
-			fileName := wt.Filesystem.Join(EventsDirName, entry.Name())
-			file, err := wt.Filesystem.Open(fileName)
+			file, err := eventsDir.Open(eventEntry.Name())
 			if err != nil {
-				fmt.Printf("failed to open file '%s': %v", fileName, err)
+				fmt.Printf("failed to open file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 			defer file.Close()
 
 			var event Event
-			err = json.NewDecoder(file).Decode(&event)
+			err = event.LoadFromFile(file, cal.EncryptionKey)
 			if err != nil {
-				fmt.Printf("failed to decode event from file '%s': %v", fileName, err)
+				fmt.Printf("failed to load event from file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+				continue
+			}
+
+			err = event.Validate()
+			if err != nil {
+				fmt.Printf("invalid event: %v\n", err)
 				continue
 			}
 
@@ -87,7 +130,7 @@ func (c *Core) LoadCalendars() error {
 
 			err = c.intervalTree.InsertEvent(event)
 			if err != nil {
-				fmt.Printf("failed to insert event '%s' into index tree: %v", event.Id, err)
+				fmt.Printf("failed to insert event '%s' into index tree: %v\n", event.Id, err)
 				continue
 			}
 		}
@@ -97,9 +140,9 @@ func (c *Core) LoadCalendars() error {
 }
 
 // Clones a repository/calendar from url, using CORS proxy, if specified.
-func (c *Core) CloneCalendar(repoUrl url.URL) error {
+func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	calendarName := calendarNameFromUrl(repoUrl)
-	if _, ok := c.repos[calendarName]; ok {
+	if cal, ok := c.calendars[calendarName]; ok || cal != nil {
 		return errors.New("calendar with this name already exists")
 	}
 
@@ -125,19 +168,39 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
 	// clone now
-	c.repos[calendarName], err = gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+	newRepo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: "origin",
 		URL:        finalUrl.String(),
 		Auth:       auth,
 	})
 	if err != nil {
-		c.RemoveCalendar(calendarName) // even on error, clone creates a directory, so lets delete it
+		c.RemoveCalendar(calendarName) // even on error, clone might create a directory, so let's delete it
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
 	// repair the remote url (set the pure url with auth, without proxy)
-	err = c.repos[calendarName].DeleteRemote("origin")
+	err = newRepo.DeleteRemote("origin")
 	c.AddRemote(calendarName, "origin", repoUrl.String())
+
+	var key []byte = nil
+	if len(password) != 0 {
+		key = encryption.DeriveKey(password, []byte(calendarName))
+
+		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", calendarName)))
+		if err != nil {
+			return fmt.Errorf("failed to create key file: %w", err)
+		}
+		defer keyFile.Close()
+
+		if _, err = keyFile.Write(key); err != nil {
+			return fmt.Errorf("failed to write key to key file: %w", err)
+		}
+	}
+	c.calendars[calendarName] = &Calendar{
+		Repository:    newRepo,
+		Tags:          nil, // TODO: load tags
+		EncryptionKey: key,
+	}
 
 	return err
 }
@@ -145,7 +208,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL) error {
 // Removes and deletes the whole calendar.
 func (c *Core) RemoveCalendar(name string) error {
 	// remove from map
-	delete(c.repos, name)
+	delete(c.calendars, name)
 
 	// remove from filesystem
 	err := gogitutil.RemoveAll(c.fs, c.fs.Join(filesystem.DirName, name))
@@ -176,7 +239,7 @@ func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
 		validUrl = parsedUrl.String()
 	}
 
-	_, err := c.repos[calendar].CreateRemote(&config.RemoteConfig{
+	_, err := c.calendars[calendar].Repository.CreateRemote(&config.RemoteConfig{
 		Name: remoteName,
 		URLs: []string{validUrl},
 	})

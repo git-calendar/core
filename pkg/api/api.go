@@ -37,7 +37,9 @@ func NewApi() *Api {
 // -------------------------- Boring methods that do not need any json parsing etc. -------------------------
 
 // func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
-func (a *Api) CreateCalendar(name string) error   { return a.inner.CreateCalendar(name) }
+func (a *Api) CreateCalendar(name, password string) error {
+	return a.inner.CreateCalendar(name, password)
+}
 func (a *Api) RemoveCalendar(name string) error   { return a.inner.RemoveCalendar(name) }
 func (a *Api) SetCorsProxy(proxyUrl string) error { return a.inner.SetCorsProxy(proxyUrl) }
 func (a *Api) LoadCalendars() error               { return a.inner.LoadCalendars() }
@@ -46,12 +48,12 @@ func (a *Api) PushAll() error                     { return a.inner.PushAll() }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 
-func (a *Api) CloneCalendar(repoUrl string) error {
+func (a *Api) CloneCalendar(repoUrl, password string) error {
 	parsedUrl, err := url.Parse(repoUrl)
 	if err != nil {
 		return fmt.Errorf("repoUrl is invalid: %w", err)
 	}
-	return a.inner.CloneCalendar(*parsedUrl)
+	return a.inner.CloneCalendar(*parsedUrl, password)
 }
 
 func (a *Api) ListCalendars() (string, error) {

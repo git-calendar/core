@@ -17,7 +17,7 @@ const TestCalendarName = "test"
 func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -59,7 +59,7 @@ func Test_AddInfinitelyRepeatingEventAndGetEvents_Works(t *testing.T) {
 func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -103,7 +103,7 @@ func Test_AddCountRepeatingEventAndGetEvents_Works(t *testing.T) {
 func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
@@ -156,7 +156,7 @@ func Test_AddRepeatingEventsAndRemoveGeneratedEvent_Works(t *testing.T) {
 
 func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName)
+	_ = c.CreateCalendar(TestCalendarName, "")
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -219,7 +219,7 @@ func Test_UpdateGeneratedEvent_Current_Works(t *testing.T) {
 
 func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName)
+	_ = c.CreateCalendar(TestCalendarName, "")
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -273,7 +273,7 @@ func Test_UpdateGeneratedEvent_Following_Works(t *testing.T) {
 
 func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName)
+	_ = c.CreateCalendar(TestCalendarName, "")
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -322,7 +322,7 @@ func Test_UpdateGeneratedEvent_All_Works(t *testing.T) {
 
 func Test_UpdateEvent_FromStandardToRepeating_Works(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName)
+	_ = c.CreateCalendar(TestCalendarName, "")
 
 	startTime := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
 	eventIn := core.Event{

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -372,10 +371,13 @@ func (c *Core) removeCurrentChild(event *Event) error {
 
 // Serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
-	// marshal event
-	data, err := json.MarshalIndent(event, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
+	// -------- write to disk --------
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return fmt.Errorf("the specified event.Calendar doesn't exist")
+	}
+	if cal.Repository == nil {
+		return fmt.Errorf("calendar repo not initialized")
 	}
 
 	// ensure events directory exists
@@ -393,21 +395,14 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
 
-	// write JSON content
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("failed to write file: %w", err)
+	err = event.WriteToFile(file, cal.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to write event to file: %w", err)
 	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
-	}
-
-	if c.repos[event.Calendar] == nil {
-		return fmt.Errorf("calendar repo not initialized")
-	}
+	defer file.Close()
 
 	// -------- add to git repo --------
-	w, err := c.repos[event.Calendar].Worktree()
+	w, err := cal.Repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
@@ -441,7 +436,7 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	}
 	filename := fmt.Sprintf("%s.json", eventId)
 
-	// -------- remove from filesystem --------
+	// -------- remove from disk --------
 	filePath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName, filename)
 	if err := c.fs.Remove(filePath); err != nil {
 		// TODO maybe continue, to clean the git from this file
@@ -449,18 +444,20 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	}
 
 	// -------- remove from git --------
-	repo, ok := c.repos[event.Calendar]
+	cal, ok := c.calendars[event.Calendar]
 	if !ok {
+		return fmt.Errorf("calendar doesn't exist")
+	}
+	if cal.Repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	w, err := repo.Worktree()
+	w, err := cal.Repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
-
 	if _, err := w.Remove(gitPath); err != nil {
 		return fmt.Errorf("git remove: %w", err)
 	}

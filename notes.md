@@ -21,8 +21,8 @@
     - idk about url
       - github-pages?
       - custom http file server?
-- [ ] encryption
-  - [ ] storing a key (in opfs?)
+- [x] encryption
+  - [x] storing a key (in opfs?)
   - values-only
   - deterministic? (same input <=> same output)
     - +good git diffs
@@ -33,7 +33,7 @@
 
 ---
 
-### Repo Structure (prototype)
+### Folder Structure
 
 ```
 .git-calendar-data/
@@ -43,10 +43,12 @@
 │   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
-└── shared/
-    ├── .git/
-    ├── events/
-    │   └── <UUID>.json
-    ├── index.jsonl
-    └── index-rich.jsonl
+├── shared/
+│   ├── .git/
+│   ├── events/
+│   │   └── <UUID>.json
+│   ├── index.jsonl
+│   └── index-rich.jsonl
+├── main.key
+└── shared.key
 ```

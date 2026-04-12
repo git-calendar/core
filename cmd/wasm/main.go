@@ -22,12 +22,12 @@ func RegisterCallbacks(api *api.Api) {
 		js.ValueOf(map[string]any{ // we wrap each method
 			"createCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.CreateCalendar(args[0].String())
+					return nil, api.CreateCalendar(args[0].String(), args[1].String())
 				})
 			}),
 			"cloneCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.CloneCalendar(args[0].String())
+					return nil, api.CloneCalendar(args[0].String(), args[1].String())
 				})
 			}),
 			"removeCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
