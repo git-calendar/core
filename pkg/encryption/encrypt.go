@@ -1,3 +1,12 @@
+// Package encryption provides utilities for encrypting and decrypting
+// arbitrary JSON-like data structures used in the git-calendar project.
+//
+// It recursively walks maps and slices, encrypting leaf values using AES-SIV
+// with additional authenticated data (AAD) derived from the field path.
+// Encrypted values are base64-encoded strings.
+//
+// Decryption performs the reverse operation, restoring the original data
+// structure and value types via JSON unmarshaling.
 package encryption
 
 import (
