@@ -379,52 +379,59 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	if cal.Repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
+	go func() {
+		// ensure events directory exists
+		dirPath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName)
+		if err := c.fs.MkdirAll(dirPath, 0o755); err != nil {
+			fmt.Printf("failed mkdir events: %v", err)
+			return
+		}
 
-	// ensure events directory exists
-	dirPath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName)
-	if err := c.fs.MkdirAll(dirPath, 0o755); err != nil {
-		return fmt.Errorf("failed mkdir events: %w", err)
-	}
+		filename := fmt.Sprintf("%s.json", event.Id)
+		filePath := c.fs.Join(dirPath, filename)
 
-	filename := fmt.Sprintf("%s.json", event.Id)
-	filePath := c.fs.Join(dirPath, filename)
+		// create truncates/overwrites the file if it exists
+		file, err := c.fs.Create(filePath)
+		if err != nil {
+			fmt.Printf("failed to create file: %v\n", err)
+			return
+		}
 
-	// create truncates/overwrites the file if it exists
-	file, err := c.fs.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
+		err = event.WriteToFile(file, cal.EncryptionKey)
+		if err != nil {
+			fmt.Printf("failed to write event to file: %v\n", err)
+			return
+		}
+		defer file.Close()
+		// -------- add to git repo --------
+		w, err := cal.Repository.Worktree()
+		if err != nil {
+			fmt.Printf("failed to get worktree: %v", err)
+			return
+		}
 
-	err = event.WriteToFile(file, cal.EncryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to write event to file: %w", err)
-	}
-	defer file.Close()
+		// stage
+		gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
+		if _, err := w.Add(gitPath); err != nil {
+			fmt.Printf("git add: %v", err)
+			return
+		}
 
-	// -------- add to git repo --------
-	w, err := cal.Repository.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
-	}
+		// commit
+		_, err = w.Commit(commitMsg, &gogit.CommitOptions{
+			Author: &object.Signature{
+				Name:  GitAuthorName,
+				Email: "",
+				When:  time.Now(),
+			},
+		})
 
-	// stage
-	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
-	if _, err := w.Add(gitPath); err != nil {
-		return fmt.Errorf("git add: %w", err)
-	}
+		if err != nil && !errors.Is(err, gogit.ErrEmptyCommit) {
+			fmt.Printf("failed to git commit: %v", err)
+			return
+		}
+	}()
 
-	// commit
-	_, err = w.Commit(commitMsg, &gogit.CommitOptions{
-		Author: &object.Signature{
-			Name:  GitAuthorName,
-			Email: "",
-			When:  time.Now(),
-		},
-	})
-
-	if err != nil && !errors.Is(err, gogit.ErrEmptyCommit) {
-		return fmt.Errorf("failed to git commit: %w", err)
-	}
 	return nil
 }
 
