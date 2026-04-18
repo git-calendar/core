@@ -25,7 +25,13 @@ type OPFS struct {
 	RootHandle js.Value // FileSystemDirectoryHandle
 }
 
-var _ billy.Filesystem = (*OPFS)(nil) // makes sure that it implements all the interface methods, it wont compile without it
+var _ billy.Filesystem = (*OPFS)(nil) // makes sure that it implements all the interface methods, it won't compile without it
+
+func New(baseDirHandle js.Value) *OPFS {
+	return &OPFS{
+		RootHandle: baseDirHandle,
+	}
+}
 
 func (fs *OPFS) MkdirAll(path string, perm fs.FileMode) error {
 	// OPFS ignores permissions (perm)
@@ -79,7 +85,7 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 	}
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
-	handle, err := await(dirHandle.Call("getFileHandle", fileName, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
+	handle, err := Await(dirHandle.Call("getFileHandle", fileName, map[string]any{"create": create})) // returns Promise<FileSystemFileHandle>
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return nil, os.ErrNotExist
@@ -135,7 +141,7 @@ func (fs *OPFS) Remove(path string) error {
 	// OPFS FileSystemDirectoryHandle provides a native removeEntry method
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/removeEntry
 	// a non-empty directory will not be removed
-	_, err = await(dirHandle.Call("removeEntry", name))
+	_, err = Await(dirHandle.Call("removeEntry", name))
 	if err == nil {
 		return nil // removed ok
 	}
@@ -212,7 +218,7 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 	// the JS AsyncIterator has a .next() -> {done, value}
 	for {
 		// get one entry
-		result, err := await(itValue.Call("next")) // {done, value}
+		result, err := Await(itValue.Call("next")) // {done, value}
 		if err != nil {
 			return nil, err
 		}
@@ -296,10 +302,10 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 
 	// try as file first
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
-	handle, err := await(parentDirHandle.Call("getFileHandle", name))
+	handle, err := Await(parentDirHandle.Call("getFileHandle", name))
 	if err == nil {
 		// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/getFile
-		file, err := await(handle.Call("getFile")) // returns Promise<File>
+		file, err := Await(handle.Call("getFile")) // returns Promise<File>
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +319,7 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 	}
 
 	// if file failed, try as directory
-	_, err = await(parentDirHandle.Call("getDirectoryHandle", name))
+	_, err = Await(parentDirHandle.Call("getDirectoryHandle", name))
 	if err == nil {
 		return &OPFSFileInfo{
 			name:  name,
@@ -367,7 +373,7 @@ func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 			continue
 		}
 
-		d, err := await(dir.Call("getDirectoryHandle", part, map[string]any{"create": create}))
+		d, err := Await(dir.Call("getDirectoryHandle", part, map[string]any{"create": create}))
 		if err != nil {
 			return js.Undefined(), err
 		}
@@ -392,7 +398,7 @@ func (fs *OPFS) split(fullPath string) (string, string) {
 //	});
 //
 // But instead of "something", we pass the value/error to Go.
-func await(p js.Value) (js.Value, error) {
+func Await(p js.Value) (js.Value, error) {
 	// create channel for each callback
 	valCh := make(chan js.Value, 1)
 	errCh := make(chan error, 1)

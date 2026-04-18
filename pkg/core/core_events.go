@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/git-calendar/core/pkg/filesystem"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/google/uuid"
@@ -381,7 +380,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	}
 
 	// ensure events directory exists
-	dirPath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName)
+	dirPath := c.fs.Join(event.Calendar, EventsDirName)
 	if err := c.fs.MkdirAll(dirPath, 0o755); err != nil {
 		return fmt.Errorf("failed mkdir events: %w", err)
 	}
@@ -437,7 +436,7 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	filename := fmt.Sprintf("%s.json", eventId)
 
 	// -------- remove from disk --------
-	filePath := c.fs.Join(filesystem.DirName, event.Calendar, EventsDirName, filename)
+	filePath := c.fs.Join(event.Calendar, EventsDirName, filename)
 	if err := c.fs.Remove(filePath); err != nil {
 		// TODO maybe continue, to clean the git from this file
 		return fmt.Errorf("failed to remove file from disk: %w", err)

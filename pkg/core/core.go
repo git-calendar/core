@@ -38,11 +38,6 @@ func NewCore() *Core {
 		panic(err)
 	}
 
-	err = c.fs.MkdirAll(filesystem.DirName, 0o755)
-	if err != nil {
-		panic(err)
-	}
-
 	return &c
 }
 
@@ -104,13 +99,11 @@ func (c *Core) resetCore() {
 
 // Loads, if exists, or creates new repository with the given name.
 func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
-	repoPath := c.fs.Join(filesystem.DirName, name)
-
-	if err := c.fs.MkdirAll(repoPath, 0o755); err != nil {
+	if err := c.fs.MkdirAll(name, 0o755); err != nil {
 		return nil, fmt.Errorf("create repo dir: %w", err)
 	}
 
-	repoFS, err := c.fs.Chroot(repoPath)
+	repoFS, err := c.fs.Chroot(name)
 	if err != nil {
 		return nil, fmt.Errorf("chroot repo dir: %w", err)
 	}

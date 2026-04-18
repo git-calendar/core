@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/git-calendar/core/pkg/encryption"
-	"github.com/git-calendar/core/pkg/filesystem"
 	gogitutil "github.com/go-git/go-billy/v5/util"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -29,7 +28,7 @@ func (c *Core) CreateCalendar(name, password string) error {
 	if len(password) != 0 {
 		key = encryption.DeriveKey(password, []byte(name))
 
-		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
+		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", name))
 		if err != nil {
 			return fmt.Errorf("failed to create key file: %w", err)
 		}
@@ -61,7 +60,7 @@ func (c *Core) LoadCalendars() error {
 	c.resetCore()
 
 	// load repositories
-	entries, err := c.fs.ReadDir(filesystem.DirName)
+	entries, err := c.fs.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("failed to list all directories in root: %w", err)
 	}
@@ -79,7 +78,7 @@ func (c *Core) LoadCalendars() error {
 		}
 
 		var key []byte = nil
-		keyFile, err := c.fs.Open(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
+		keyFile, err := c.fs.Open(fmt.Sprintf("%s.key", name))
 		if err == nil {
 			key, err = io.ReadAll(keyFile)
 			if err != nil {
@@ -147,11 +146,10 @@ func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	}
 
 	// make sure that the repo dir is created
-	repoPath := c.fs.Join(filesystem.DirName, calendarName)
-	if err := c.fs.MkdirAll(repoPath, 0o755); err != nil {
+	if err := c.fs.MkdirAll(calendarName, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
-	repoFS, err := c.fs.Chroot(repoPath)
+	repoFS, err := c.fs.Chroot(calendarName)
 	if err != nil {
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
@@ -186,7 +184,7 @@ func (c *Core) CloneCalendar(repoUrl url.URL, password string) error {
 	if len(password) != 0 {
 		key = encryption.DeriveKey(password, []byte(calendarName))
 
-		keyFile, err := c.fs.Create(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", calendarName)))
+		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
 		if err != nil {
 			return fmt.Errorf("failed to create key file: %w", err)
 		}
@@ -211,12 +209,12 @@ func (c *Core) RemoveCalendar(name string) error {
 	delete(c.calendars, name)
 
 	// remove dir from filesystem
-	if err := gogitutil.RemoveAll(c.fs, c.fs.Join(filesystem.DirName, name)); err != nil {
+	if err := gogitutil.RemoveAll(c.fs, name); err != nil {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
 	}
 
 	// try to remove encryption key
-	_ = c.fs.Remove(c.fs.Join(filesystem.DirName, fmt.Sprintf("%s.key", name)))
+	_ = c.fs.Remove(fmt.Sprintf("%s.key", name))
 
 	// TODO: This is the lazy way.
 	// LoadCalendars does full erase and load again for events map and tree. It also deletes all the repos, and reloads them from disk.
