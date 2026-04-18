@@ -20,15 +20,19 @@ func GetFS() (billy.Filesystem, error) {
 		return nil, errors.New("opfsRootHandle not initialized")
 	}
 
-	// get or create subdirectory
-	dirHandlePromise := rootHandle.Call("getDirectoryHandle", DirName, map[string]any{
-		"create": true,
-	})
+	// create OPFS rooted at /
+	fs := opfs.New(rootHandle)
 
-	dirHandle, err := opfs.Await(dirHandlePromise)
-	if err != nil {
-		return nil, fmt.Errorf("cant get the git-calendar-data folder handle: %w", err)
+	// ensure directory exists
+	if err := fs.MkdirAll(DirName, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create dir: %w", err)
 	}
 
-	return opfs.New(dirHandle), nil
+	// chroot into the directory
+	chrooted, err := fs.Chroot(DirName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to chroot: %w", err)
+	}
+
+	return chrooted, nil
 }
