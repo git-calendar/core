@@ -1,9 +1,8 @@
 //go:build js && wasm
 
-package filesystem
+package opfs
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -19,24 +18,11 @@ import (
 	"github.com/go-git/go-billy/v5/helper/chroot"
 )
 
-const DirName = "git-calendar-data"
-
-func GetFS() (billy.Filesystem, error) {
-	rootHandle := js.Global().Get("opfsRootHandle")
-	if rootHandle.IsUndefined() {
-		return nil, errors.New("opfsRootHandle not initialized")
-	}
-
-	return &OPFS{
-		root: rootHandle,
-	}, nil
-}
-
 // Origin private file system
 //
 // https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system
 type OPFS struct {
-	root js.Value // FileSystemDirectoryHandle
+	RootHandle js.Value // FileSystemDirectoryHandle
 }
 
 var _ billy.Filesystem = (*OPFS)(nil) // makes sure that it implements all the interface methods, it wont compile without it
@@ -375,7 +361,7 @@ func (fs *OPFS) applyFlags(f *OPFSFile, flag int) error {
 func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 	parts := strings.Split(path, "/")
 
-	dir := fs.root
+	dir := fs.RootHandle
 	for _, part := range parts {
 		if part == "" || part == "." {
 			continue
