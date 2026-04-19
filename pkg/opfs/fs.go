@@ -3,13 +3,13 @@
 package opfs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"syscall/js"
 	"time"
@@ -46,7 +46,7 @@ func (fs *OPFS) Join(elem ...string) string {
 
 func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.File, error) {
 	create := flag&os.O_CREATE != 0
-	fullPath = normalizePath(fullPath)
+	fullPath = path.Clean(fullPath)
 
 	var err error
 	defer func() { // recover any panic that could happen along the way: Call()
@@ -58,6 +58,7 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 	// check the cache
 	inodeCacheMu.Lock()
 	defer inodeCacheMu.Unlock()
+
 	if inode, ok := inodeCache[fullPath]; ok && inode != nil {
 		inode.refs++
 		f := &OPFSFile{
@@ -75,7 +76,7 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 	// "cache miss", create the inode
 
 	// get direct parent dir handle
-	pathOnly, fileName := filepath.Split(fullPath)
+	pathOnly, fileName := path.Split(fullPath)
 	dirHandle, err := fs.getDirectoryHandle(pathOnly, create)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -93,11 +94,18 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 		return nil, fmt.Errorf("failed to get file handle: %w", err)
 	}
 
+	file, err := Await(handle.Call("getFile"))
+	if err != nil {
+		return nil, err
+	}
+
 	// cache the inode
 	inode := &opfsInode{
-		handle: handle,
-		path:   fullPath,
-		refs:   1,
+		handle:  handle,
+		path:    fullPath,
+		refs:    1,
+		lastMod: time.UnixMilli(int64(file.Get("lastModified").Int())),
+		buf:     nil, // will be lazy loaded
 	}
 	inodeCache[fullPath] = inode
 
@@ -113,23 +121,15 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 	return f, err
 }
 
-func (fs *OPFS) Remove(path string) error {
-	if path == "" {
-		return fmt.Errorf("invalid remove path: %q", path)
+func (fs *OPFS) Remove(fullPath string) error {
+	if fullPath == "" {
+		return fmt.Errorf("invalid remove path: %q", fullPath)
 	}
 
-	path = normalizePath(path)
-
-	inodeCacheMu.Lock()
-	if inode, ok := inodeCache[path]; ok {
-		tmpFile := &OPFSFile{inode: inode}
-		tmpFile.closeAccess() // ignore error, were removing it anyway
-		delete(inodeCache, path)
-	}
-	inodeCacheMu.Unlock()
+	fullPath = path.Clean(fullPath)
 
 	// get direct parent dir handle
-	dirPath, name := fs.split(path)
+	dirPath, name := fs.split(fullPath)
 	dirHandle, err := fs.getDirectoryHandle(dirPath, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -162,7 +162,9 @@ func (fs *OPFS) Rename(oldpath, newpath string) error {
 	// https://developer.mozilla.org/en-US/docs/Web/API/File_System_API#api.FileSystemHandle
 
 	// try "move" if the browser supports it (Firefox and Safari as of 2025)
-	// TODO
+	if err := fs.tryMove(oldpath, newpath); err == nil {
+		return nil // moved ok
+	}
 
 	// ------- copying workaround -------
 	// open file
@@ -283,9 +285,11 @@ func (fs *OPFS) Open(name string) (billy.File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
+func (fs *OPFS) Stat(fullPath string) (os.FileInfo, error) {
+	fullPath = path.Clean(fullPath)
+
 	// get direct parent dir handle
-	path, name := fs.split(path)
+	path, name := fs.split(fullPath)
 	parentDirHandle, err := fs.getDirectoryHandle(path, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -294,9 +298,23 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
 	}
 
-	defer func() { // recover any panic
+	// ---- check inode cache first (IMPORTANT) ----
+	inodeCacheMu.Lock()
+	inode, ok := inodeCache[fullPath]
+	inodeCacheMu.Unlock()
+
+	if ok && inode != nil {
+		return &OPFSFileInfo{
+			name:    name,
+			size:    int64(len(inode.buf)),
+			modTime: inode.lastMod,
+			isDir:   false,
+		}, nil
+	}
+
+	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS Stat %q failed: %+v", path, r)
+			err = fmt.Errorf("OPFS Stat %q failed: %+v", fullPath, r)
 		}
 	}()
 
@@ -305,10 +323,11 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 	handle, err := Await(parentDirHandle.Call("getFileHandle", name))
 	if err == nil {
 		// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/getFile
-		file, err := Await(handle.Call("getFile")) // returns Promise<File>
+		file, err := Await(handle.Call("getFile"))
 		if err != nil {
 			return nil, err
 		}
+
 		return &OPFSFileInfo{
 			name:    name,
 			size:    int64(file.Get("size").Int()),                         // native File(Blob) "size" property
@@ -356,8 +375,8 @@ func (fs *OPFS) applyFlags(f *OPFSFile, flag int) error {
 
 	if flag&os.O_APPEND != 0 {
 		// prepare the file for appending
-		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
-		f.offset = int64(size)                       // set the offset to the end so that future Write() calls append
+		f.inode.ensureLoaded()
+		f.offset = int64(len(f.inode.buf))
 	}
 
 	return nil
@@ -441,4 +460,35 @@ func Await(p js.Value) (js.Value, error) {
 		catch.Release()
 		return js.Undefined(), err
 	}
+}
+
+func (fs *OPFS) tryMove(oldpath, newpath string) error {
+	// get old dir handle
+	oldDirPath, oldName := fs.split(oldpath)
+	oldDirHandle, err := fs.getDirectoryHandle(oldDirPath, false)
+	if err != nil {
+		return err
+	}
+
+	// get old file handle
+	oldFileHandle, err := Await(oldDirHandle.Call("getFileHandle", oldName))
+	if err != nil {
+		return err
+	}
+
+	// get new dir handle
+	newPath, newName := fs.split(newpath)
+	newDirHandle, err := fs.getDirectoryHandle(newPath, true)
+	if err != nil {
+		return err
+	}
+
+	// check if move exists
+	move := oldFileHandle.Get("move")
+	if move.IsUndefined() {
+		return errors.New("move not supported")
+	}
+
+	_, err = Await(move.Invoke(newDirHandle, newName))
+	return err
 }

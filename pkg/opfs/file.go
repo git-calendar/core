@@ -3,9 +3,11 @@
 package opfs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"syscall/js"
+	"time"
 
 	"github.com/go-git/go-billy/v5"
 )
@@ -28,29 +30,28 @@ func (f *OPFSFile) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
-	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("writeat: failed to open access: %w", err)
+func (f *OPFSFile) WriteAt(p []byte, off int64) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	f.inode.ensureLoaded()
+
+	end := off + int64(len(p))
+
+	// grow buffer if needed
+	if end > int64(len(f.inode.buf)) {
+		newBuf := make([]byte, end)
+		copy(newBuf, f.inode.buf)
+		f.inode.buf = newBuf
 	}
 
-	defer func() { // // recover a panic from Get("Uint8Array") or Call("write")
-		if r := recover(); r != nil {
-			n = 0
-			err = fmt.Errorf("OPFS File WriteAt failed: %+v", r)
-		}
-	}()
+	n := copy(f.inode.buf[off:end], p)
 
-	// create a byte array in js
-	buf := js.Global().Get("Uint8Array").New(len(p))
+	f.inode.dirty = true
+	f.inode.lastMod = time.Now()
 
-	// copy the data from Go to JS
-	js.CopyBytesToJS(buf, p)
-
-	// call .write(data, {at: offset}) in JS
-	n = f.inode.access.Call("write", buf, map[string]any{"at": off}).Int()
-
-	// std os.File.WriteAt does NOT move the file offset
-	return // returns n, err actually (named return values)
+	// std os.File.WriteAt does NOT move the file offset, but rather only returns the n of written bytes
+	return n, nil
 }
 
 func (f *OPFSFile) Read(p []byte) (int, error) {
@@ -64,44 +65,19 @@ func (f *OPFSFile) Read(p []byte) (int, error) {
 }
 
 func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
-	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("readat: failed to open access: %w", err)
+	f.inode.ensureLoaded()
+
+	n = copy(p, f.inode.buf[off:])
+	if n < len(p) {
+		err = io.EOF // short read means we hit the end
 	}
-
-	defer func() { // recover a panic from Get("Uint8Array") or Call("read")
-		if r := recover(); r != nil {
-			n = 0
-			err = fmt.Errorf("OPFS File ReadAt failed: %+v", r)
-		}
-	}()
-
-	// create a byte array in JS
-	buf := js.Global().Get("Uint8Array").New(len(p))
-
-	// call .read(data, {at: offset}) in JS
-	n = f.inode.access.Call("read", buf, map[string]any{"at": off}).Int()
-
-	if n == 0 {
-		return 0, io.EOF
-	}
-
-	// copy all the data from JS to Go
-	js.CopyBytesToGo(p[:n], buf) // p[:n] so that it copies less bytes when less were returned
-
-	return // returns n, err actually (named return values)
+	return n, err
 }
 
-func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
-	if err := f.openAccess(); err != nil {
-		return 0, fmt.Errorf("seek: failed to open access: %w", err)
-	}
+func (f *OPFSFile) Seek(offset int64, whence int) (int64, error) {
+	f.inode.ensureLoaded()
 
-	defer func() { // recover a panic from Call("getSize")
-		if r := recover(); r != nil {
-			newOffset = 0
-			err = fmt.Errorf("OPFS File Seek failed: %+v", r)
-		}
-	}()
+	var newOffset int64
 
 	switch whence {
 	case io.SeekStart:
@@ -111,9 +87,8 @@ func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 		// if seek from currect offset, add the offset to the current one
 		newOffset = f.offset + offset
 	case io.SeekEnd:
-		// if seek from end, get the file size and add the offset to the end
-		size := f.inode.access.Call("getSize").Int() // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/getSize
-		newOffset = int64(size) + offset
+		// if seek from end, add the offset to file size
+		newOffset = int64(len(f.inode.buf)) + offset
 	default:
 		return 0, fmt.Errorf("invalid whence: %d", whence)
 	}
@@ -126,7 +101,7 @@ func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 	// set the new offset
 	f.offset = newOffset
 
-	return // returns newOffset, err actually (named return values)
+	return newOffset, nil
 }
 
 func (f *OPFSFile) Name() (name string) {
@@ -136,7 +111,7 @@ func (f *OPFSFile) Name() (name string) {
 		}
 	}()
 
-	if f.inode.handle.Truthy() { // basically "if f.access != nil"
+	if f.inode.handle.Truthy() { // basically "if f.inode.handle != nil"
 		return f.inode.handle.Get("name").String()
 	}
 
@@ -144,27 +119,34 @@ func (f *OPFSFile) Name() (name string) {
 }
 
 func (f *OPFSFile) Truncate(size int64) error {
-	if err := f.openAccess(); err != nil {
-		return fmt.Errorf("truncate: failed to open access: %w", err)
+	if size < 0 {
+		return errors.New("negative size")
 	}
+	f.inode.ensureLoaded()
 
-	var err error
-	defer func() { // recover a panic from Call("truncate")
-		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS File Truncate failed: %+v", r)
-		}
-	}()
+	curSize := int64(len(f.inode.buf))
 
-	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemSyncAccessHandle/truncate
-	f.inode.access.Call("truncate", size)
+	switch {
+	case size < curSize:
+		// shrink
+		f.inode.buf = f.inode.buf[:size]
+
+	case size > curSize:
+		// grow (zero-fill)
+		newBuf := make([]byte, size)
+		copy(newBuf, f.inode.buf)
+		f.inode.buf = newBuf
+	}
 
 	if f.offset > size {
 		f.offset = size
 	}
-	return err
+	f.inode.dirty = true
+	f.inode.lastMod = time.Now()
+	return nil
 }
 
-func (f *OPFSFile) Close() error {
+func (f *OPFSFile) Close() (err error) {
 	inodeCacheMu.Lock()
 	defer inodeCacheMu.Unlock()
 
@@ -175,15 +157,46 @@ func (f *OPFSFile) Close() error {
 	f.inode.refs--
 
 	if f.inode.refs <= 0 {
-		// properly flush and close the inode handles
-		err := f.closeAccess()
+		if f.inode.dirty {
+			defer func() { // recover a panic from Call()
+				if r := recover(); r != nil {
+					err = fmt.Errorf("OPFS File Close paniced: %+v", r)
+				}
+			}()
+
+			// create a byte array in js
+			buf := js.Global().Get("Uint8Array").New(len(f.inode.buf))
+			// copy the data from Go to JS
+			js.CopyBytesToJS(buf, f.inode.buf)
+
+			access, err := Await(f.inode.handle.Call("createSyncAccessHandle"))
+			if err == nil {
+				access.Call("write", buf, map[string]any{"at": 0})
+				access.Call("truncate", len(f.inode.buf))
+				// access.Call("flush")
+				access.Call("close")
+			} else {
+				// fallback to slower async write
+				writable, err2 := Await(f.inode.handle.Call("createWritable"))
+				if err2 != nil {
+					return errors.Join(err, err2)
+				}
+
+				_, _ = Await(writable.Call("write", map[string]any{
+					"type":     "write",
+					"position": 0,
+					"data":     buf,
+				}))
+
+				_, _ = Await(writable.Call("truncate", len(f.inode.buf)))
+				// _, _ = Await(writable.Call("flush"))
+				_, _ = Await(writable.Call("close"))
+			}
+		}
 
 		// remove from inode cache
-		// (important bcs we cant have a dangling reference to a inode, we wouldnt be able to delete it!)
+		// (important bcs we can't have a dangling reference to a inode, we wouldn't be able to delete it!)
 		delete(inodeCache, f.inode.path)
-
-		f.inode = nil
-		return err
 	}
 
 	f.inode = nil
@@ -198,46 +211,4 @@ func (f *OPFSFile) Lock() error {
 func (f *OPFSFile) Unlock() error {
 	// implementing like so: "f.inode.mu.Lock()" breaks it for some reason
 	return nil // will do nothing i guess
-}
-
-// -----------------------------------------------------------
-
-// Helper function to open sync access for file
-func (f *OPFSFile) openAccess() error {
-	f.inode.mu.Lock()
-	defer f.inode.mu.Unlock()
-
-	// skip if already has access
-	if f.inode.access.Truthy() { // basically "if f.access != nil"
-		return nil
-	}
-
-	var err error
-	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
-	f.inode.access, err = Await(f.inode.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
-	return err
-}
-
-// Helper to close just the access handle
-func (f *OPFSFile) closeAccess() error {
-	f.inode.mu.Lock()
-	defer f.inode.mu.Unlock()
-
-	if !f.inode.access.Truthy() {
-		return nil // already closed
-	}
-
-	var err error
-	defer func() { // recover a panic from Call("flush"/"close")
-		if r := recover(); r != nil {
-			err = fmt.Errorf("OPFS File Close failed: %+v", r)
-		}
-		f.inode.access = js.Undefined()
-		f.inode.handle = js.Undefined()
-	}()
-
-	f.inode.access.Call("flush")
-	f.inode.access.Call("close")
-
-	return err
 }
