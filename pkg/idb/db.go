@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package indexeddb implements the billy.Filesystem interface backed by IndexedDB store
+// Package idb implements the billy.Filesystem interface backed by IndexedDB store.
 // It is only usable in a js/wasm build targeting a browser environment.
 // https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
 package idb
@@ -78,15 +78,15 @@ func New(name string, version int) (*IndexedDB, error) {
 
 func (idb *IndexedDB) Create(filename string) (billy.File, error) {
 	key := idb.absolutePath(filename)
-	fileInfo := IDBFileInfo{
+
+	tx := NewTx()
+	tx.Delete(contentStoreName, key) // clear old content if any
+	tx.Put(infoStoreName, key, (&IDBFileInfo{
 		name:    path.Base(filename),
 		size:    0,
 		modTime: time.Now(),
 		mode:    0o666,
-	}
-
-	tx := NewTx()
-	tx.Put(infoStoreName, key, fileInfo.toJS())
+	}).toJS())
 	if err := tx.Commit(idb.jsDB); err != nil {
 		return nil, fmt.Errorf("failed to create file %s in idb: %w", filename, err)
 	}
@@ -208,12 +208,12 @@ func (idb *IndexedDB) Remove(name string) error {
 		return os.ErrNotExist
 	}
 
-	fullpath := idb.absolutePath(name)
+	key := idb.absolutePath(name)
 
 	if !info.IsDir() {
 		tx := NewTx()
-		tx.Delete(infoStoreName, fullpath)
-		tx.Delete(contentStoreName, fullpath)
+		tx.Delete(infoStoreName, key)
+		tx.Delete(contentStoreName, key)
 		if err := tx.Commit(idb.jsDB); err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (idb *IndexedDB) Remove(name string) error {
 		}
 
 		tx := NewTx()
-		tx.Delete(infoStoreName, fullpath)
+		tx.Delete(infoStoreName, key)
 		if err := tx.Commit(idb.jsDB); err != nil {
 			return err
 		}
@@ -454,7 +454,7 @@ func (idb *IndexedDB) applyFlags(f *IDBFile, flag int) error {
 
 	if flag&os.O_APPEND != 0 {
 		// prepare the file for appending
-		info, err := idb.Stat(f.key)
+		info, err := idb.Stat(f.relPath)
 		if err != nil {
 			return fmt.Errorf("failed to stat file: %w", err)
 		}
