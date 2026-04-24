@@ -10,14 +10,14 @@ import (
 )
 
 type IDBFile struct {
-	fs      *IndexedDB //
-	key     string     // The key in IndexedDB (absolute path).
-	relPath string     // The path relative to fs.
-	offset  int64      // The current offset in bytes.
+	fs      *IndexedDB // A reference to it's fs.
+	key     string     // The key used in IndexedDB (absolute filepath).
+	relPath string     // Path relative to fs.
+	offset  int64      // Current offset in bytes.
 }
 
 func (f *IDBFile) Name() string {
-	return f.relPath // returns the filepath RELATIVE to current fs
+	return f.relPath // returns the filepath RELATIVE to current fs root
 }
 
 func (f *IDBFile) Read(p []byte) (int, error) {

@@ -18,9 +18,9 @@ import (
 )
 
 type IndexedDB struct {
-	name string
-	jsDB js.Value
-	root string
+	name string   // The DB name.
+	jsDB js.Value // JS IDBDatabase object (https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
+	root string   // The current abosolute root.
 }
 
 const (
