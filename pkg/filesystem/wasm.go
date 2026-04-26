@@ -9,6 +9,7 @@ import (
 
 const DirName = "git-calendar-data" // the storeName for IndexedDB
 
+// Returns a FS inside IndexedDB.
 func GetFS() (billy.Filesystem, error) {
 	return idb.New(DirName, 1)
 }

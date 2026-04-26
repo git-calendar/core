@@ -135,8 +135,8 @@ func (idb *IndexedDB) OpenFile(filename string, flag int, perm os.FileMode) (bil
 	}
 
 	if !exists && create {
-		// check if parent exists
-		if _, err := idb.Stat(path.Dir(filename)); err != nil {
+		// create all parent dirs
+		if err := idb.MkdirAll(path.Dir(filename), 0o755); err != nil {
 			return nil, err
 		}
 

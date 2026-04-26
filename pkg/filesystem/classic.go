@@ -13,7 +13,7 @@ import (
 
 const DirName string = ".git-calendar-data"
 
-// Returns a FS starting from users home directory
+// Returns a FS starting from users home directory.
 func GetFS() (billy.Filesystem, error) {
 	// get user home dir
 	home, err := os.UserHomeDir()
