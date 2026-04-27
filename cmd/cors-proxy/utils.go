@@ -24,11 +24,12 @@ var roundTripper http.RoundTripper = &http.Transport{
 		Timeout:   5 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}).DialContext,
-	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   1000,
 	IdleConnTimeout:       60 * time.Second,
 	TLSHandshakeTimeout:   5 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
 	ResponseHeaderTimeout: 10 * time.Second,
+	ForceAttemptHTTP2:     true,
 }
 
 func isAllowedHost(u *url.URL) bool {
