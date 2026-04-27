@@ -106,7 +106,7 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	}
 }
 
-// Removes a real (basic/repeating parent) event from the calendar. Use RemoveRepeatingEvent method for repeating events.
+// Removes a real (basic/parent) event from the calendar. Use RemoveRepeatingEvent method for repeating events.
 func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
@@ -228,7 +228,7 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
-// Updates single generated/child event by adding a repeat exception to its Parent and creating a brand new event instead.
+// Updates single generated/child event by adding it to its Parent repeat exceptions and creating a brand new event instead.
 func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	parent, ok := c.events[updated.ParentId]
 	if !ok || parent == nil || !parent.IsParent() {
@@ -237,7 +237,7 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 
 	// update parent event with the new exception
 	parent.Repeat.Exceptions = append(updated.Repeat.Exceptions, updated.Id)
-	if err := c.saveAndCommitEvent(updated, fmt.Sprintf("Added exception to parent '%s'", updated.Id)); err != nil {
+	if err := c.saveAndCommitEvent(updated, fmt.Sprintf("Added exception to parent '%s'", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to save parent event: %w", err)
 	}
 
@@ -283,7 +283,7 @@ func (c *Core) updateFollowingChildren(event *Event) (*Event, error) {
 // Both old and new arguments are child events.
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	if old.IsParent() || new.IsParent() {
-		return nil, fmt.Errorf("updateRepeatingAll works with child event")
+		return nil, fmt.Errorf("updateRepeatingAll works with child events")
 	}
 
 	parent, ok := c.events[new.ParentId]
@@ -330,7 +330,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		}
 	}
 
-	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Updated parent updated '%s'", new.Id)); err != nil {
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Updated time series (parent '%s')", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to save updated to repo: %w", err)
 	}
 
@@ -356,10 +356,11 @@ func (c *Core) removeCurrentChild(event *Event) error {
 		}
 	}
 
-	// TODO: cleanup the parent if all children are in exceptions
-	// either Count != 0 and count = len(exceptions) or hard to know from the Until
+	// TODO: finish this
+	// cleanup the Parent if all Children are in Exceptions
+	// either (Count != 0 and Count = len(Exceptions)) or TODO: hard to know from the Until
 	if (parent.Repeat.Count != 0 && len(parent.Repeat.Exceptions) == parent.Repeat.Count) || (!parent.Repeat.Until.IsZero() && false) { // ughhh
-		err := c.deleteAndCommitEvent(parent.ParentId, fmt.Sprintf("Delete event '%s'", event.Id))
+		err := c.deleteAndCommitEvent(parent.Id, fmt.Sprintf("Delete event '%s'", parent.Id))
 		if err != nil {
 			return fmt.Errorf("failed to delete event from git: %w", err)
 		}
