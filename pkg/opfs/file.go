@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package filesystem
+package opfs
 
 import (
 	"fmt"
@@ -214,7 +214,7 @@ func (f *OPFSFile) openAccess() error {
 
 	var err error
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createSyncAccessHandle
-	f.inode.access, err = await(f.inode.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
+	f.inode.access, err = Await(f.inode.handle.Call("createSyncAccessHandle")) // returns Promise<FileSystemSyncAccessHandle>
 	return err
 }
 

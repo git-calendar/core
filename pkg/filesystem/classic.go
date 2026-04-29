@@ -4,8 +4,10 @@ package filesystem
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/helper/chroot"
 	"github.com/go-git/go-billy/v5/osfs"
 )
 
@@ -21,5 +23,16 @@ func GetFS() (billy.Filesystem, error) {
 		return nil, err
 	}
 
-	return osfs.New(home), nil
+	// ensure the directory exists on the real filesystem
+	rootPath := filepath.Join(home, DirName)
+	if err := os.MkdirAll(rootPath, 0o755); err != nil {
+		return nil, err
+	}
+
+	// base filesystem rooted at home
+	base := osfs.New(home)
+
+	// chroot into DirName
+	scoped := chroot.New(base, DirName)
+	return scoped, nil
 }

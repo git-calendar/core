@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package filesystem
+package opfs
 
 import (
 	"path/filepath"
