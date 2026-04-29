@@ -156,30 +156,21 @@ func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
 // (stored in bytes 12–15, big-endian) shifted by the given duration.
 // Returns uuid.Nil if the input is not version 8 or is invalid.
 func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
-	idBuf := make([]byte, 16)
-	copy(idBuf, id[:]) // copy full 16 bytes
-
-	// check UUID version (high 4 bits of byte 6 should be 8 for v8)
-	if (idBuf[6] >> 4) != 8 {
+	// version Check (Byte 6, high 4 bits)
+	if (id[6] >> 4) != 8 {
 		return uuid.Nil
 	}
 
-	// read timestamp (last 4 bytes)
-	origTime := binary.BigEndian.Uint32(idBuf[12:16])
+	// extract original timestamp (big-endian bytes 12-15)
+	origTime := binary.BigEndian.Uint32(id[12:16])
 
-	// shift time
-	shiftedTime := uint32(
-		time.Unix(int64(origTime), 0).
-			Add(duration).
-			Unix(),
-	)
+	// calculate shift in whole seconds
+	secondsShift := int64(duration.Seconds())
+	shiftedTime := uint32(int64(origTime) + secondsShift)
 
-	// write back shifted timestamp
-	binary.BigEndian.PutUint32(idBuf[12:16], shiftedTime)
+	// create new UUID and write back
+	newId := id // UUID is [16]byte, so this is a value copy
+	binary.BigEndian.PutUint32(newId[12:16], shiftedTime)
 
-	newId, err := uuid.FromBytes(idBuf)
-	if err != nil {
-		return uuid.Nil
-	}
 	return newId
 }

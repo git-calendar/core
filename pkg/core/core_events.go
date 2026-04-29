@@ -234,18 +234,23 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
+	if parent.Repeat == nil {
+		return nil, fmt.Errorf("parent is not a repeating event, WTF")
+	}
+
 	// update parent event with the new exception
-	parent.Repeat.Exceptions = append(updated.Repeat.Exceptions, updated.Id)
-	if err := c.saveAndCommitEvent(updated, fmt.Sprintf("Added exception to parent '%s'", parent.Id)); err != nil {
+	parent.Repeat.Exceptions = append(parent.Repeat.Exceptions, updated.Id)
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Added exception to parent '%s'", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to save parent event: %w", err)
 	}
 
 	// detach updated from repeating time series
-	updated.Repeat = nil
-	updated.ParentId = uuid.Nil
-	updated.Id = uuid.Nil // let it create a new one
+	detachedEvent := *updated         // shallow copy
+	detachedEvent.Repeat = nil        // not repeating anymore
+	detachedEvent.ParentId = uuid.Nil // not child anymore
+	detachedEvent.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
 
-	return c.CreateEvent(*updated) // save as new
+	return c.CreateEvent(detachedEvent) // save as new
 }
 
 // Splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
@@ -263,19 +268,21 @@ func (c *Core) updateFollowingChildren(event *Event) (*Event, error) {
 	}
 
 	// create the new parent for the second half of the time series
-	event.ParentId = uuid.Nil // not child anymore
-	event.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
+	newEvent := *event           // shallow copy
+	newEvent.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
+	newEvent.ParentId = uuid.Nil // not child anymore
 
-	if event.Repeat.Count != 0 {
+	if newEvent.Repeat.Count != 0 {
 		// TODO: shorten the repeat for the second half
 	}
 
-	newParent, err := c.CreateEvent(*event)
+	createdEvent, err := c.CreateEvent(newEvent)
 	if err != nil {
+		// TODO: rollback?
 		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
 
-	return newParent, nil
+	return createdEvent, nil
 }
 
 // Updates the entire repeating series by only modifying the parent. That means all generated child events get updated as well.
@@ -309,8 +316,8 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		}
 	}
 
-	if new.Repeat == nil { // updated event does not repeat
-		parent.Repeat = nil
+	if repeatChanged { // updated event does not repeat
+		parent.Repeat = new.Repeat
 	}
 
 	parent.Title = new.Title
