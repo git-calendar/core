@@ -9,34 +9,31 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-22.04 # has to be older
+    name: Run Tests
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25.5"
-          cache: true
+          go-version-file: 'go.mod'
 
-      # standard go tests
       - name: Run Standard Tests
-        run: go test -v ./...
-
-      # wasm tests
+        run: go test -v -race ./...
+      # WASM tests (needs: ubuntu-22.04)
       # - name: Install wasmbrowsertest
       #   run: |
       #     go install github.com/agnivade/wasmbrowsertest@latest
       #     mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
-
       # - name: Install Chrome
       #   uses: browser-actions/setup-chrome@latest
-
       # - name: Run WASM Tests
       #   run: GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm # no e2e cuz they wont work (no opfsRootHandle exists etc.)
 
   build-and-release:
+    name: Build and Release
     needs: tests # only release if security AND all tests pass
     if: startsWith(github.ref, 'refs/tags/') # only with tag push (vX.X.X)
     runs-on: ubuntu-latest
@@ -44,20 +41,20 @@ jobs:
       contents: write
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25.5"
-          cache: true
+          go-version-file: 'go.mod'
 
-      - name: Build
+      - name: Build WASM
         run: make production_build_web # just web for now
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/web/core.wasm
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -5,8 +5,14 @@
   - [ ] indexing
     - [x] interval-btree?
     - [ ] smart indexing (index file)
-  - [x] repeating events
+  - [ ] repeating events
     - infinite shadow (ghost events)
+    - [x] basic repetition
+    - [x] update repeating
+    - [ ] remove repeating
+      - pkg/core/core_events.go:139-143
+      - pkg/core/core_events.go:359
+    - [ ] tests
   - [x] connect repeating event exceptions
     - exception needs to have uuid
     - time encoded inside uuidv8

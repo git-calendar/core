@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/lmittmann/tint"
 )
 
 var cfg *config
@@ -22,7 +24,7 @@ func main() {
 	if cfg.Production {
 		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true})) // JSON logging
 	} else {
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // basic logging
+		logger = slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug, AddSource: true, TimeFormat: time.DateTime})) // basic logging
 	}
 	slog.SetDefault(logger)
 

@@ -8,15 +8,15 @@ It’s used as a workaround for browser security restrictions when accessing thi
 ## Build and run
 ### Bare metal
 ```sh
-go run ./cmd/cors-proxy
-```
-```sh
-go build -o ./build/cors-proxy ./cmd/cors-proxy
+cd cmd/cors-proxy
+go run .
+go build .
 ```
 
 ### Podman/Docker
 ```sh
-podman build -t cors-proxy -f cmd/cors-proxy/Dockerfile .
+cd cmd/cors-proxy
+podman build -t cors-proxy .
 ```
 ```sh
 podman run -d --rm \

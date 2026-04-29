@@ -15,9 +15,8 @@ build_android: create_build_dir
 #build_ios: create_build_dir
 # 	gomobile bind -target=ios ./pkg/api # TODO
 
-build_web: create_build_dir
-	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm     # build the wasm
-	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js  # copy wasm_exec.js "glue"
+build_web: create_build_dir wasm_glue
+	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm
 
 
 
@@ -25,20 +24,26 @@ build_web: create_build_dir
 # Production builds (ldflags make the binary smaller)
 # -------------------------------------------------------------------------------------------
 
-prod: production_build_android production_build_web
+prod: prod_build_android prod_build_web
 
-production_build_android: create_build_dir
+prod_build_android: create_build_dir
 	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./pkg/api
 
-production_build_web: create_build_dir
-	GOOS=js GOARCH=wasm go build -ldflags="-w -s" -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm  # build the wasm
-	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js                # copy wasm_exec.js "glue"
+prod_build_web: create_build_dir wasm_glue
+	GOOS=js GOARCH=wasm go build -ldflags="-w -s" -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm
 
 
 
 # -------------------------------------------------------------------------------------------
 # Other
 # -------------------------------------------------------------------------------------------
+
+# copy wasm_exec.js "glue"
+wasm_glue:
+	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js
+
+proxy:
+	cd cmd/cors-proxy && go run .
 
 create_build_dir:
 	mkdir -p ${BUILD_DIR}/android
@@ -49,11 +54,16 @@ clean:
 	rm -rf ${BUILD_DIR}
 	gomobile clean
 
+# @echo "  build_ios - iOS XCFramework (works on MacOS only)"
 help:
 	@echo "Available targets:"
-	@echo "  all               - build Android + iOS + Web"
-	@echo "  build_android     - Android AAR"
-	@echo "  build_ios         - iOS XCFramework (works on MacOS only)"
-	@echo "  build_web         - WASM module + wasm_exec.js"
-	@echo "  prod              - production (stripped) builds"
-	@echo "  clean             - remove build artifacts"
+	@echo "  all                  - build Android + iOS + Web"
+	@echo "  build_android        - Android AAR"
+	@echo "  build_web            - WASM module + wasm_exec.js"
+	@echo ""
+	@echo "  prod                 - production (stripped) builds"
+	@echo "  prod_build_android   - production Android AAR"
+	@echo "  prod_build_web       - production WASM module + wasm_exec.js"
+	@echo ""
+	@echo "  proxy                - runs CORS proxy on localhost"
+	@echo "  clean                - remove build artifacts"
