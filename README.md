@@ -1,7 +1,6 @@
 # Git Calendar Core
 [![Go Report Card](https://goreportcard.com/badge/github.com/git-calendar/core)](https://goreportcard.com/report/github.com/git-calendar/core)
 
-
 Related projects:
 - [CORS proxy](./cmd/cors-proxy)
 - Web client: [git-calendar/web-client](https://github.com/git-calendar/web-client)

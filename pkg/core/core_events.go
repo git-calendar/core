@@ -260,6 +260,10 @@ func (c *Core) updateFollowingChildren(event *Event) (*Event, error) {
 		return nil, fmt.Errorf("no valid parent found")
 	}
 
+	// save originals for rollback
+	originalUntil := parent.Repeat.Until
+	originalCount := parent.Repeat.Count
+
 	parent.Repeat.Until = event.From // cap parent at start of change
 	parent.Repeat.Count = 0          // enforce Until logic over Count
 
@@ -273,14 +277,31 @@ func (c *Core) updateFollowingChildren(event *Event) (*Event, error) {
 	newEvent.ParentId = uuid.Nil // not child anymore
 
 	if newEvent.Repeat.Count != 0 {
-		// TODO: shorten the repeat for the second half
+		// shorten the repeat for the second half
+		_, elapsed := firstOccurrenceAtOrAfter(event.From, parent)
+		if elapsed <= 0 {
+			// Split is at or before the parent's first occurrence - nothing to subtract.
+			newEvent.Repeat.Count = originalCount
+		} else {
+			newEvent.Repeat.Count = originalCount - elapsed
+			if newEvent.Repeat.Count <= 0 {
+				newEvent.Repeat.Count = 1
+			}
+		}
 	}
 
 	createdEvent, err := c.CreateEvent(newEvent)
 	if err != nil {
-		// TODO: rollback?
+		// rollback the parent cap
+		parent.Repeat.Until = originalUntil
+		parent.Repeat.Count = originalCount
+		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("Rolled back cap on parent event '%s'", parent.Id)); rbErr != nil {
+			return nil, fmt.Errorf("failed to create new event: %w; rollback also failed: %v", err, rbErr)
+		}
 		return nil, fmt.Errorf("failed to create new event: %w", err)
 	}
+
+	// TODO: update series with exceptions does not work as intended...
 
 	return createdEvent, nil
 }
@@ -316,7 +337,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		}
 	}
 
-	if repeatChanged { // updated event does not repeat
+	if repeatChanged {
 		parent.Repeat = new.Repeat
 	}
 

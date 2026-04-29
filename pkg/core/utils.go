@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/binary"
-	"errors"
 	"net/url"
 	"path"
 	"strings"
@@ -57,8 +56,8 @@ func firstOccurrenceAtOrAfter(searchStart time.Time, ev *Event) (time.Time, int)
 
 func containsTime(exceptions []uuid.UUID, t time.Time) bool {
 	for _, ex := range exceptions {
-		exTime, err := getTimeFromUUID(ex)
-		if err != nil {
+		exTime := getTimeFromUUID(ex)
+		if exTime.IsZero() {
 			continue
 		}
 		if exTime.Equal(t) {
@@ -124,8 +123,8 @@ func calendarNameFromUrl(u url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// Generates custom uuid from parentId and some time. It uses 6 bytes for the parent and 6 bytes for the time
-// If the generation fails, it returns uuid.New()
+// Generates custom uuid from parentId and some time. It uses 6 bytes for the parent and 6 bytes for the time.
+// If the generation fails, it returns uuid.New().
 func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
 	copy(idBuf[:6], parentId[:6])      // take first 6 bytes from parentId
@@ -143,17 +142,16 @@ func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
 }
 
 // extracts time from custom UUIDv8
-func getTimeFromUUID(id uuid.UUID) (time.Time, error) {
+func getTimeFromUUID(id uuid.UUID) time.Time {
 	// check if the id is v8
 	if id[6] != 0x80 {
-		return time.Time{}, errors.New("invalid UUID")
+		return time.Time{}
 	}
 	unix32 := binary.BigEndian.Uint32(id[12:16])
-	return time.Unix(int64(unix32), 0), nil
+	return time.Unix(int64(unix32), 0)
 }
 
-// getShiftedUUID returns a copy of a UUIDv8 with its custom 32-bit timestamp
-// (stored in bytes 12–15, big-endian) shifted by the given duration.
+// getShiftedUUID returns a copy of a UUIDv8 with its custom 32-bit timestamp (stored in bytes 12–15, big-endian) shifted by the given duration.
 // Returns uuid.Nil if the input is not version 8 or is invalid.
 func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
 	// version Check (Byte 6, high 4 bits)
