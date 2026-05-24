@@ -23,6 +23,10 @@ func TestAddEvent_CreatesJsonFile(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	id := uuid.New()
 	title := "Foo Event"
 	eventIn := core.Event{
@@ -68,6 +72,10 @@ func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	id := uuid.New()
 	startTime := time.Now()
@@ -125,6 +133,10 @@ func TestAddEventAndGetEvent(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	date := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 	eventIn := core.Event{
 		Id:       uuid.New(),
@@ -157,6 +169,10 @@ func TestAddEventsAndGetThemByInterval(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	numEvents := 5
 	for i := range numEvents {
@@ -187,6 +203,10 @@ func TestAddNormalEventsAndRemoveEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	numEvents := 5
@@ -230,6 +250,10 @@ func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var events []core.Event
 	for i := range 5 {
@@ -267,6 +291,10 @@ func TestUpdateStandardEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	startTime := time.Now()
 	eventIn := core.Event{

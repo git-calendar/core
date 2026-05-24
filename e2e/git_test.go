@@ -9,15 +9,14 @@ import (
 func TestAddRemote(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.RemoveCalendar(TestCalendarName)
+	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
-		t.Errorf("failed to delete existing repo: %v", err)
+		t.Fatalf("failed to init repo: %v", err)
 	}
 
-	err = c.CreateCalendar(TestCalendarName, "")
-	if err != nil {
-		t.Errorf("failed to init repo: %v", err)
-	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	err = c.AddRemote(TestCalendarName, "github", "https://github.com/git-calendar/core.git")
 	if err != nil {

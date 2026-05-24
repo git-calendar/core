@@ -17,6 +17,10 @@ func TestCreateCalendar(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Errorf("failed to get home dir: %v", err)

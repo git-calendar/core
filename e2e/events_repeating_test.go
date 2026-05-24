@@ -22,6 +22,10 @@ func TestAddInfinitelyRepeatingEventAndGetEvents(t *testing.T) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
 	id := uuid.New()
 	startTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	eventIn := core.Event{
@@ -63,6 +67,10 @@ func TestAddCountRepeatingEventAndGetEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	const COUNT = 6
 	id := uuid.New()
@@ -107,6 +115,10 @@ func TestAddRepeatingEventsAndRemoveRepeatingEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	const COUNT = 6
 	id := uuid.New()
@@ -156,7 +168,15 @@ func TestAddRepeatingEventsAndRemoveRepeatingEvent(t *testing.T) {
 
 func TestUpdateRepeatingEvent_Current(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName, "")
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -187,7 +207,7 @@ func TestUpdateRepeatingEvent_Current(t *testing.T) {
 	updatedTarget.From = startTime.Add(time.Hour)
 	updatedTarget.To = startTime.Add(2 * time.Hour)
 
-	_, err := c.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Current)
+	_, err = c.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Current)
 	if err != nil {
 		t.Errorf("failed to update child event (Current): %v", err)
 	}
@@ -219,7 +239,15 @@ func TestUpdateRepeatingEvent_Current(t *testing.T) {
 
 func TestUpdateRepeatingEvent_Following(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName, "")
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -273,7 +301,15 @@ func TestUpdateRepeatingEvent_Following(t *testing.T) {
 
 func TestUpdateRepeatingEvent_All(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName, "")
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -305,7 +341,7 @@ func TestUpdateRepeatingEvent_All(t *testing.T) {
 		Count:     5,
 	}
 
-	_, err := c.UpdateEvent(*targetEvent)
+	_, err = c.UpdateEvent(*targetEvent)
 	if err != nil {
 		t.Errorf("failed to update child event (All): %v", err)
 	}
@@ -322,7 +358,15 @@ func TestUpdateRepeatingEvent_All(t *testing.T) {
 
 func TestUpdateEvent_FromStandardToRepeating(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName, "")
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	startTime := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
 	eventIn := core.Event{
@@ -333,7 +377,7 @@ func TestUpdateEvent_FromStandardToRepeating(t *testing.T) {
 		To:       startTime.Add(time.Hour),
 	}
 
-	_, err := c.CreateEvent(eventIn)
+	_, err = c.CreateEvent(eventIn)
 	if err != nil {
 		t.Fatalf("failed to create an event: %v", err)
 	}
@@ -367,7 +411,15 @@ func TestUpdateEvent_FromStandardToRepeating(t *testing.T) {
 
 func TestUpdateFollowing_ExceptionCarriedToNewParent(t *testing.T) {
 	c := core.NewCore()
-	_ = c.CreateCalendar(TestCalendarName, "")
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -383,7 +435,7 @@ func TestUpdateFollowing_ExceptionCarriedToNewParent(t *testing.T) {
 			Count:     count,
 		},
 	}
-	_, err := c.CreateEvent(parentEvent)
+	_, err = c.CreateEvent(parentEvent)
 	if err != nil {
 		t.Fatalf("failed to create event: %v", err)
 	}

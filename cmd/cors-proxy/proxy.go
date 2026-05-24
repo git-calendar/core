@@ -36,7 +36,7 @@ func main() {
 		Handler:        accessLog(corsMiddleware(rateLimit(mux))),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   15 * time.Second,
-		MaxHeaderBytes: 64 << 10, // 1KB
+		MaxHeaderBytes: 64 << 10, // 64KiB
 	}
 
 	slog.Info(fmt.Sprintf("configuration: %+v", *cfg))
