@@ -3,3 +3,5 @@
 .vscode/
 .idea/
 build/
+
+*_gen.go

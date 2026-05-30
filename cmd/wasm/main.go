@@ -8,135 +8,22 @@ import (
 	"github.com/git-calendar/core/pkg/api"
 )
 
-// This is the starting point which gets called from JS.
+var a *api.Api
+
 func main() {
-	api := api.NewApi()
-
-	RegisterCallbacks(api)
-
-	select {} // block infinitely
+	a = api.NewApi()
+	js.Global().Call("__appReady")
+	select {}
 }
 
-func RegisterCallbacks(api *api.Api) {
-	js.Global().Set("CalendarCore",
-		js.ValueOf(map[string]any{ // we wrap each method
-			"createCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.CreateCalendar(args[0].String(), args[1].String())
-				})
-			}),
-			"cloneCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.CloneCalendar(args[0].String(), args[1].String())
-				})
-			}),
-			"removeCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.RemoveCalendar(args[0].String())
-				})
-			}),
-			"listCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.ListCalendars()
-				})
-			}),
-			"loadCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.LoadCalendars()
-				})
-			}),
-			"pullAll": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.PullAll()
-				})
-			}),
-			"pushAll": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.PushAll()
-				})
-			}),
-			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.SetCorsProxy(args[0].String())
-				})
-			}),
-			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.CreateEvent(args[0].String())
-				})
-			}),
-			"removeEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.RemoveEvent(args[0].String())
-				})
-			}),
-			"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.GetEvent(args[0].String())
-				})
-			}),
-			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.GetEvents(args[0].String(), args[1].String())
-				})
-			}),
-			"updateEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.UpdateEvent(args[0].String())
-				})
-			}),
-			"updateRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.UpdateRepeatingEvent(args[0].String(), args[1].String(), args[2].Int())
-				})
-			}),
-			"removeRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.RemoveRepeatingEvent(args[0].String(), args[1].Int())
-				})
-			}),
-			// TODO others
-		}),
-	)
-
-	// tell JS we are ready
-	if readyFn := js.Global().Get("onWasmReady"); readyFn.Type() == js.TypeFunction {
-		readyFn.Invoke()
-	}
+func GetEvents(from, to string) (string, error) {
+	return a.GetEvents(from, to)
 }
 
-// helper to handle the async nature and error throwing of JS
-func wrapPromise(fn func() (any, error)) any {
-	handler := js.FuncOf(func(this js.Value, args []js.Value) any {
-		resolve := args[0]
-		reject := args[1]
+func LoadCalendars() error {
+	return a.LoadCalendars()
+}
 
-		go func() {
-			res, err := fn()
-			if err != nil { // create a JS new Error(message) and invoke it ("throw" it or whatever)
-				// get the error text (default behavior)
-				errorMessage := err.Error()
-
-				// check if the error is a wrapper for a JS value; if it is, try to get the "message" property and use it instead
-				if jsErr, ok := err.(js.Error); ok {
-					message := jsErr.Value.Get("message")
-					if message.Truthy() {
-						errorMessage = message.String()
-					}
-				}
-
-				// create the JS Error object
-				errorConstructor := js.Global().Get("Error")
-				reject.Invoke(errorConstructor.New(errorMessage))
-			} else { // no error, pass the result
-				resolve.Invoke(js.ValueOf(res))
-			}
-		}()
-
-		return nil
-	})
-
-	// return a JS Promise
-	promiseClass := js.Global().Get("Promise")
-	return promiseClass.New(handler)
+func ListCalendars() (string, error) {
+	return a.ListCalendars()
 }
