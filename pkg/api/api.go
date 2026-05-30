@@ -40,11 +40,12 @@ func NewApi() *Api {
 func (a *Api) CreateCalendar(name, password string) error {
 	return a.inner.CreateCalendar(name, password)
 }
-func (a *Api) RemoveCalendar(name string) error   { return a.inner.RemoveCalendar(name) }
-func (a *Api) SetCorsProxy(proxyUrl string) error { return a.inner.SetCorsProxy(proxyUrl) }
-func (a *Api) LoadCalendars() error               { return a.inner.LoadCalendars() }
-func (a *Api) PullAll() error                     { return a.inner.PullAll() }
-func (a *Api) PushAll() error                     { return a.inner.PushAll() }
+func (a *Api) RemoveCalendar(name string) error          { return a.inner.RemoveCalendar(name) }
+func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
+func (a *Api) LoadCalendars() error                      { return a.inner.LoadCalendars() }
+func (a *Api) PullAll() error                            { return a.inner.PullAll() }
+func (a *Api) PushAll() error                            { return a.inner.PushAll() }
+func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 

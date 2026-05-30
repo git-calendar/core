@@ -1,11 +1,13 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
+	"github.com/git-calendar/core/pkg/export"
 	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
@@ -91,6 +93,33 @@ func (c *Core) PullAll() error {
 		}
 	}
 	return err
+}
+
+func (c *Core) ExportZip(calendar string) ([]byte, error) {
+	var buf bytes.Buffer
+	var fs billy.Filesystem
+
+	if calendar == "" {
+		fs = c.fs
+	} else {
+		cal, ok := c.calendars[calendar]
+		if !ok {
+			return nil, fmt.Errorf("calendar not found: %s", calendar)
+		}
+
+		wt, err := cal.Repository.Worktree()
+		if err != nil {
+			return nil, err
+		}
+
+		fs = wt.Filesystem
+	}
+
+	if err := export.Zip(fs, &buf); err != nil {
+		return nil, err
+	}
+
+	return append([]byte(nil), buf.Bytes()...), nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------

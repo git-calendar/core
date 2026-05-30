@@ -55,6 +55,11 @@ func RegisterCallbacks(api *api.Api) {
 					return nil, api.PushAll()
 				})
 			}),
+			"exportZip": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.ExportZip(args[0].String())
+				})
+			}),
 			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.SetCorsProxy(args[0].String())
