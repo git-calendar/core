@@ -134,7 +134,7 @@ func wrapPromise(fn func() (any, error)) any {
 				errorConstructor := js.Global().Get("Error")
 				reject.Invoke(errorConstructor.New(errorMessage))
 			} else { // no error, pass the result
-				resolve.Invoke(js.ValueOf(res))
+				resolve.Invoke(toJSValue(res))
 			}
 		}()
 
@@ -144,4 +144,19 @@ func wrapPromise(fn func() (any, error)) any {
 	// return a JS Promise
 	promiseClass := js.Global().Get("Promise")
 	return promiseClass.New(handler)
+}
+
+func toJSValue(v any) js.Value {
+	switch x := v.(type) {
+	case nil:
+		return js.Null()
+	case js.Value:
+		return x
+	case []byte:
+		u8 := js.Global().Get("Uint8Array").New(len(x))
+		js.CopyBytesToJS(u8, x)
+		return u8
+	default:
+		return js.ValueOf(v)
+	}
 }
