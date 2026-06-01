@@ -299,6 +299,80 @@ func TestUpdateRepeatingEvent_Following(t *testing.T) {
 	}
 }
 
+func TestUpdateRepeatingEvent_Following_SecondOccurrence(t *testing.T) {
+	c := core.NewCore()
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
+	parentId := uuid.New()
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	parentEvent := core.Event{
+		Id:       parentId,
+		Calendar: TestCalendarName,
+		Title:    "Daily Meeting",
+		From:     startTime,
+		To:       startTime.Add(time.Hour),
+		Repeat: &core.Repetition{
+			Frequency: core.Day,
+			Interval:  1,
+			Until:     startTime.AddDate(0, 1, 0),
+		},
+	}
+
+	_, err = c.CreateEvent(parentEvent)
+	if err != nil {
+		t.Fatalf("failed to create parent event: %v", err)
+	}
+
+	eventsOut := c.GetEvents(startTime, startTime.AddDate(0, 0, 21))
+	if len(eventsOut) < 2 {
+		t.Fatalf("expected at least 2 expanded events, got %d", len(eventsOut))
+	}
+
+	targetEvent := eventsOut[1] // second occurrence
+
+	updatedTarget := targetEvent
+	updatedTarget.Title = "Daily Meeting - New Phase"
+	updatedTarget.Repeat = &core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Until:     startTime.AddDate(0, 1, 0),
+	}
+
+	newParentOut, err := c.UpdateRepeatingEvent(targetEvent, updatedTarget, core.Following)
+	if err != nil {
+		t.Fatalf("failed to update child event Following: %v", err)
+	}
+
+	if newParentOut.ParentId != uuid.Nil {
+		t.Errorf("new event should be a parent, but ParentId is %s", newParentOut.ParentId)
+	}
+
+	if newParentOut.Title != "Daily Meeting - New Phase" {
+		t.Errorf("title not updated on new parent")
+	}
+
+	olderParentOut, err := c.GetEvent(parentId)
+	if err != nil {
+		t.Fatalf("failed to get old parent: %v", err)
+	}
+
+	if olderParentOut.Repeat != nil && !olderParentOut.Repeat.Until.After(olderParentOut.From) {
+		t.Fatalf(
+			"old parent has invalid repetition boundary: \nFrom=%s\nUntil=%s",
+			olderParentOut.From,
+			olderParentOut.Repeat.Until,
+		)
+	}
+}
+
 func TestUpdateRepeatingEvent_All(t *testing.T) {
 	c := core.NewCore()
 

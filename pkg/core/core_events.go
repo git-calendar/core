@@ -257,16 +257,22 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	}
 
 	// save originals for rollback
-	originalUntil := parent.Repeat.Until
-	originalCount := parent.Repeat.Count
+	originalRepeat := *parent.Repeat
 	originalExceptions := append([]uuid.UUID{}, parent.Repeat.Exceptions...) // deep copy
 
-	parent.Repeat.Until = addUnit(old.From, -1, old.Repeat.Frequency) // cap parent at start of change
-	parent.Repeat.Count = 0                                           // enforce Until logic over Count
+	until := addUnit(old.From, -1, old.Repeat.Frequency) // cap parent at start of change
+	if !until.After(parent.From) {
+		parent.Repeat = nil
+	} else {
+		parent.Repeat.Until = until
+		parent.Repeat.Count = 0 // enforce Until logic over Count
+	}
 
 	// split exceptions
-	exBefore, exAfter := splitExceptions(parent.Repeat.Exceptions, new.From)
-	parent.Repeat.Exceptions = exBefore
+	exBefore, exAfter := splitExceptions(originalExceptions, new.From)
+	if parent.Repeat != nil {
+		parent.Repeat.Exceptions = exBefore
+	}
 
 	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Capped parent event '%s'", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to commit parent event: %w", err)
@@ -277,14 +283,14 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	newEvent.Id = uuid.New()     // assign new id
 	newEvent.ParentId = uuid.Nil // not child anymore
 
-	if originalCount != 0 && newEvent.Repeat != nil {
+	if originalRepeat.Count != 0 && newEvent.Repeat != nil {
 		// shorten the repeat for the second half
 		_, elapsed := firstOccurrenceAtOrAfter(old.From, parent)
 		if elapsed <= 0 {
 			// the split is at the first occurance -> nothing to subtract (basically update all)
-			newEvent.Repeat.Count = originalCount
+			newEvent.Repeat.Count = originalRepeat.Count
 		} else {
-			remaining := originalCount - elapsed
+			remaining := originalRepeat.Count - elapsed
 			if remaining <= 0 {
 				remaining = 1
 			}
@@ -305,8 +311,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	createdEvent, err := c.CreateEvent(newEvent)
 	if err != nil {
 		// rollback the parent cap
-		parent.Repeat.Until = originalUntil
-		parent.Repeat.Count = originalCount
+		parent.Repeat = &originalRepeat
 		parent.Repeat.Exceptions = originalExceptions
 		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("Rolled back cap on parent event '%s'", parent.Id)); rbErr != nil {
 			return nil, fmt.Errorf("failed to create new event: %w; rollback also failed: %v", err, rbErr)
