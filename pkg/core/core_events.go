@@ -307,6 +307,12 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 			newEvent.Repeat.Exceptions = append(newEvent.Repeat.Exceptions, generateCustomUUID(newEvent.Id, t))
 		}
 	}
+	if newEvent.Repeat != nil && newEvent.Repeat.Count != 0 {
+		newEvent.Repeat.Count -= len(exAfter)
+		if newEvent.Repeat.Count < 1 {
+			newEvent.Repeat.Count = 1
+		}
+	}
 
 	createdEvent, err := c.CreateEvent(newEvent)
 	if err != nil {
