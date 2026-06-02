@@ -57,7 +57,14 @@ func TestListCalendars(t *testing.T) {
 
 	var found bool
 	for _, calendar := range c.ListCalendars() {
-		if calendar == TestCalendarName {
+		if calendar.Name == TestCalendarName {
+			if calendar.EncryptionKey != nil {
+				t.Fatal("encryption key is not nil")
+			}
+			if len(calendar.Tags) != 0 {
+				t.Fatal("there should be no tags")
+			}
+
 			found = true
 			break
 		}
@@ -95,5 +102,140 @@ func TestRemoveCalendar(t *testing.T) {
 
 	if err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to check calendar directory: %v", err)
+	}
+}
+
+func TestRenameCalendar(t *testing.T) {
+	c := core.NewCore()
+
+	oldName := TestCalendarName + "_old"
+	newName := TestCalendarName + "_new"
+
+	err := c.CreateCalendar(oldName, "")
+	if err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(oldName)
+	})
+
+	err = c.RenameCalendar(oldName, newName)
+	if err != nil {
+		t.Fatalf("failed to rename calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(newName)
+	})
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	oldCalendarPath := filepath.Join(home, filesystem.DirName, oldName)
+	newCalendarPath := filepath.Join(home, filesystem.DirName, newName)
+
+	_, err = os.Stat(oldCalendarPath)
+	if err == nil {
+		t.Error("old calendar directory still exists")
+	}
+
+	if err != nil && !os.IsNotExist(err) {
+		t.Errorf("failed to check old calendar directory: %v", err)
+	}
+
+	_, err = os.Stat(newCalendarPath)
+	if err != nil {
+		t.Errorf("new calendar directory does not exist: %v", err)
+	}
+}
+
+func TestRenameCalendar_SameName(t *testing.T) {
+	c := core.NewCore()
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
+	err = c.RenameCalendar(TestCalendarName, TestCalendarName)
+	if err != nil {
+		t.Fatalf("renaming calendar to same name should not fail: %v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	calendarPath := filepath.Join(home, filesystem.DirName, TestCalendarName)
+
+	_, err = os.Stat(calendarPath)
+	if err != nil {
+		t.Errorf("calendar directory should still exist: %v", err)
+	}
+}
+
+func TestRenameCalendar_MissingCalendar(t *testing.T) {
+	c := core.NewCore()
+
+	c.RemoveCalendar(TestCalendarName)
+
+	err := c.RenameCalendar(TestCalendarName, "new-calendar")
+	if err == nil {
+		t.Fatal("expected error when renaming missing calendar")
+	}
+}
+
+func TestRenameCalendar_AlreadyExists(t *testing.T) {
+	c := core.NewCore()
+
+	oldName := TestCalendarName + "_old"
+	newName := TestCalendarName + "_new"
+
+	err := c.CreateCalendar(oldName, "")
+	if err != nil {
+		t.Fatalf("failed to create old calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(oldName)
+	})
+
+	err = c.CreateCalendar(newName, "")
+	if err != nil {
+		t.Fatalf("failed to create new calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(newName)
+	})
+
+	err = c.RenameCalendar(oldName, newName)
+	if err == nil {
+		t.Fatal("expected error when renaming calendar to existing name")
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Errorf("failed to get home dir: %v", err)
+	}
+
+	oldCalendarPath := filepath.Join(home, filesystem.DirName, oldName)
+	newCalendarPath := filepath.Join(home, filesystem.DirName, newName)
+
+	_, err = os.Stat(oldCalendarPath)
+	if err != nil {
+		t.Errorf("old calendar directory should still exist: %v", err)
+	}
+
+	_, err = os.Stat(newCalendarPath)
+	if err != nil {
+		t.Errorf("existing new calendar directory should still exist: %v", err)
 	}
 }
