@@ -40,7 +40,10 @@ func NewApi() *Api {
 func (a *Api) CreateCalendar(name, password string) error {
 	return a.inner.CreateCalendar(name, password)
 }
-func (a *Api) RemoveCalendar(name string) error          { return a.inner.RemoveCalendar(name) }
+func (a *Api) RemoveCalendar(name string) error { return a.inner.RemoveCalendar(name) }
+func (a *Api) RenameCalendar(oldName, newName string) error {
+	return a.inner.RenameCalendar(oldName, newName)
+}
 func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
 func (a *Api) LoadCalendars() error                      { return a.inner.LoadCalendars() }
 func (a *Api) PullAll() error                            { return a.inner.PullAll() }
