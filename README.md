@@ -1,35 +1,24 @@
 # Git Calendar Core
 [![Go Report Card](https://goreportcard.com/badge/github.com/git-calendar/core)](https://goreportcard.com/report/github.com/git-calendar/core)
+[![Go version](https://img.shields.io/github/go-mod/go-version/git-calendar/core)](./go.mod)
+[![Go](https://github.com/git-calendar/core/actions/workflows/go.yaml/badge.svg)](https://github.com/git-calendar/core/actions/workflows/go.yaml)
+[![License](https://img.shields.io/github/license/git-calendar/core)](./LICENSE)
+
+A shared core for Git-backed calendar.
 
 Related projects:
 - [CORS proxy](./cmd/cors-proxy)
 - Web client: [git-calendar/web-client](https://github.com/git-calendar/web-client)
 
-### Building
-For Android and IOS bindings, make sure to install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile):
+## Build
+Install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile) for Android and iOS builds:
 ```sh
 go install golang.org/x/mobile/cmd/gomobile@latest
 ```
-You can build for specific platforms using:
-```sh
-make [build_android|build_ios|build_web]
-```
 
-### Testing Web/Wasm parts:
-Install [wasmbrowsertest](https://github.com/agnivade/wasmbrowsertest):
+Build a target:
 ```sh
-go install github.com/agnivade/wasmbrowsertest@latest
-```
-Run tests like so:
-```sh
-GOOS=js GOARCH=wasm go test -exec $(go env GOPATH)/bin/wasmbrowsertest ./pkg/... ./cmd/wasm
-```
-Or, if you don't wanna specify the `-exec`:
-1. Rename the exacutable so that `go test` finds it automatically:
-```sh
-mv "$(go env GOPATH)/bin/wasmbrowsertest" "$(go env GOPATH)/bin/go_js_wasm_exec"
-```
-2. And then run tests like you normally would:
-```sh
-GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm
+make build_android
+make build_ios
+make build_web
 ```
