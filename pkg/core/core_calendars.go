@@ -19,6 +19,10 @@ import (
 
 // Creates a new calendar.
 func (c *Core) CreateCalendar(name, password string) error {
+	if _, exists := c.calendars[name]; exists {
+		return fmt.Errorf("calendar named %s already exist", name)
+	}
+
 	repo, err := c.initCalendarRepo(name)
 	if err != nil {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
@@ -39,19 +43,28 @@ func (c *Core) CreateCalendar(name, password string) error {
 		}
 	}
 
-	c.calendars[name] = &Calendar{
-		Repository:    repo,
-		Tags:          []string{},
+	cal := Calendar{
+		Name:          name,
+		Tags:          []Tag{},
 		EncryptionKey: key,
+		repository:    repo,
 	}
+	if err := cal.Validate(); err != nil {
+		_ = gogitutil.RemoveAll(c.fs, name) // cleanup
+		_ = c.fs.Remove(fmt.Sprintf("%s.key", name))
+		return fmt.Errorf("calendar invalid: %w", err)
+	}
+
+	c.calendars[name] = &cal
 	return nil
 }
 
-// Returns a list of calendar names loaded.
-func (c *Core) ListCalendars() []string {
-	// TODO list tags too
-	calendars := slices.Collect(maps.Keys(c.calendars))
-	slices.Sort(calendars)
+// Returns a list of calendars loaded.
+func (c *Core) ListCalendars() []*Calendar {
+	calendars := slices.Collect(maps.Values(c.calendars))
+	slices.SortFunc(calendars, func(a, b *Calendar) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return calendars
 }
 
@@ -88,16 +101,17 @@ func (c *Core) LoadCalendars() error {
 		}
 
 		c.calendars[name] = &Calendar{
-			Repository:    repo,
+			Name:          name,
 			Tags:          nil, // TODO: load tags
 			EncryptionKey: key,
+			repository:    repo,
 		}
 	}
 
 	// load tree + events
 	// TODO do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
-		wt, _ := cal.Repository.Worktree()
+		wt, _ := cal.repository.Worktree()
 		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
 		eventEntries, _ := eventsDir.ReadDir("/")
 		for _, eventEntry := range eventEntries {
@@ -191,9 +205,10 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 		}
 	}
 	c.calendars[calendarName] = &Calendar{
-		Repository:    newRepo,
+		Name:          calendarName,
 		Tags:          nil, // TODO: load tags
 		EncryptionKey: key,
+		repository:    newRepo,
 	}
 
 	// repair the remote url (set the pure url with auth, without proxy)
@@ -229,6 +244,43 @@ func (c *Core) RemoveCalendar(name string) error {
 	return c.LoadCalendars()
 }
 
+func (c *Core) RenameCalendar(oldName, newName string) error {
+	if _, exists := c.calendars[oldName]; !exists {
+		return fmt.Errorf("calendar %s doesn't exist", oldName)
+	}
+	if oldName == newName {
+		return nil
+	}
+	if _, exists := c.calendars[newName]; exists {
+		return fmt.Errorf("calendar named %s already exists", newName)
+	}
+
+	calendar := c.calendars[oldName]
+	if err := c.fs.Rename(oldName, newName); err != nil {
+		return fmt.Errorf("failed to rename the repository directory: %w", err)
+	}
+	if len(calendar.EncryptionKey) != 0 { // TODO: maybe check c.fs.Stat() instead?
+		if err := c.fs.Rename(fmt.Sprintf("%s.key", oldName), fmt.Sprintf("%s.key", newName)); err != nil {
+			_ = c.fs.Rename(newName, oldName) // try to rename repo back
+			return fmt.Errorf("failed to rename the encryption key file: %w", err)
+		}
+	}
+
+	newRepo, err := c.initCalendarRepo(newName)
+	if err != nil {
+		_ = c.fs.Rename(newName, oldName)                                               // try to rename repo back
+		_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName)) // try to rename key back (maybe it didn't exist in the first place, mehh)
+		return fmt.Errorf("failed to load new repo dir: %w", err)
+	}
+	calendar.Name = newName
+	calendar.repository = newRepo
+
+	delete(c.calendars, oldName)
+	c.calendars[newName] = calendar
+
+	return nil
+}
+
 // Adds a new remote to the specified calendar repository.
 func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
 	var validUrl string
@@ -250,7 +302,7 @@ func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
 		return fmt.Errorf("calendar not found: %s", calendar)
 	}
 
-	_, err := cal.Repository.CreateRemote(&config.RemoteConfig{
+	_, err := cal.repository.CreateRemote(&config.RemoteConfig{
 		Name: remoteName,
 		URLs: []string{validUrl},
 	})

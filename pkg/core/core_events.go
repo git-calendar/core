@@ -429,7 +429,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	if !ok {
 		return fmt.Errorf("the specified event.Calendar doesn't exist")
 	}
-	if cal.Repository == nil {
+	if cal.repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
@@ -455,7 +455,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	defer file.Close()
 
 	// -------- add to git repo --------
-	w, err := cal.Repository.Worktree()
+	w, err := cal.repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
@@ -501,11 +501,11 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	if !ok {
 		return fmt.Errorf("calendar doesn't exist")
 	}
-	if cal.Repository == nil {
+	if cal.repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	w, err := cal.Repository.Worktree()
+	w, err := cal.repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}

@@ -55,7 +55,7 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 func (c *Core) PushAll() error {
 	var errs error
 	for _, cal := range c.calendars {
-		remotes, err := cal.Repository.Remotes()
+		remotes, err := cal.repository.Remotes()
 		if err != nil {
 			errs = errors.Join(err)
 		}
@@ -79,7 +79,7 @@ func (c *Core) PullAll() error {
 
 	var err error
 	for _, cal := range c.calendars {
-		wt, errx := cal.Repository.Worktree()
+		wt, errx := cal.repository.Worktree()
 		if errx != nil || wt == nil { // only fails if repo is bare (aka. only .git/ folder exists, no files) which should not happen ever haha
 			continue
 		}
@@ -107,7 +107,7 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 			return nil, fmt.Errorf("calendar not found: %s", calendar)
 		}
 
-		wt, err := cal.Repository.Worktree()
+		wt, err := cal.repository.Worktree()
 		if err != nil {
 			return nil, err
 		}
