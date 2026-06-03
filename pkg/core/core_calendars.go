@@ -219,9 +219,10 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
+	remoteName := remoteNameFromURL(repoUrl)
 	// clone now
 	newRepo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
-		RemoteName: "origin",
+		RemoteName: remoteName,
 		URL:        finalUrl.String(),
 		Auth:       auth,
 	})
@@ -252,12 +253,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 	}
 
 	// repair the remote url (set the pure url with auth, without proxy)
-	err = newRepo.DeleteRemote("origin")
-	if err != nil {
-		return err
-	}
-	err = c.AddRemote(calendarName, "origin", repoUrl.String())
-	if err != nil {
+	if err := c.UpdateRemotes(calendarName, repoUrl); err != nil {
 		return err
 	}
 
