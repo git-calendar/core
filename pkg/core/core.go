@@ -25,7 +25,6 @@ type Core struct {
 	calendars    map[string]*calendar
 	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
 	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
-	// tags      map[string][]string // might not be needed to "cache" it like this
 }
 
 // A "constructor" for Core.

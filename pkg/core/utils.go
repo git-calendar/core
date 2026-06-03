@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -199,4 +201,50 @@ func splitExceptions(exceptions []uuid.UUID, cutoff time.Time) (before, after []
 		}
 	}
 	return
+}
+
+// normalizeRemoteUrl removes any trailing slash, checks for the .git suffix and validates the URL.
+func normalizeRemoteUrl(raw string) (string, error) {
+	raw = strings.TrimSuffix(raw, "/") // remove trailing "/"
+	if !strings.HasSuffix(raw, ".git") {
+		return "", errors.New("remote url doesn't end with '.git'")
+	}
+	parsedUrl, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("cannot parse remote url: %w", err)
+	}
+	return parsedUrl.String(), nil
+}
+
+func RemoteNameFromURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+
+	host := strings.TrimPrefix(u.Hostname(), "www.")
+
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) == 0 {
+		return host
+	}
+
+	repo := strings.TrimSuffix(parts[len(parts)-1], ".git")
+	if repo == "" {
+		return host
+	}
+
+	if len(parts) >= 2 {
+		owner := parts[len(parts)-2]
+		return cleanRemoteName(host + "_" + owner + "_" + repo)
+	}
+
+	return cleanRemoteName(host + "_" + repo)
+}
+
+func cleanRemoteName(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, ".", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	return s
 }

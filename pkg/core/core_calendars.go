@@ -308,20 +308,54 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	return nil
 }
 
+func (c *Core) UpdateRemotes(calendar string, remoteUrls ...string) error {
+	cal, ok := c.calendars[calendar]
+	if !ok {
+		return fmt.Errorf("calendar not found: %s", calendar)
+	}
+
+	var finalErr error
+
+	// delete all existing remotes.
+	remotes, err := cal.repository.Remotes()
+	if err != nil {
+		return fmt.Errorf("failed to list remotes: %w", err)
+	}
+
+	for _, remote := range remotes {
+		if err := cal.repository.DeleteRemote(remote.Config().Name); err != nil {
+			finalErr = errors.Join(finalErr, fmt.Errorf("failed to delete remote %q: %w", remote.Config().Name, err))
+		}
+	}
+
+	// create / re-create remotes
+	for _, remote := range remoteUrls {
+		u, err := normalizeRemoteUrl(remote)
+		if err != nil {
+			finalErr = errors.Join(finalErr, err)
+			continue
+		}
+
+		remoteName := RemoteNameFromURL(u)
+
+		_, err = cal.repository.CreateRemote(&config.RemoteConfig{
+			Name: remoteName,
+			URLs: []string{u},
+		})
+		if err != nil {
+			finalErr = errors.Join(finalErr, fmt.Errorf("failed to create remote %q: %w", remoteName, err))
+		}
+	}
+
+	return finalErr
+}
+
 // Adds a new remote to the specified calendar repository.
 func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
-	var validUrl string
-	{
-		// validate URL (git doesn't do that when adding a remote, it fails afterwards with e.g. git fetch)
-		u := strings.TrimSuffix(remoteUrl, "/") // remove trailing "/"
-		if !strings.HasSuffix(u, ".git") {
-			return errors.New("remote url doesn't end with '.git'")
-		}
-		parsedUrl, err := url.Parse(u)
-		if err != nil {
-			return fmt.Errorf("cannot parse remote url: %w", err)
-		}
-		validUrl = parsedUrl.String()
+	// validate URL (go-git doesn't do that when adding a remote, it fails afterwards with e.g. git fetch)
+	validUrl, err := normalizeRemoteUrl(remoteUrl)
+	if err != nil {
+		return err
 	}
 
 	cal, ok := c.calendars[calendar]
@@ -329,7 +363,7 @@ func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
 		return fmt.Errorf("calendar not found: %s", calendar)
 	}
 
-	_, err := cal.repository.CreateRemote(&config.RemoteConfig{
+	_, err = cal.repository.CreateRemote(&config.RemoteConfig{
 		Name: remoteName,
 		URLs: []string{validUrl},
 	})
