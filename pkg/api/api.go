@@ -45,15 +45,25 @@ func (a *Api) RenameCalendar(oldName, newName string) error {
 }
 
 func (a *Api) LoadCalendars() error { return a.inner.LoadCalendars() }
-func (a *Api) UpdateRemotes(calendar string, remoteUrls ...string) error {
-	return a.inner.UpdateRemotes(calendar, remoteUrls...)
-}
+
 func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
 func (a *Api) PullAll() error                            { return a.inner.PullAll() }
 func (a *Api) PushAll() error                            { return a.inner.PushAll() }
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
+
+func (a *Api) UpdateRemotes(calendar string, remoteUrls ...string) error {
+	parsed := make([]*url.URL, 0, len(remoteUrls))
+	for _, u := range remoteUrls {
+		pu, err := url.Parse(u)
+		if err != nil {
+			return fmt.Errorf("remoteUrl %q is invalid: %w", u, err)
+		}
+		parsed = append(parsed, pu)
+	}
+	return a.inner.UpdateRemotes(calendar, parsed...)
+}
 
 func (a *Api) CloneCalendar(repoUrl, password string) error {
 	parsedUrl, err := url.Parse(repoUrl)

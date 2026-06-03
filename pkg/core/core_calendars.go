@@ -81,12 +81,25 @@ func (c *Core) ListCalendars() ([]CalendarInfo, error) {
 				return nil, fmt.Errorf("failed to list remotes for calendar %q: %w", cal.Name, err)
 			}
 
-			info.Remotes = make([]string, 0, len(remotes))
+			info.Remotes = make([]*url.URL, 0, len(remotes))
 			for _, remote := range remotes {
-				info.Remotes = append(info.Remotes, remote.Config().URLs[0]) // TODO: better
+				allUrls := remote.Config().URLs
+				if len(allUrls) == 1 { // remote should have exactly 1 url
+					raw := allUrls[0]
+					u, err := url.Parse(raw)
+					if err != nil {
+						fmt.Printf("WARNING: calendar %q remote %q has invalid url: %q\n", cal.Name, remote.Config().Name, raw)
+						continue
+					}
+					info.Remotes = append(info.Remotes, u)
+				} else {
+					fmt.Printf("WARNING: calendar %q remote %q doesn't have exactly 1 url!\n", cal.Name, remote.Config().Name)
+				}
 			}
 
-			slices.Sort(info.Remotes)
+			slices.SortFunc(info.Remotes, func(a, b *url.URL) int {
+				return strings.Compare(a.String(), b.String())
+			})
 		}
 
 		result = append(result, info)
@@ -308,7 +321,7 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	return nil
 }
 
-func (c *Core) UpdateRemotes(calendar string, remoteUrls ...string) error {
+func (c *Core) UpdateRemotes(calendar string, remoteUrls ...*url.URL) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
 		return fmt.Errorf("calendar not found: %s", calendar)
@@ -329,18 +342,12 @@ func (c *Core) UpdateRemotes(calendar string, remoteUrls ...string) error {
 	}
 
 	// create / re-create remotes
-	for _, remote := range remoteUrls {
-		u, err := normalizeRemoteUrl(remote)
-		if err != nil {
-			finalErr = errors.Join(finalErr, err)
-			continue
-		}
-
-		remoteName := RemoteNameFromURL(u)
+	for _, u := range remoteUrls {
+		remoteName := remoteNameFromURL(u)
 
 		_, err = cal.repository.CreateRemote(&config.RemoteConfig{
 			Name: remoteName,
-			URLs: []string{u},
+			URLs: []string{u.String()},
 		})
 		if err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("failed to create remote %q: %w", remoteName, err))
@@ -348,28 +355,4 @@ func (c *Core) UpdateRemotes(calendar string, remoteUrls ...string) error {
 	}
 
 	return finalErr
-}
-
-// Adds a new remote to the specified calendar repository.
-func (c *Core) AddRemote(calendar, remoteName, remoteUrl string) error {
-	// validate URL (go-git doesn't do that when adding a remote, it fails afterwards with e.g. git fetch)
-	validUrl, err := normalizeRemoteUrl(remoteUrl)
-	if err != nil {
-		return err
-	}
-
-	cal, ok := c.calendars[calendar]
-	if !ok {
-		return fmt.Errorf("calendar not found: %s", calendar)
-	}
-
-	_, err = cal.repository.CreateRemote(&config.RemoteConfig{
-		Name: remoteName,
-		URLs: []string{validUrl},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create a remote: %w", err)
-	}
-
-	return nil
 }

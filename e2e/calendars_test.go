@@ -1,9 +1,10 @@
 package e2e
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/git-calendar/core/pkg/core"
@@ -98,7 +99,7 @@ func TestListCalendars_WithRemotes(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	remotes := []string{"https://github.com/git-calendar/calendar.git", "https://gitlab.com/git-calendar/calendar2.git"}
+	remotes := []*url.URL{mustParseUrl("https://github.com/git-calendar/calendar.git"), mustParseUrl("https://github.com/git-calendar/calendar2.git")}
 	err = c.UpdateRemotes(TestCalendarName, remotes...)
 	if err != nil {
 		t.Fatalf("failed to update remotes: %v", err)
@@ -115,8 +116,19 @@ func TestListCalendars_WithRemotes(t *testing.T) {
 			continue
 		}
 
-		if !slices.Equal(calendar.Remotes, remotes) {
-			t.Fatalf("remotes mismatch: got %v, want %v", calendar.Remotes, remotes)
+		if len(calendar.Remotes) != len(remotes) {
+			t.Fatalf("wrong number of remotes")
+		}
+
+		got := make(map[string]struct{}, len(calendar.Remotes))
+		for _, remote := range calendar.Remotes {
+			got[remote.String()] = struct{}{}
+		}
+
+		for _, remote := range remotes {
+			if _, ok := got[remote.String()]; !ok {
+				t.Fatalf("remote %q not found in listed calendar remotes", remote.String())
+			}
 		}
 
 		found = true
@@ -291,4 +303,13 @@ func TestRenameCalendar_AlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Errorf("existing new calendar directory should still exist: %v", err)
 	}
+}
+
+// Helper
+func mustParseUrl(raw string) *url.URL {
+	u, err := url.Parse(raw)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse url: %v", err))
+	}
+	return u
 }

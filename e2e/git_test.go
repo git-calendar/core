@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/git-calendar/core/pkg/core"
@@ -19,15 +18,15 @@ func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	const oldCalName = "https://github.com/git-calendar/old-calendar.git"
-	const newCalName = "https://github.com/git-calendar/new-calendar.git"
+	oldCalRemote := "https://github.com/git-calendar/old-calendar.git"
+	newCalRemote := "https://github.com/git-calendar/new-calendar.git"
 
-	err = c.UpdateRemotes(TestCalendarName, oldCalName)
+	err = c.UpdateRemotes(TestCalendarName, mustParseUrl(oldCalRemote))
 	if err != nil {
 		t.Fatalf("failed to set initial remotes: %v", err)
 	}
 
-	err = c.UpdateRemotes(TestCalendarName, newCalName)
+	err = c.UpdateRemotes(TestCalendarName, mustParseUrl(newCalRemote))
 	if err != nil {
 		t.Fatalf("failed to replace remotes: %v", err)
 	}
@@ -43,9 +42,12 @@ func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 			continue
 		}
 
-		want := []string{newCalName}
-		if !slices.Equal(calendar.Remotes, want) {
-			t.Fatalf("remotes mismatch: got %v, want %v", calendar.Remotes, want)
+		if len(calendar.Remotes) != 1 {
+			t.Fatalf("expected to get 1 remote, got: %v", calendar.Remotes)
+		}
+
+		if calendar.Remotes[0].String() != newCalRemote {
+			t.Fatalf("remote url mismatch: got %v, want %v", calendar.Remotes[0].String(), newCalRemote)
 		}
 
 		found = true
@@ -69,10 +71,7 @@ func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	err = c.UpdateRemotes(
-		TestCalendarName,
-		"https://github.com/git-calendar/calendar.git",
-	)
+	err = c.UpdateRemotes(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
 	if err != nil {
 		t.Fatalf("failed to set remotes: %v", err)
 	}
@@ -114,7 +113,7 @@ func TestUpdateRemotes_MissingCalendar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = c.UpdateRemotes(TestCalendarName, "https://github.com/git-calendar/calendar.git")
+	err = c.UpdateRemotes(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

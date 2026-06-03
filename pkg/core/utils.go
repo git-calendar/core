@@ -2,8 +2,6 @@ package core
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -203,28 +201,28 @@ func splitExceptions(exceptions []uuid.UUID, cutoff time.Time) (before, after []
 	return
 }
 
-// normalizeRemoteUrl removes any trailing slash, checks for the .git suffix and validates the URL.
-func normalizeRemoteUrl(raw string) (string, error) {
-	raw = strings.TrimSuffix(raw, "/") // remove trailing "/"
-	if !strings.HasSuffix(raw, ".git") {
-		return "", errors.New("remote url doesn't end with '.git'")
-	}
-	parsedUrl, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("cannot parse remote url: %w", err)
-	}
-	return parsedUrl.String(), nil
-}
-
-func RemoteNameFromURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-
+// remoteNameFromURL turns "http://abc.com/foo/bar/my-calendar.git" into "abc_com_foo_bar_my_calendar".
+func remoteNameFromURL(u *url.URL) string {
 	host := strings.TrimPrefix(u.Hostname(), "www.")
+	host = cleanRemoteName(host)
 
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	path := strings.Trim(u.EscapedPath(), "/")
+	if path == "" {
+		return host
+	}
+
+	rawParts := strings.Split(path, "/")
+	parts := make([]string, 0, len(rawParts))
+	for _, p := range rawParts {
+		if p == "" {
+			continue
+		}
+		if unescaped, err := url.PathUnescape(p); err == nil {
+			p = unescaped
+		}
+		parts = append(parts, p)
+	}
+
 	if len(parts) == 0 {
 		return host
 	}
