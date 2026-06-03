@@ -43,7 +43,7 @@ func (c *Core) CreateCalendar(name, password string) error {
 		}
 	}
 
-	cal := Calendar{
+	cal := calendar{
 		Name:          name,
 		Tags:          []Tag{},
 		EncryptionKey: key,
@@ -59,13 +59,40 @@ func (c *Core) CreateCalendar(name, password string) error {
 	return nil
 }
 
-// Returns a list of calendars loaded.
-func (c *Core) ListCalendars() []*Calendar {
+// ListCalendars returns calendar metadata.
+func (c *Core) ListCalendars() ([]CalendarInfo, error) {
 	calendars := slices.Collect(maps.Values(c.calendars))
-	slices.SortFunc(calendars, func(a, b *Calendar) int {
+	slices.SortFunc(calendars, func(a, b *calendar) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	return calendars
+
+	result := make([]CalendarInfo, 0, len(calendars))
+
+	for _, cal := range calendars {
+		info := CalendarInfo{
+			Name:      cal.Name,
+			Tags:      slices.Clone(cal.Tags),
+			Encrypted: cal.IsEncrypted(),
+		}
+
+		if cal.repository != nil {
+			remotes, err := cal.repository.Remotes()
+			if err != nil {
+				return nil, fmt.Errorf("failed to list remotes for calendar %q: %w", cal.Name, err)
+			}
+
+			info.Remotes = make([]string, 0, len(remotes))
+			for _, remote := range remotes {
+				info.Remotes = append(info.Remotes, remote.Config().URLs[0]) // TODO: better
+			}
+
+			slices.Sort(info.Remotes)
+		}
+
+		result = append(result, info)
+	}
+
+	return result, nil
 }
 
 // Tries to load every directory/repo/calendar in the fs root.
@@ -100,7 +127,7 @@ func (c *Core) LoadCalendars() error {
 			keyFile.Close()
 		}
 
-		c.calendars[name] = &Calendar{
+		c.calendars[name] = &calendar{
 			Name:          name,
 			Tags:          nil, // TODO: load tags
 			EncryptionKey: key,
@@ -204,7 +231,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 			return fmt.Errorf("failed to write key to key file: %w", err)
 		}
 	}
-	c.calendars[calendarName] = &Calendar{
+	c.calendars[calendarName] = &calendar{
 		Name:          calendarName,
 		Tags:          nil, // TODO: load tags
 		EncryptionKey: key,

@@ -61,7 +61,10 @@ func (a *Api) CloneCalendar(repoUrl, password string) error {
 }
 
 func (a *Api) ListCalendars() (string, error) {
-	arr := a.inner.ListCalendars()
+	arr, err := a.inner.ListCalendars()
+	if err != nil {
+		return emptyJsonArr, err
+	}
 	data, err := json.Marshal(arr)
 	if err != nil {
 		return emptyJsonArr, fmt.Errorf("failed to marshal names to json: %w", err)

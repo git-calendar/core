@@ -22,7 +22,7 @@ import (
 type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
-	calendars    map[string]*Calendar
+	calendars    map[string]*calendar
 	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
 	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 	// tags      map[string][]string // might not be needed to "cache" it like this
@@ -128,7 +128,7 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 func (c *Core) resetCore() {
 	c.intervalTree = NewIntervalTree()
 	c.events = make(map[uuid.UUID]*Event)
-	c.calendars = make(map[string]*Calendar)
+	c.calendars = make(map[string]*calendar)
 }
 
 // Loads, if exists, or creates new repository with the given name.

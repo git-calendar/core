@@ -6,15 +6,15 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 )
 
-type Calendar struct {
-	Name          string `json:"name"`
-	Tags          []Tag  `json:"tags"`
-	EncryptionKey []byte `json:"encryption_key"`
+type calendar struct {
+	Name          string
+	Tags          []Tag
+	EncryptionKey []byte
 
 	repository *gogit.Repository
 }
 
-func (cal *Calendar) Validate() error {
+func (cal *calendar) Validate() error {
 	if cal == nil {
 		return nil
 	}
@@ -24,8 +24,16 @@ func (cal *Calendar) Validate() error {
 	return nil
 }
 
-func (cal *Calendar) IsEncrypted() bool {
+func (cal *calendar) IsEncrypted() bool {
 	return len(cal.EncryptionKey) != 0
+}
+
+// A DTO like calendar struct.
+type CalendarInfo struct {
+	Name      string   `json:"name"`
+	Tags      []Tag    `json:"tags,omitempty"`
+	Encrypted bool     `json:"encrypted"`
+	Remotes   []string `json:"remotes,omitempty"`
 }
 
 type Tag struct {
