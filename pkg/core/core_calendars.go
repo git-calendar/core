@@ -323,6 +323,12 @@ func (c *Core) UpdateRemotes(calendar string, remoteUrls ...*url.URL) error {
 		return fmt.Errorf("calendar not found: %s", calendar)
 	}
 
+	for _, u := range remoteUrls {
+		if !strings.HasSuffix(u.Path, ".git") {
+			return fmt.Errorf("remotes have to end with \".git\"")
+		}
+	}
+
 	var finalErr error
 
 	// delete all existing remotes.
@@ -330,7 +336,6 @@ func (c *Core) UpdateRemotes(calendar string, remoteUrls ...*url.URL) error {
 	if err != nil {
 		return fmt.Errorf("failed to list remotes: %w", err)
 	}
-
 	for _, remote := range remotes {
 		if err := cal.repository.DeleteRemote(remote.Config().Name); err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("failed to delete remote %q: %w", remote.Config().Name, err))
