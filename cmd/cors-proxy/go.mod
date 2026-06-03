@@ -1,6 +1,6 @@
 module github.com/git-calendar/core/cmd/cors-proxy
 
-go 1.25.5
+go 1.26.4
 
 require (
 	github.com/lmittmann/tint v1.1.3
