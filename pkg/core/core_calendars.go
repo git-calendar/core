@@ -86,7 +86,7 @@ func (c *Core) LoadCalendars() error {
 
 		repo, err := c.initCalendarRepo(name)
 		if err != nil {
-			fmt.Printf("failed to init/load '%s' repository: %v", name, err)
+			fmt.Printf("failed to init/load %q repository: %v", name, err)
 			continue
 		}
 
@@ -95,7 +95,7 @@ func (c *Core) LoadCalendars() error {
 		if err == nil {
 			key, err = io.ReadAll(keyFile)
 			if err != nil {
-				fmt.Printf("failed to read encryption key for '%s' repository: %v", name, err)
+				fmt.Printf("failed to read encryption key for %q repository: %v", name, err)
 			}
 			keyFile.Close()
 		}
@@ -121,7 +121,7 @@ func (c *Core) LoadCalendars() error {
 
 			file, err := eventsDir.Open(eventEntry.Name())
 			if err != nil {
-				fmt.Printf("failed to open file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+				fmt.Printf("failed to open file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 			defer file.Close()
@@ -129,7 +129,7 @@ func (c *Core) LoadCalendars() error {
 			var event Event
 			err = event.LoadFromFile(file, cal.EncryptionKey)
 			if err != nil {
-				fmt.Printf("failed to load event from file '%s' from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+				fmt.Printf("failed to load event from file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
 			}
 
@@ -143,7 +143,7 @@ func (c *Core) LoadCalendars() error {
 
 			err = c.intervalTree.InsertEvent(event)
 			if err != nil {
-				fmt.Printf("failed to insert event '%s' into index tree: %v\n", event.Id, err)
+				fmt.Printf("failed to insert event %q into index tree: %v\n", event.Id, err)
 				continue
 			}
 		}
