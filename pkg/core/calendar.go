@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"net/url"
 
@@ -34,10 +35,25 @@ type CalendarInfo struct {
 	Name      string     `json:"name"`
 	Tags      []Tag      `json:"tags,omitempty"`
 	Encrypted bool       `json:"encrypted"`
-	Remotes   []*url.URL `json:"remotes,omitempty"`
+	Remotes   RemoteUrls `json:"remotes,omitempty"`
 }
 
 type Tag struct {
 	Name  string `json:"name,omitzero"`
 	Color string `json:"color,omitzero"`
+}
+
+type RemoteUrls []*url.URL // custom type that ensures urls are strings in json, not objects
+
+func (r RemoteUrls) MarshalJSON() ([]byte, error) {
+	remotes := make([]string, 0, len(r))
+
+	for _, remote := range r {
+		if remote == nil {
+			continue
+		}
+		remotes = append(remotes, remote.String())
+	}
+
+	return json.Marshal(remotes)
 }
