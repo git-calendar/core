@@ -35,6 +35,11 @@ func RegisterCallbacks(api *api.Api) {
 					return nil, api.RemoveCalendar(args[0].String())
 				})
 			}),
+			"renameCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RenameCalendar(args[0].String(), args[1].String())
+				})
+			}),
 			"listCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return api.ListCalendars()
@@ -43,6 +48,55 @@ func RegisterCallbacks(api *api.Api) {
 			"loadCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.LoadCalendars()
+				})
+			}),
+			"updateRemotes": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					remoteUrls := make([]string, 0, len(args)-1)
+					for _, arg := range args[1:] {
+						remoteUrls = append(remoteUrls, arg.String())
+					}
+					return nil, api.UpdateRemotes(args[0].String(), remoteUrls...)
+				})
+			}),
+			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.CreateEvent(args[0].String())
+				})
+			}),
+			"updateEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.UpdateEvent(args[0].String())
+				})
+			}),
+			"updateRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.UpdateRepeatingEvent(args[0].String(), args[1].String(), args[2].Int())
+				})
+			}),
+			"removeEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RemoveEvent(args[0].String())
+				})
+			}),
+			"removeRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RemoveRepeatingEvent(args[0].String(), args[1].Int())
+				})
+			}),
+			"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.GetEvent(args[0].String())
+				})
+			}),
+			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.GetEvents(args[0].String(), args[1].String())
+				})
+			}),
+			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.SetCorsProxy(args[0].String())
 				})
 			}),
 			"pullAll": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -60,47 +114,6 @@ func RegisterCallbacks(api *api.Api) {
 					return api.ExportZip(args[0].String())
 				})
 			}),
-			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.SetCorsProxy(args[0].String())
-				})
-			}),
-			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.CreateEvent(args[0].String())
-				})
-			}),
-			"removeEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.RemoveEvent(args[0].String())
-				})
-			}),
-			"getEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.GetEvent(args[0].String())
-				})
-			}),
-			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.GetEvents(args[0].String(), args[1].String())
-				})
-			}),
-			"updateEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.UpdateEvent(args[0].String())
-				})
-			}),
-			"updateRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return api.UpdateRepeatingEvent(args[0].String(), args[1].String(), args[2].Int())
-				})
-			}),
-			"removeRepeatingEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.RemoveRepeatingEvent(args[0].String(), args[1].Int())
-				})
-			}),
-			// TODO others
 		}),
 	)
 

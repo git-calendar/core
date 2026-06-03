@@ -36,7 +36,6 @@ func NewApi() *Api {
 
 // -------------------------- Boring methods that do not need any json parsing etc. -------------------------
 
-// func (a *Api) AddRemote(name, remoteUrl string) error { return a.inner.AddRemote(name, remoteUrl) }
 func (a *Api) CreateCalendar(name, password string) error {
 	return a.inner.CreateCalendar(name, password)
 }
@@ -44,8 +43,12 @@ func (a *Api) RemoveCalendar(name string) error { return a.inner.RemoveCalendar(
 func (a *Api) RenameCalendar(oldName, newName string) error {
 	return a.inner.RenameCalendar(oldName, newName)
 }
+
+func (a *Api) LoadCalendars() error { return a.inner.LoadCalendars() }
+func (a *Api) UpdateRemotes(calendar string, remoteUrls ...string) error {
+	return a.inner.UpdateRemotes(calendar, remoteUrls...)
+}
 func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
-func (a *Api) LoadCalendars() error                      { return a.inner.LoadCalendars() }
 func (a *Api) PullAll() error                            { return a.inner.PullAll() }
 func (a *Api) PushAll() error                            { return a.inner.PushAll() }
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
