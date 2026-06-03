@@ -1,40 +1,121 @@
 package e2e
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/git-calendar/core/pkg/core"
 )
 
-func TestAddRemote(t *testing.T) {
+func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
 	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
+		t.Fatalf("failed to create calendar: %v", err)
 	}
 
 	t.Cleanup(func() {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	err = c.AddRemote(TestCalendarName, "github", "https://github.com/git-calendar/core.git")
+	const oldCalName = "https://github.com/git-calendar/old-calendar.git"
+	const newCalName = "https://github.com/git-calendar/new-calendar.git"
+
+	err = c.UpdateRemotes(TestCalendarName, oldCalName)
 	if err != nil {
-		t.Errorf("failed to add remote: %v", err)
+		t.Fatalf("failed to set initial remotes: %v", err)
 	}
 
-	err = c.AddRemote(TestCalendarName, "github", "foo")
-	if err == nil {
-		t.Errorf("expected an error after adding an existing remote")
+	err = c.UpdateRemotes(TestCalendarName, newCalName)
+	if err != nil {
+		t.Fatalf("failed to replace remotes: %v", err)
 	}
 
-	err = c.AddRemote(TestCalendarName, "foo", "invalid url bla bla")
-	if err == nil {
-		t.Errorf("expected an error after adding an invalid url")
+	calendars, err := c.ListCalendars()
+	if err != nil {
+		t.Fatalf("failed to list calendars: %v", err)
 	}
 
-	err = c.AddRemote(TestCalendarName, "bar", "https://github.com/git-calendar/core")
+	var found bool
+	for _, calendar := range calendars {
+		if calendar.Name != TestCalendarName {
+			continue
+		}
+
+		want := []string{newCalName}
+		if !slices.Equal(calendar.Remotes, want) {
+			t.Fatalf("remotes mismatch: got %v, want %v", calendar.Remotes, want)
+		}
+
+		found = true
+		break
+	}
+
+	if !found {
+		t.Errorf("calendar %q not found in list", TestCalendarName)
+	}
+}
+
+func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
+	c := core.NewCore()
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
+	err = c.UpdateRemotes(
+		TestCalendarName,
+		"https://github.com/git-calendar/calendar.git",
+	)
+	if err != nil {
+		t.Fatalf("failed to set remotes: %v", err)
+	}
+
+	err = c.UpdateRemotes(TestCalendarName)
+	if err != nil {
+		t.Fatalf("failed to clear remotes: %v", err)
+	}
+
+	calendars, err := c.ListCalendars()
+	if err != nil {
+		t.Fatalf("failed to list calendars: %v", err)
+	}
+
+	var found bool
+	for _, calendar := range calendars {
+		if calendar.Name != TestCalendarName {
+			continue
+		}
+
+		if len(calendar.Remotes) != 0 {
+			t.Fatalf("expected no remotes, got %v", calendar.Remotes)
+		}
+
+		found = true
+		break
+	}
+
+	if !found {
+		t.Errorf("calendar %q not found in list", TestCalendarName)
+	}
+}
+
+func TestUpdateRemotes_MissingCalendar(t *testing.T) {
+	c := core.NewCore()
+
+	err := c.RemoveCalendar(TestCalendarName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.UpdateRemotes(TestCalendarName, "https://github.com/git-calendar/calendar.git")
 	if err == nil {
-		t.Errorf("expected an error after adding an non-git url")
+		t.Fatal("expected error, got nil")
 	}
 }

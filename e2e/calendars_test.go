@@ -3,6 +3,7 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/git-calendar/core/pkg/core"
@@ -55,19 +56,71 @@ func TestListCalendars(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	var found bool
-	for _, calendar := range c.ListCalendars() {
-		if calendar.Name == TestCalendarName {
-			if calendar.EncryptionKey != nil {
-				t.Fatal("encryption key is not nil")
-			}
-			if len(calendar.Tags) != 0 {
-				t.Fatal("there should be no tags")
-			}
+	calendars, err := c.ListCalendars()
+	if err != nil {
+		t.Fatalf("failed to list calendars: %v", err)
+	}
 
-			found = true
-			break
+	var found bool
+	for _, calendar := range calendars {
+		if calendar.Name != TestCalendarName {
+			continue
 		}
+
+		if calendar.Encrypted {
+			t.Fatal("calendar should not be encrypted")
+		}
+		if len(calendar.Tags) != 0 {
+			t.Fatal("there should be no tags")
+		}
+		if len(calendar.Remotes) != 0 {
+			t.Fatal("there should be no remotes")
+		}
+
+		found = true
+		break
+	}
+
+	if !found {
+		t.Errorf("calendar %q not found in list", TestCalendarName)
+	}
+}
+
+func TestListCalendars_WithRemotes(t *testing.T) {
+	c := core.NewCore()
+
+	err := c.CreateCalendar(TestCalendarName, "")
+	if err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(TestCalendarName)
+	})
+
+	remotes := []string{"https://github.com/git-calendar/calendar.git", "https://gitlab.com/git-calendar/calendar2.git"}
+	err = c.UpdateRemotes(TestCalendarName, remotes...)
+	if err != nil {
+		t.Fatalf("failed to update remotes: %v", err)
+	}
+
+	calendars, err := c.ListCalendars()
+	if err != nil {
+		t.Fatalf("failed to list calendars: %v", err)
+	}
+
+	var found bool
+	for _, calendar := range calendars {
+		if calendar.Name != TestCalendarName {
+			continue
+		}
+
+		if !slices.Equal(calendar.Remotes, remotes) {
+			t.Fatalf("remotes mismatch: got %v, want %v", calendar.Remotes, remotes)
+		}
+
+		found = true
+		break
 	}
 
 	if !found {
