@@ -18,10 +18,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: go.mod
 
       - name: Run Standard Tests
         run: go test -v -race ./...
+
       # WASM tests (needs: ubuntu-22.04)
       # - name: Install wasmbrowsertest
       #   run: |
@@ -46,7 +47,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: go.mod
 
       - name: Build WASM
         run: make prod_build_web # just web for now
