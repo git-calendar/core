@@ -69,40 +69,27 @@ func (c *Core) ListCalendars() ([]CalendarInfo, error) {
 	result := make([]CalendarInfo, 0, len(calendars))
 
 	for _, cal := range calendars {
-		info := CalendarInfo{
+		var remoteUrl string
+		if cal.repository != nil {
+			remote, err := cal.repository.Remote("origin")
+			if err == nil {
+				cfg := remote.Config()
+				if cfg == nil {
+					return nil, fmt.Errorf("remote for calendar %q has no config", cal.Name)
+				}
+				if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
+					return nil, fmt.Errorf("remote for calendar %q must have exactly one non-empty URL, got %d", cal.Name, len(cfg.URLs))
+				}
+				remoteUrl = cfg.URLs[0]
+			}
+		}
+
+		result = append(result, CalendarInfo{
 			Name:      cal.Name,
 			Tags:      slices.Clone(cal.Tags),
 			Encrypted: cal.IsEncrypted(),
-		}
-
-		if cal.repository != nil {
-			remotes, err := cal.repository.Remotes()
-			if err != nil {
-				return nil, fmt.Errorf("failed to list remotes for calendar %q: %w", cal.Name, err)
-			}
-
-			info.Remotes = make([]*url.URL, 0, len(remotes))
-			for _, remote := range remotes {
-				allUrls := remote.Config().URLs
-				if len(allUrls) == 1 { // remote should have exactly 1 url
-					raw := allUrls[0]
-					u, err := url.Parse(raw)
-					if err != nil {
-						fmt.Printf("WARNING: calendar %q remote %q has invalid url: %q\n", cal.Name, remote.Config().Name, raw)
-						continue
-					}
-					info.Remotes = append(info.Remotes, u)
-				} else {
-					fmt.Printf("WARNING: calendar %q remote %q doesn't have exactly 1 url!\n", cal.Name, remote.Config().Name)
-				}
-			}
-
-			slices.SortFunc(info.Remotes, func(a, b *url.URL) int {
-				return strings.Compare(a.String(), b.String())
-			})
-		}
-
-		result = append(result, info)
+			RemoteUrl: remoteUrl,
+		})
 	}
 
 	return result, nil
@@ -219,10 +206,9 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
-	remoteName := remoteNameFromURL(repoUrl)
 	// clone now
 	newRepo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
-		RemoteName: remoteName,
+		RemoteName: "origin",
 		URL:        finalUrl.String(),
 		Auth:       auth,
 	})
@@ -253,7 +239,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 	}
 
 	// repair the remote url (set the pure url with auth, without proxy)
-	if err := c.UpdateRemotes(calendarName, repoUrl); err != nil {
+	if err := c.UpdateRemote(calendarName, repoUrl); err != nil {
 		return err
 	}
 
@@ -317,43 +303,39 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	return nil
 }
 
-func (c *Core) UpdateRemotes(calendar string, remoteUrls ...*url.URL) error {
+func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 	cal, ok := c.calendars[calendar]
-	if !ok {
+	if !ok || cal == nil {
 		return fmt.Errorf("calendar not found: %s", calendar)
 	}
 
-	for _, u := range remoteUrls {
-		if !strings.HasSuffix(u.Path, ".git") {
-			return fmt.Errorf("remotes have to end with \".git\"")
+	if cal.repository == nil {
+		return fmt.Errorf("calendar %q has no repository", calendar)
+	}
+
+	if remoteURL == nil {
+		if err := cal.repository.DeleteRemote("origin"); err != nil {
+			return fmt.Errorf("failed to delete remote: %w", err)
+		}
+		return nil
+	}
+
+	if !strings.HasSuffix(remoteURL.Path, ".git") {
+		return errors.New(`remote URL has to end with ".git"`)
+	}
+
+	if _, err := cal.repository.Remote("origin"); err == nil {
+		if err := cal.repository.DeleteRemote("origin"); err != nil {
+			return fmt.Errorf("failed to delete remote: %w", err)
 		}
 	}
 
-	var finalErr error
-
-	// delete all existing remotes.
-	remotes, err := cal.repository.Remotes()
-	if err != nil {
-		return fmt.Errorf("failed to list remotes: %w", err)
-	}
-	for _, remote := range remotes {
-		if err := cal.repository.DeleteRemote(remote.Config().Name); err != nil {
-			finalErr = errors.Join(finalErr, fmt.Errorf("failed to delete remote %q: %w", remote.Config().Name, err))
-		}
+	if _, err := cal.repository.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{remoteURL.String()},
+	}); err != nil {
+		return fmt.Errorf("failed to create remote: %w", err)
 	}
 
-	// create / re-create remotes
-	for _, u := range remoteUrls {
-		remoteName := remoteNameFromURL(u)
-
-		_, err = cal.repository.CreateRemote(&config.RemoteConfig{
-			Name: remoteName,
-			URLs: []string{u.String()},
-		})
-		if err != nil {
-			finalErr = errors.Join(finalErr, fmt.Errorf("failed to create remote %q: %w", remoteName, err))
-		}
-	}
-
-	return finalErr
+	return nil
 }

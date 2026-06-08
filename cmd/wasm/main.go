@@ -50,13 +50,9 @@ func RegisterCallbacks(api *api.Api) {
 					return nil, api.LoadCalendars()
 				})
 			}),
-			"updateRemotes": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"updateRemote": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					remoteUrls := make([]string, 0, len(args)-1)
-					for _, arg := range args[1:] {
-						remoteUrls = append(remoteUrls, arg.String())
-					}
-					return nil, api.UpdateRemotes(args[0].String(), remoteUrls...)
+					return nil, api.UpdateRemote(args[0].String(), args[1].String())
 				})
 			}),
 			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {

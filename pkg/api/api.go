@@ -53,16 +53,12 @@ func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.Export
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 
-func (a *Api) UpdateRemotes(calendar string, remoteUrls ...string) error {
-	parsed := make([]*url.URL, 0, len(remoteUrls))
-	for _, u := range remoteUrls {
-		pu, err := url.Parse(u)
-		if err != nil {
-			return fmt.Errorf("remoteUrl %q is invalid: %w", u, err)
-		}
-		parsed = append(parsed, pu)
+func (a *Api) UpdateRemote(calendar string, remoteUrl string) error {
+	parsed, err := url.Parse(remoteUrl)
+	if err != nil {
+		return fmt.Errorf("remoteUrl is invalid: %w", err)
 	}
-	return a.inner.UpdateRemotes(calendar, parsed...)
+	return a.inner.UpdateRemote(calendar, parsed)
 }
 
 func (a *Api) CloneCalendar(repoUrl, password string) error {

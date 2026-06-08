@@ -74,9 +74,6 @@ func TestListCalendars(t *testing.T) {
 		if len(calendar.Tags) != 0 {
 			t.Fatal("there should be no tags")
 		}
-		if len(calendar.Remotes) != 0 {
-			t.Fatal("there should be no remotes")
-		}
 
 		found = true
 		break
@@ -87,7 +84,7 @@ func TestListCalendars(t *testing.T) {
 	}
 }
 
-func TestListCalendars_WithRemotes(t *testing.T) {
+func TestListCalendars_WithRemote(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -99,8 +96,9 @@ func TestListCalendars_WithRemotes(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	remotes := []*url.URL{mustParseUrl("https://github.com/git-calendar/calendar.git"), mustParseUrl("https://github.com/git-calendar/calendar2.git")}
-	err = c.UpdateRemotes(TestCalendarName, remotes...)
+	remoteUrl := "https://github.com/git-calendar/calendar.git"
+
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(remoteUrl))
 	if err != nil {
 		t.Fatalf("failed to update remotes: %v", err)
 	}
@@ -115,22 +113,9 @@ func TestListCalendars_WithRemotes(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-
-		if len(calendar.Remotes) != len(remotes) {
-			t.Fatalf("wrong number of remotes")
+		if calendar.RemoteUrl != remoteUrl {
+			t.Fatalf("remote url mismatch: got %v, want %v", calendar.RemoteUrl, remoteUrl)
 		}
-
-		got := make(map[string]struct{}, len(calendar.Remotes))
-		for _, remote := range calendar.Remotes {
-			got[remote.String()] = struct{}{}
-		}
-
-		for _, remote := range remotes {
-			if _, ok := got[remote.String()]; !ok {
-				t.Fatalf("remote %q not found in listed calendar remotes", remote.String())
-			}
-		}
-
 		found = true
 		break
 	}

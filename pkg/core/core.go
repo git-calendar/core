@@ -72,26 +72,48 @@ func (c *Core) PushAll() error {
 	return errs
 }
 
-// Update all repositories from remotes.
 func (c *Core) PullAll() error {
-	// TODO idk if it works
+	var resultErr error
 
-	var err error
 	for _, cal := range c.calendars {
-		wt, errx := cal.repository.Worktree()
-		if errx != nil || wt == nil { // only fails if repo is bare (aka. only .git/ folder exists, no files) which should not happen ever haha
+		fmt.Println("pulling", cal.Name)
+
+		wt, err := cal.repository.Worktree()
+		if err != nil || wt == nil {
 			continue
 		}
 
-		errx = wt.Pull(&gogit.PullOptions{})
-		if errx == gogit.NoErrAlreadyUpToDate {
-			continue // this is ok
+		remotes, err := cal.repository.Remotes()
+		if err != nil {
+			resultErr = errors.Join(resultErr, err)
+			continue
 		}
-		if errx != nil {
-			err = errors.Join(errx)
+
+		if len(remotes) == 0 {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%s: no remotes configured", cal.Name))
+			continue
+		}
+
+		remoteName := remotes[0].Config().Name
+
+		err = wt.Pull(&gogit.PullOptions{
+			RemoteName: remoteName,
+		})
+
+		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+			continue
+		}
+
+		if err != nil {
+			resultErr = errors.Join(
+				resultErr,
+				fmt.Errorf("%s: pull from remote %q failed: %w", cal.Name, remoteName, err),
+			)
+			continue
 		}
 	}
-	return err
+
+	return resultErr
 }
 
 func (c *Core) ExportZip(calendar string) ([]byte, error) {

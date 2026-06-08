@@ -6,7 +6,7 @@ import (
 	"github.com/git-calendar/core/pkg/core"
 )
 
-func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
+func TestUpdateRemote_ReplacesExistingRemote(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -21,12 +21,12 @@ func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 	oldCalRemote := "https://github.com/git-calendar/old-calendar.git"
 	newCalRemote := "https://github.com/git-calendar/new-calendar.git"
 
-	err = c.UpdateRemotes(TestCalendarName, mustParseUrl(oldCalRemote))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(oldCalRemote))
 	if err != nil {
 		t.Fatalf("failed to set initial remotes: %v", err)
 	}
 
-	err = c.UpdateRemotes(TestCalendarName, mustParseUrl(newCalRemote))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(newCalRemote))
 	if err != nil {
 		t.Fatalf("failed to replace remotes: %v", err)
 	}
@@ -41,15 +41,9 @@ func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-
-		if len(calendar.Remotes) != 1 {
-			t.Fatalf("expected to get 1 remote, got: %v", calendar.Remotes)
+		if calendar.RemoteUrl != newCalRemote {
+			t.Fatalf("remote url mismatch: got %v, want %v", calendar.RemoteUrl, newCalRemote)
 		}
-
-		if calendar.Remotes[0].String() != newCalRemote {
-			t.Fatalf("remote url mismatch: got %v, want %v", calendar.Remotes[0].String(), newCalRemote)
-		}
-
 		found = true
 		break
 	}
@@ -59,7 +53,7 @@ func TestUpdateRemotes_ReplacesExistingRemotes(t *testing.T) {
 	}
 }
 
-func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
+func TestUpdateRemote_DeletesWhenEmpty(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.CreateCalendar(TestCalendarName, "")
@@ -71,12 +65,12 @@ func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	err = c.UpdateRemotes(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
 	if err != nil {
 		t.Fatalf("failed to set remotes: %v", err)
 	}
 
-	err = c.UpdateRemotes(TestCalendarName)
+	err = c.UpdateRemote(TestCalendarName, nil)
 	if err != nil {
 		t.Fatalf("failed to clear remotes: %v", err)
 	}
@@ -91,11 +85,9 @@ func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-
-		if len(calendar.Remotes) != 0 {
-			t.Fatalf("expected no remotes, got %v", calendar.Remotes)
+		if calendar.RemoteUrl != "" {
+			t.Fatalf("remote url mismatch: got %v, want \"\"", calendar.RemoteUrl)
 		}
-
 		found = true
 		break
 	}
@@ -105,7 +97,7 @@ func TestUpdateRemotes_DeletesAllWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestUpdateRemotes_MissingCalendar(t *testing.T) {
+func TestUpdateRemote_MissingCalendar(t *testing.T) {
 	c := core.NewCore()
 
 	err := c.RemoveCalendar(TestCalendarName)
@@ -113,7 +105,7 @@ func TestUpdateRemotes_MissingCalendar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = c.UpdateRemotes(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
