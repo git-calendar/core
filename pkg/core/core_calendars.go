@@ -315,6 +315,9 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 
 	if remoteURL == nil {
 		if err := cal.repository.DeleteRemote("origin"); err != nil {
+			if errors.Is(err, gogit.ErrRemoteNotFound) {
+				return nil
+			}
 			return fmt.Errorf("failed to delete remote: %w", err)
 		}
 		return nil
@@ -324,17 +327,13 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 		return errors.New(`remote URL has to end with ".git"`)
 	}
 
-	if _, err := cal.repository.Remote("origin"); err == nil {
-		if err := cal.repository.DeleteRemote("origin"); err != nil {
-			return fmt.Errorf("failed to delete remote: %w", err)
-		}
-	}
-
-	if _, err := cal.repository.CreateRemote(&config.RemoteConfig{
+	cfg, _ := cal.repository.Config()
+	cfg.Remotes["origin"] = &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{remoteURL.String()},
-	}); err != nil {
-		return fmt.Errorf("failed to create remote: %w", err)
+	}
+	if err := cal.repository.SetConfig(cfg); err != nil {
+		return fmt.Errorf("failed to set remote: %w", err)
 	}
 
 	return nil
