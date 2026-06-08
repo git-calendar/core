@@ -76,39 +76,56 @@ func (c *Core) PullAll() error {
 	var resultErr error
 
 	for _, cal := range c.calendars {
+		if cal == nil || cal.repository == nil {
+			continue
+		}
+
 		fmt.Println("pulling", cal.Name)
 
 		wt, err := cal.repository.Worktree()
-		if err != nil || wt == nil {
-			continue
-		}
-
-		remotes, err := cal.repository.Remotes()
 		if err != nil {
-			resultErr = errors.Join(resultErr, err)
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get worktree: %w", cal.Name, err))
+			continue
+		}
+		if wt == nil {
 			continue
 		}
 
-		if len(remotes) == 0 {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%s: no remotes configured", cal.Name))
+		remote, err := cal.repository.Remote("origin")
+		if err != nil {
+			if errors.Is(err, gogit.ErrRemoteNotFound) {
+				continue // this is ok
+			}
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get remote: %w", cal.Name, err))
 			continue
 		}
 
-		remoteName := remotes[0].Config().Name
+		cfg := remote.Config()
+		if cfg == nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote has no config", cal.Name))
+			continue
+		}
+		if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote must have exactly one non-empty URL", cal.Name))
+			continue
+		}
+		repoURL, err := url.Parse(cfg.URLs[0])
+		if err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: parse remote URL: %w", cal.Name, err))
+			continue
+		}
 
+		finalURL, auth := prepareRepoUrl(repoURL, c.proxyUrl)
 		err = wt.Pull(&gogit.PullOptions{
-			RemoteName: remoteName,
+			RemoteName: "origin",
+			RemoteURL:  finalURL.String(),
+			Auth:       auth,
 		})
-
 		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-			continue
+			continue // this is ok
 		}
-
 		if err != nil {
-			resultErr = errors.Join(
-				resultErr,
-				fmt.Errorf("%s: pull from remote %q failed: %w", cal.Name, remoteName, err),
-			)
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: pull from origin failed: %w", cal.Name, err))
 			continue
 		}
 	}
