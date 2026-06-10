@@ -50,30 +50,45 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
-// Update all remotes for all repositories.
 func (c *Core) PushAll() error {
-	var errs error
+	var resultErr error
+
 	for _, cal := range c.calendars {
-		remotes, err := cal.repository.Remotes()
-		if err != nil {
-			errs = errors.Join(err)
+		if cal == nil || cal.repository == nil {
+			continue
 		}
 
-		for _, remote := range remotes {
-			err = remote.Push(&gogit.PushOptions{})
-			if err == gogit.NoErrAlreadyUpToDate {
+		fmt.Println("pushing", cal.Name)
+
+		repoUrl, err := repoUrlFromCalendar(cal)
+		if err != nil {
+			if errors.Is(err, gogit.ErrRemoteNotFound) {
 				continue // this is ok
 			}
-			if err != nil {
-				errs = errors.Join(err)
+			resultErr = errors.Join(resultErr, err)
+			continue
+		}
+
+		finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
+		err = cal.repository.Push(&gogit.PushOptions{
+			RemoteName: GitRemoteName,
+			RemoteURL:  finalUrl.String(),
+			Auth:       auth,
+		})
+		if err != nil {
+			if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+				continue // this is ok
 			}
+			resultErr = errors.Join(resultErr, err)
 		}
 	}
-	return errs
+
+	return resultErr
 }
 
 func (c *Core) PullAll() error {
 	var resultErr error
+	var needPushAfter bool
 
 	for _, cal := range c.calendars {
 		if cal == nil || cal.repository == nil {
@@ -91,42 +106,50 @@ func (c *Core) PullAll() error {
 			continue
 		}
 
-		remote, err := cal.repository.Remote("origin")
+		repoUrl, err := repoUrlFromCalendar(cal)
 		if err != nil {
 			if errors.Is(err, gogit.ErrRemoteNotFound) {
 				continue // this is ok
 			}
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get remote: %w", cal.Name, err))
+			resultErr = errors.Join(resultErr, err)
 			continue
 		}
 
-		cfg := remote.Config()
-		if cfg == nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote has no config", cal.Name))
-			continue
-		}
-		if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote must have exactly one non-empty URL", cal.Name))
-			continue
-		}
-		repoURL, err := url.Parse(cfg.URLs[0])
-		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: parse remote URL: %w", cal.Name, err))
-			continue
-		}
-
-		finalURL, auth := prepareRepoUrl(repoURL, c.proxyUrl)
+		finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
 		err = wt.Pull(&gogit.PullOptions{
-			RemoteName: "origin",
-			RemoteURL:  finalURL.String(),
+			RemoteName: GitRemoteName,
+			RemoteURL:  finalUrl.String(),
 			Auth:       auth,
 		})
-		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-			continue // this is ok
-		}
 		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: pull from origin failed: %w", cal.Name, err))
+			if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+				continue // good
+			}
+
+			// histories have diverged -> merge needed
+			if errors.Is(err, gogit.ErrNonFastForwardUpdate) {
+				fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
+
+				err := customMergeRemote(cal, c.proxyUrl)
+				if err != nil {
+					resultErr = errors.Join(resultErr, fmt.Errorf("%q: custom merge failed: %w", cal.Name, err))
+					continue
+				}
+				fmt.Printf("Custom merge successfull\n", cal.Name)
+				needPushAfter = true
+
+				continue
+			}
+
+			// some other error happened
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: pull from remote failed: %w", cal.Name, err))
 			continue
+		}
+	}
+
+	if needPushAfter {
+		if err := c.PushAll(); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("push to remotes failed: %w", err))
 		}
 	}
 

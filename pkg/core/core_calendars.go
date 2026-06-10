@@ -71,7 +71,7 @@ func (c *Core) ListCalendars() ([]CalendarInfo, error) {
 	for _, cal := range calendars {
 		var remoteUrl string
 		if cal.repository != nil {
-			remote, err := cal.repository.Remote("origin")
+			remote, err := cal.repository.Remote(GitRemoteName)
 			if err == nil {
 				cfg := remote.Config()
 				if cfg == nil {
@@ -208,7 +208,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
 	// clone now
 	newRepo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
-		RemoteName: "origin",
+		RemoteName: GitRemoteName,
 		URL:        finalUrl.String(),
 		Auth:       auth,
 	})
@@ -300,6 +300,8 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	delete(c.calendars, oldName)
 	c.calendars[newName] = calendar
 
+	// TODO: handle "calendar" field in its events
+
 	return nil
 }
 
@@ -314,7 +316,7 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 	}
 
 	if remoteURL == nil {
-		if err := cal.repository.DeleteRemote("origin"); err != nil {
+		if err := cal.repository.DeleteRemote(GitRemoteName); err != nil {
 			if errors.Is(err, gogit.ErrRemoteNotFound) {
 				return nil
 			}
@@ -328,8 +330,8 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 	}
 
 	cfg, _ := cal.repository.Config()
-	cfg.Remotes["origin"] = &config.RemoteConfig{
-		Name: "origin",
+	cfg.Remotes[GitRemoteName] = &config.RemoteConfig{
+		Name: GitRemoteName,
 		URLs: []string{remoteURL.String()},
 	}
 	if err := cal.repository.SetConfig(cfg); err != nil {

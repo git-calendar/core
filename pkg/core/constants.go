@@ -7,6 +7,8 @@ const (
 	EventsDirName string = "events"
 
 	GitAuthorName string = "git-calendar"
+	GitRemoteName string = "origin"
+	GitBranchName string = "main"
 )
 
 // ------- Repeating frequency -------
