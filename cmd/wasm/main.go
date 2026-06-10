@@ -95,14 +95,9 @@ func RegisterCallbacks(api *api.Api) {
 					return nil, api.SetCorsProxy(args[0].String())
 				})
 			}),
-			"pullAll": js.FuncOf(func(this js.Value, args []js.Value) any {
+			"syncAll": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.PullAll()
-				})
-			}),
-			"pushAll": js.FuncOf(func(this js.Value, args []js.Value) any {
-				return wrapPromise(func() (any, error) {
-					return nil, api.PushAll()
+					return nil, api.SyncAll()
 				})
 			}),
 			"exportZip": js.FuncOf(func(this js.Value, args []js.Value) any {

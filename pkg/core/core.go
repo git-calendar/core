@@ -11,6 +11,7 @@ import (
 	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/uuid"
@@ -50,110 +51,140 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
-func (c *Core) PushAll() error {
+func (c *Core) SyncAll() error {
 	var resultErr error
 
 	for _, cal := range c.calendars {
 		if cal == nil || cal.repository == nil {
-			continue
+			continue // important to check here; syncCalendar and other do assume this
 		}
 
-		fmt.Println("pushing", cal.Name)
-
-		repoUrl, err := repoUrlFromCalendar(cal)
-		if err != nil {
-			if errors.Is(err, gogit.ErrRemoteNotFound) {
-				continue // this is ok
-			}
-			resultErr = errors.Join(resultErr, err)
-			continue
+		if err := c.syncCalendar(cal); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: sync failed: %w", cal.Name, err))
 		}
+	}
 
-		finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
-		err = cal.repository.Push(&gogit.PushOptions{
-			RemoteName: GitRemoteName,
-			RemoteURL:  finalUrl.String(),
-			Auth:       auth,
-		})
-		if err != nil {
-			if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-				continue // this is ok
-			}
-			resultErr = errors.Join(resultErr, err)
-		}
+	if err := c.LoadCalendars(); err != nil { // reload events from disk
+		resultErr = errors.Join(resultErr, err)
 	}
 
 	return resultErr
 }
 
-func (c *Core) PullAll() error {
-	var resultErr error
-	var needPushAfter bool
-
-	for _, cal := range c.calendars {
-		if cal == nil || cal.repository == nil {
-			continue
+// syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
+func (c *Core) syncCalendar(cal *calendar) error {
+	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
+		if errors.Is(err, gogit.ErrRemoteNotFound) {
+			return nil // this is ok
 		}
-
-		fmt.Println("pulling", cal.Name)
-
-		wt, err := cal.repository.Worktree()
-		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get worktree: %w", cal.Name, err))
-			continue
-		}
-		if wt == nil {
-			continue
-		}
-
-		repoUrl, err := repoUrlFromCalendar(cal)
-		if err != nil {
-			if errors.Is(err, gogit.ErrRemoteNotFound) {
-				continue // this is ok
-			}
-			resultErr = errors.Join(resultErr, err)
-			continue
-		}
-
-		finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
-		err = wt.Pull(&gogit.PullOptions{
-			RemoteName: GitRemoteName,
-			RemoteURL:  finalUrl.String(),
-			Auth:       auth,
-		})
-		if err != nil {
-			if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-				continue // good
-			}
-
-			// histories have diverged -> merge needed
-			if errors.Is(err, gogit.ErrNonFastForwardUpdate) {
-				fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
-
-				err := customMergeRemote(cal, c.proxyUrl)
-				if err != nil {
-					resultErr = errors.Join(resultErr, fmt.Errorf("%q: custom merge failed: %w", cal.Name, err))
-					continue
-				}
-				fmt.Printf("Custom merge successfull\n", cal.Name)
-				needPushAfter = true
-
-				continue
-			}
-
-			// some other error happened
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: pull from remote failed: %w", cal.Name, err))
-			continue
-		}
+		return err
 	}
 
-	if needPushAfter {
-		if err := c.PushAll(); err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("push to remotes failed: %w", err))
-		}
+	localRef, err := localMainRef(cal.repository)
+	if err != nil {
+		return err
 	}
 
-	return resultErr
+	remoteRef, err := remoteMainRef(cal.repository)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case localRef.Hash() == remoteRef.Hash():
+		return nil
+
+	case isAncestor(cal.repository, localRef.Hash(), remoteRef.Hash()):
+		// remote is ahead
+		return fastForwardCalendar(cal, remoteRef.Hash())
+
+	case isAncestor(cal.repository, remoteRef.Hash(), localRef.Hash()):
+		// local is ahead
+		return pushCalendar(cal, c.proxyUrl)
+
+	default:
+		// cant simply push or pull (history diverged) -> try merge
+
+		fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
+		if err := customMerge(cal, c.proxyUrl); err != nil {
+			return fmt.Errorf("failed to merge: %w", err)
+		}
+		fmt.Printf("Custom merge successfull for %q\n", cal.Name)
+
+		return pushCalendar(cal, c.proxyUrl)
+	}
+}
+
+func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
+	fmt.Println("pushing", cal.Name)
+
+	repoUrl, err := repoUrlFromCalendar(cal)
+	if err != nil {
+		return err
+	}
+
+	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
+	err = cal.repository.Push(&gogit.PushOptions{
+		RemoteName: GitRemoteName,
+		RemoteURL:  finalUrl.String(),
+		Auth:       auth,
+	})
+	if err != nil {
+		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+			return nil // this is ok
+		}
+		return err
+	}
+
+	return nil
+}
+
+func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
+	fmt.Println("fetching", cal.Name)
+
+	repoUrl, err := repoUrlFromCalendar(cal)
+	if err != nil {
+		return err
+	}
+
+	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
+	err = cal.repository.Fetch(&gogit.FetchOptions{
+		RemoteName: GitRemoteName,
+		RemoteURL:  finalUrl.String(),
+		Auth:       auth,
+	})
+	if err != nil {
+		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+			return nil // this is ok
+		}
+		return err
+	}
+
+	return nil
+}
+
+func fastForwardCalendar(cal *calendar, hash plumbing.Hash) error {
+	fmt.Println("fast-forward", cal.Name)
+
+	wt, err := cal.repository.Worktree()
+	if err != nil {
+		return err
+	}
+
+	if err := wt.Checkout(&gogit.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(GitBranchName),
+	}); err != nil {
+		return fmt.Errorf("failed to checkout %s: %w", GitBranchName, err)
+	}
+
+	if err := wt.Reset(&gogit.ResetOptions{
+		Commit: hash,
+		Mode:   gogit.HardReset,
+	}); err != nil {
+		return fmt.Errorf("failed to fast-forward %s to %s: %w", GitBranchName, hash, err)
+	}
+
+	return nil
 }
 
 func (c *Core) ExportZip(calendar string) ([]byte, error) {

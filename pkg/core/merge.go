@@ -18,7 +18,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func customMergeRemote(cal *calendar, proxyUrl *url.URL) error {
+func customMerge(cal *calendar, proxyUrl *url.URL) error {
 	if cal == nil {
 		return errors.New("cal is nil")
 	}
@@ -28,23 +28,6 @@ func customMergeRemote(cal *calendar, proxyUrl *url.URL) error {
 		return err
 	}
 
-	// fetch from remote
-	repoUrl, err := repoUrlFromCalendar(cal)
-	if err != nil {
-		return err
-	}
-
-	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
-	err = cal.repository.Fetch(&gogit.FetchOptions{
-		RemoteName: GitRemoteName,
-		RemoteURL:  finalUrl.String(),
-		Auth:       auth,
-	})
-	if err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-		return fmt.Errorf("fetch failed: %w", err)
-	}
-
-	// checkout main branch to be sure
 	localBranch := plumbing.NewBranchReferenceName(GitBranchName)
 	head, err := cal.repository.Head()
 	if err != nil {
@@ -92,6 +75,7 @@ func customMergeRemote(cal *calendar, proxyUrl *url.URL) error {
 		case EventsDirName:
 			return mergeEventFile(wt.Filesystem, remotePath, f)
 		default:
+			fmt.Printf("skipping %q merge...\n", f.Name)
 			return nil // TODO: merge index.json, ... ?
 		}
 	})
@@ -101,7 +85,7 @@ func customMergeRemote(cal *calendar, proxyUrl *url.URL) error {
 
 	// commit the merge
 	if _, err = wt.Add(EventsDirName); err != nil { // TODO: stage only touched files
-		return err
+		return fmt.Errorf("failed to stage merged events: %w", err)
 	}
 
 	commitMsg := fmt.Sprintf("Merge remote-tracking branch '%s/%s' (LWW resolution)", GitRemoteName, GitBranchName)
@@ -130,39 +114,100 @@ func mergeEventFile(repoFs billy.Filesystem, remotePath string, f *object.File) 
 	// read contents
 	remoteReader, err := f.Reader()
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: failed to open remote blob as reader: %w", remotePath, err)
 	}
 	defer remoteReader.Close()
 
 	remoteData, err := io.ReadAll(remoteReader)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: failed to read remote blob: %w", remotePath, err)
 	}
 
 	// if file doesn't exist locally, take the remote one
 	if _, err := repoFs.Stat(localFilePath); os.IsNotExist(err) {
-		return util.WriteFile(repoFs, localFilePath, remoteData, 0o644)
+		if os.IsNotExist(err) {
+			// make sure events/ exists
+			if err := repoFs.MkdirAll(EventsDirName, 0o755); err != nil {
+				return fmt.Errorf("%s: failed to create events dir: %w", remotePath, err)
+			}
+			if err := util.WriteFile(repoFs, localFilePath, remoteData, 0o644); err != nil {
+				return fmt.Errorf("%s: failed to write remote event: %w", remotePath, err)
+			}
+			return nil
+		}
+
+		return fmt.Errorf("%s: failed to stat local event: %w", remotePath, err)
 	}
 
 	// else collision
 	localData, err := util.ReadFile(repoFs, localFilePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: failed to read local event: %w", remotePath, err)
 	}
 
 	// parse json events
 	var localEvent, remoteEvent Event
 	if err := json.Unmarshal(localData, &localEvent); err != nil {
-		return err
+		return fmt.Errorf("%s: failed to parse local event: %w", remotePath, err)
 	}
 	if err := json.Unmarshal(remoteData, &remoteEvent); err != nil {
-		return err
+		return fmt.Errorf("%s: failed to parse remote event: %w", remotePath, err)
 	}
 
 	// latest update wins
 	if remoteEvent.UpdatedAt.After(localEvent.UpdatedAt) {
-		return util.WriteFile(repoFs, localFilePath, remoteData, 0o644)
+		if err := util.WriteFile(repoFs, localFilePath, remoteData, 0o644); err != nil {
+			return fmt.Errorf("%s: failed to write newer remote event: %w", remotePath, err)
+		}
 	}
 
 	return nil
+}
+
+func localMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
+	refName := plumbing.NewBranchReferenceName(GitBranchName)
+
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		return nil, fmt.Errorf("local ref %s: %w", refName, err)
+	}
+
+	return ref, nil
+}
+
+func remoteMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
+	refName := plumbing.NewRemoteReferenceName(GitRemoteName, GitBranchName)
+
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		return nil, fmt.Errorf("remote ref %s: %w", refName, err)
+	}
+
+	return ref, nil
+}
+
+func isAncestor(repo *gogit.Repository, ancestorHash, descendantHash plumbing.Hash) bool {
+	if ancestorHash == descendantHash {
+		return true
+	}
+
+	ancestorCommit, err := repo.CommitObject(ancestorHash)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	descendantCommit, err := repo.CommitObject(descendantHash)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	ok, err := ancestorCommit.IsAncestor(descendantCommit)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	return ok
 }
