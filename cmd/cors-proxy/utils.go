@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -56,6 +57,13 @@ func targetUrl(u *url.URL) *url.URL {
 	}
 
 	return destUrl
+}
+
+var gitPathRegex = regexp.MustCompile(`/(info/refs|git-upload-pack|git-receive-pack)/?$`)
+
+// Checks if the request destination URL path looks like git request.
+func isGitRequest(destUrl *url.URL) bool {
+	return gitPathRegex.MatchString(destUrl.Path)
 }
 
 // ------------------- middleware -------------------

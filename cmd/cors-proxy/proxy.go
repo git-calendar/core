@@ -56,6 +56,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !isGitRequest(destUrl) {
+		http.Error(w, "this is a git-only proxy", http.StatusBadRequest)
+		return
+	}
+
 	// reject unknown hosts
 	if !isAllowedHost(destUrl) {
 		http.Error(w, "forbidden upstream host", http.StatusForbidden)
