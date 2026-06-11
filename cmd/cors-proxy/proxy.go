@@ -28,12 +28,11 @@ func main() {
 	slog.SetDefault(logger)
 
 	// create a http server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", proxyHandler)
+	handler := http.HandlerFunc(proxyHandler)
 
 	s := &http.Server{
 		Addr:           fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-		Handler:        accessLog(corsMiddleware(rateLimit(mux))),
+		Handler:        accessLog(corsMiddleware(rateLimit(handler))),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		MaxHeaderBytes: 64 << 10, // 64KiB

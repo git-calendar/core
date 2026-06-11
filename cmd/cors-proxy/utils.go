@@ -18,7 +18,7 @@ import (
 	"github.com/sethvargo/go-limiter/noopstore"
 )
 
-// a transport used for destination requests
+// a transport used for upstream requests
 var roundTripper http.RoundTripper = &http.Transport{
 	Proxy: http.ProxyFromEnvironment,
 	DialContext: (&net.Dialer{
@@ -33,6 +33,7 @@ var roundTripper http.RoundTripper = &http.Transport{
 	ForceAttemptHTTP2:     true,
 }
 
+// Checks target/destination host with the allowlist.
 func isAllowedHost(u *url.URL) bool {
 	if u == nil {
 		return false
@@ -42,10 +43,9 @@ func isAllowedHost(u *url.URL) bool {
 	return slices.Contains(cfg.AllowedHosts, host)
 }
 
+// Extracts the target/destination URL from the path of the original request.
 func targetUrl(u *url.URL) *url.URL {
 	targetStr := strings.TrimPrefix(u.Path, "/")
-	targetStr = strings.Replace(targetStr, "https:/", "https://", 1) // fix collapsed double slash
-	targetStr = strings.Replace(targetStr, "http:/", "http://", 1)
 
 	destUrl, err := url.Parse(targetStr)
 	if err != nil || destUrl.Scheme == "" || destUrl.Host == "" {
