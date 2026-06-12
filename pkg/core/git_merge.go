@@ -19,8 +19,8 @@ import (
 
 // mergeOriginMain performs a 3-way last-write-wins merge of origin/main -> main.
 func mergeOriginMain(repo *gogit.Repository) error {
-	if repo != nil {
-		return errors.New("calendar or repository is nil")
+	if repo == nil {
+		return errors.New("repository is nil")
 	}
 
 	// get worktree with main branch
@@ -93,8 +93,7 @@ func mergeOriginMain(repo *gogit.Repository) error {
 	return nil
 }
 
-// applyLWW applies last-write-wins strategy to an event file from three
-// versions (base, local, remote).
+// applyLWW applies last-write-wins strategy to an event file from three versions (base, local, remote).
 func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote eventVersion) error {
 	switch {
 	case base.exists && !remote.exists: // remote deleted -> delete wins
@@ -114,7 +113,7 @@ func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote eventVersi
 	case local.hash == remote.hash: // identical blobs; no-op
 
 	default: // both sides modified -> last write wins
-		if remote.event.UpdatedAt.After(local.event.UpdatedAt) {
+		if remote.event.UpdatedAt.After(local.event.UpdatedAt) { // if same, local wins i guess?
 			return writeEvent(wt, gitPath, remote)
 		}
 	}
@@ -141,7 +140,7 @@ func writeEvent(wt *gogit.Worktree, gitPath string, ver eventVersion) error {
 	return nil
 }
 
-// ------------------------------------ helpers ------------------------------------
+// ------------------------------------ Helpers ------------------------------------
 
 // ensureBranch checks out branch if HEAD is elsewhere, then returns the worktree.
 func ensureBranch(repo *gogit.Repository, branch string) (*gogit.Worktree, error) {

@@ -50,6 +50,7 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
+// SyncAll tries to synchronize all calendars with its remotes.
 func (c *Core) SyncAll() error {
 	var resultErr error
 
