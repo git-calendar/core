@@ -79,25 +79,20 @@ func (c *Core) syncCalendar(cal *calendar) error {
 		return err
 	}
 
-	localRef, err := localMainRef(cal.repository)
-	if err != nil {
-		return err
-	}
-
-	remoteRef, err := remoteMainRef(cal.repository)
+	localCommit, remoteCommit, err := getCommits(cal.repository)
 	if err != nil {
 		return err
 	}
 
 	switch {
-	case localRef.Hash() == remoteRef.Hash():
-		return nil
+	case localCommit.Hash == remoteCommit.Hash:
+		return nil // already in sync
 
-	case isAncestor(cal.repository, localRef.Hash(), remoteRef.Hash()):
+	case isAncestor(localCommit, remoteCommit):
 		// remote is ahead
-		return fastForwardCalendar(cal, remoteRef.Hash())
+		return fastForwardCalendar(cal, remoteCommit.Hash)
 
-	case isAncestor(cal.repository, remoteRef.Hash(), localRef.Hash()):
+	case isAncestor(remoteCommit, localCommit):
 		// local is ahead
 		return pushCalendar(cal, c.proxyUrl)
 
@@ -105,7 +100,7 @@ func (c *Core) syncCalendar(cal *calendar) error {
 		// cant simply push or pull (history diverged) -> try merge
 
 		fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
-		if err := customMerge(cal, c.proxyUrl); err != nil {
+		if err := mergeOriginMain(cal.repository); err != nil {
 			return fmt.Errorf("failed to merge: %w", err)
 		}
 		fmt.Printf("Custom merge successfull for %q\n", cal.Name)

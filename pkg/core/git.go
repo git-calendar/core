@@ -18,19 +18,11 @@ func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
 	}
 
 	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
-	err = cal.repository.Push(&gogit.PushOptions{
+	return ignoreUpToDate(cal.repository.Push(&gogit.PushOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalUrl.String(),
 		Auth:       auth,
-	})
-	if err != nil {
-		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-			return nil // this is ok
-		}
-		return err
-	}
-
-	return nil
+	}))
 }
 
 func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
@@ -42,19 +34,11 @@ func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
 	}
 
 	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
-	err = cal.repository.Fetch(&gogit.FetchOptions{
+	return ignoreUpToDate(cal.repository.Fetch(&gogit.FetchOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalUrl.String(),
 		Auth:       auth,
-	})
-	if err != nil {
-		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-			return nil // this is ok
-		}
-		return err
-	}
-
-	return nil
+	}))
 }
 
 func fastForwardCalendar(cal *calendar, hash plumbing.Hash) error {
@@ -81,52 +65,10 @@ func fastForwardCalendar(cal *calendar, hash plumbing.Hash) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------------------------------
-
-func localMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
-	refName := plumbing.NewBranchReferenceName(GitBranchName)
-
-	ref, err := repo.Reference(refName, true)
-	if err != nil {
-		return nil, fmt.Errorf("local ref %s: %w", refName, err)
+// ignoreUpToDate swallows the benign "already up to date" error from push/fetch.
+func ignoreUpToDate(err error) error {
+	if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+		return nil
 	}
-
-	return ref, nil
-}
-
-func remoteMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
-	refName := plumbing.NewRemoteReferenceName(GitRemoteName, GitBranchName)
-
-	ref, err := repo.Reference(refName, true)
-	if err != nil {
-		return nil, fmt.Errorf("remote ref %s: %w", refName, err)
-	}
-
-	return ref, nil
-}
-
-func isAncestor(repo *gogit.Repository, ancestorHash, descendantHash plumbing.Hash) bool {
-	if ancestorHash == descendantHash {
-		return true
-	}
-
-	ancestorCommit, err := repo.CommitObject(ancestorHash)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-
-	descendantCommit, err := repo.CommitObject(descendantHash)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-
-	ok, err := ancestorCommit.IsAncestor(descendantCommit)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-
-	return ok
+	return err
 }
