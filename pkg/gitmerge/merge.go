@@ -1,7 +1,6 @@
-package core
+package gitmerge
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,72 +16,82 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// mergeOriginMain performs a 3-way last-write-wins merge of origin/main -> main.
-func mergeOriginMain(repo *gogit.Repository) error {
+// MergeRemoteIntoBranch performs a 3-way last-write-wins merge of origin/main -> main.
+func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	if repo == nil {
 		return errors.New("repository is nil")
 	}
+	if err := opts.validate(); err != nil {
+		return err
+	}
 
-	// get worktree with main branch
-	wt, err := ensureBranch(repo, GitBranchName)
+	wt, err := ensureBranch(repo, opts.BranchName)
 	if err != nil {
 		return err
 	}
 
-	localCommit, remoteCommit, err := getCommits(repo)
+	localCommit, remoteCommit, err := GetCommits(repo, opts.BranchName, opts.RemoteName)
 	if err != nil {
 		return err
 	}
 	if localCommit.Hash == remoteCommit.Hash {
-		return nil // already up to date
+		return nil
 	}
 
-	// prepare trees
 	baseCommit, err := mergeBase(localCommit, remoteCommit)
 	if err != nil {
 		return err
 	}
+
 	baseTree, err := baseCommit.Tree()
 	if err != nil {
 		return fmt.Errorf("load base tree: %w", err)
 	}
+
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return fmt.Errorf("load local tree: %w", err)
 	}
+
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return fmt.Errorf("load remote tree: %w", err)
 	}
 
-	paths, err := collectEventPaths(baseTree, localTree, remoteTree)
+	paths, err := collectPaths(opts.IncludePath, baseTree, localTree, remoteTree)
 	if err != nil {
 		return err
 	}
+
 	for _, p := range paths {
-		baseVer, err := readEventVersion(baseTree, p)
+		baseVer, err := readFileVersion(baseTree, p, opts.UpdatedAt)
 		if err != nil {
 			return err
 		}
-		localVer, err := readEventVersion(localTree, p)
+
+		localVer, err := readFileVersion(localTree, p, opts.UpdatedAt)
 		if err != nil {
 			return err
 		}
-		remoteVer, err := readEventVersion(remoteTree, p)
+
+		remoteVer, err := readFileVersion(remoteTree, p, opts.UpdatedAt)
 		if err != nil {
 			return err
 		}
+
 		if err := applyLWW(wt, p, baseVer, localVer, remoteVer); err != nil {
 			return err
 		}
 	}
 
-	commitMsg := fmt.Sprintf("Merge '%s/%s' (LWW)", GitRemoteName, GitBranchName)
+	commitMsg := fmt.Sprintf("Merge '%s/%s' (LWW)", opts.RemoteName, opts.BranchName)
+
 	_, err = wt.Commit(commitMsg, &gogit.CommitOptions{
 		Parents: []plumbing.Hash{localCommit.Hash, remoteCommit.Hash},
 		Author: &object.Signature{
-			Name: GitAuthorName,
-			When: time.Now(),
+			Name:  opts.AuthorName,
+			Email: opts.AuthorEmail,
+			When:  time.Now(),
 		},
 		AllowEmptyCommits: true,
 	})
@@ -94,7 +103,7 @@ func mergeOriginMain(repo *gogit.Repository) error {
 }
 
 // applyLWW applies last-write-wins strategy to an event file from three versions (base, local, remote).
-func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote eventVersion) error {
+func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote fileVersion) error {
 	switch {
 	case base.exists && !remote.exists: // remote deleted -> delete wins
 		if local.exists {
@@ -108,21 +117,21 @@ func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote eventVersi
 	case !remote.exists: // remote has nothing new; local-only add or both absent
 
 	case !local.exists: // remote added a new file -> take it
-		return writeEvent(wt, gitPath, remote)
+		return writeFile(wt, gitPath, remote)
 
 	case local.hash == remote.hash: // identical blobs; no-op
 
 	default: // both sides modified -> last write wins
-		if remote.event.UpdatedAt.After(local.event.UpdatedAt) { // if same, local wins i guess?
-			return writeEvent(wt, gitPath, remote)
+		if remote.updatedAt.After(local.updatedAt) { // if same, local wins i guess?
+			return writeFile(wt, gitPath, remote)
 		}
 	}
 
 	return nil
 }
 
-// writeEvent writes a remote event blob to the worktree filesystem and stages it.
-func writeEvent(wt *gogit.Worktree, gitPath string, ver eventVersion) error {
+// writeFile writes a remote blob to the worktree filesystem and stages it.
+func writeFile(wt *gogit.Worktree, gitPath string, ver fileVersion) error {
 	fs := wt.Filesystem
 	localPath := billyPath(fs, gitPath)
 
@@ -131,12 +140,15 @@ func writeEvent(wt *gogit.Worktree, gitPath string, ver eventVersion) error {
 			return fmt.Errorf("%s: failed to create parent dir: %w", gitPath, err)
 		}
 	}
+
 	if err := util.WriteFile(fs, localPath, ver.data, 0o644); err != nil {
-		return fmt.Errorf("%s: failed to write event: %w", gitPath, err)
+		return fmt.Errorf("%s: failed to write file: %w", gitPath, err)
 	}
+
 	if _, err := wt.Add(gitPath); err != nil {
-		return fmt.Errorf("%s: failed to stage event: %w", gitPath, err)
+		return fmt.Errorf("%s: failed to stage file: %w", gitPath, err)
 	}
+
 	return nil
 }
 
@@ -162,31 +174,18 @@ func ensureBranch(repo *gogit.Repository, branch string) (*gogit.Worktree, error
 	return wt, nil
 }
 
-func localMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
-	name := plumbing.NewBranchReferenceName(GitBranchName)
-	ref, err := repo.Reference(name, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get local ref %s: %w", name, err)
-	}
-	return ref, nil
-}
-
-func remoteMainRef(repo *gogit.Repository) (*plumbing.Reference, error) {
-	name := plumbing.NewRemoteReferenceName(GitRemoteName, GitBranchName)
-	ref, err := repo.Reference(name, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get remote ref %s: %w", name, err)
-	}
-	return ref, nil
-}
-
-// getCommits returns the local and remote HEAD commits for the main branch.
-func getCommits(repo *gogit.Repository) (local, remote *object.Commit, err error) {
-	localRef, err := localMainRef(repo)
+// GetCommits returns the local and remote HEAD commits for the main branch.
+func GetCommits(
+	repo *gogit.Repository,
+	branchName string,
+	remoteName string,
+) (local, remote *object.Commit, err error) {
+	localRef, err := localBranchRef(repo, branchName)
 	if err != nil {
 		return nil, nil, err
 	}
-	remoteRef, err := remoteMainRef(repo)
+
+	remoteRef, err := remoteBranchRef(repo, remoteName, branchName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -195,6 +194,7 @@ func getCommits(repo *gogit.Repository) (local, remote *object.Commit, err error
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load local commit: %w", err)
 	}
+
 	remote, err = repo.CommitObject(remoteRef.Hash())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load remote commit: %w", err)
@@ -203,17 +203,30 @@ func getCommits(repo *gogit.Repository) (local, remote *object.Commit, err error
 	return local, remote, nil
 }
 
-// isAncestor reports whether a is an ancestor of (or equal to) b.
-func isAncestor(a, b *object.Commit) bool {
-	if a.Hash == b.Hash {
-		return true
-	}
-	ok, err := a.IsAncestor(b)
+func localBranchRef(repo *gogit.Repository, branchName string) (*plumbing.Reference, error) {
+	name := plumbing.NewBranchReferenceName(branchName)
+
+	ref, err := repo.Reference(name, true)
 	if err != nil {
-		fmt.Printf("WARN: isAncestor %s -> %s: %v\n", a.Hash, b.Hash, err)
-		return false
+		return nil, fmt.Errorf("failed to get local ref %s: %w", name, err)
 	}
-	return ok
+
+	return ref, nil
+}
+
+func remoteBranchRef(
+	repo *gogit.Repository,
+	remoteName string,
+	branchName string,
+) (*plumbing.Reference, error) {
+	name := plumbing.NewRemoteReferenceName(remoteName, branchName)
+
+	ref, err := repo.Reference(name, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote ref %s: %w", name, err)
+	}
+
+	return ref, nil
 }
 
 // mergeBase returns the best common ancestor of a and b.
@@ -230,60 +243,68 @@ func mergeBase(a, b *object.Commit) (*object.Commit, error) {
 
 // ------------------------------------------------------------------------------
 
-type eventVersion struct {
-	exists bool
-	hash   plumbing.Hash
-	data   []byte
-	event  Event
+type fileVersion struct {
+	exists    bool
+	hash      plumbing.Hash
+	data      []byte
+	updatedAt time.Time
 }
 
-// readEventVersion reads and parses an event at gitPath from tree.
-func readEventVersion(tree *object.Tree, gitPath string) (eventVersion, error) {
+func readFileVersion(
+	tree *object.Tree,
+	gitPath string,
+	updatedAtFunc UpdatedAtFunc,
+) (fileVersion, error) {
 	f, err := tree.File(gitPath)
 	if errors.Is(err, object.ErrFileNotFound) {
-		return eventVersion{}, nil
+		return fileVersion{}, nil
 	}
 	if err != nil {
-		return eventVersion{}, fmt.Errorf("%s: failed to lookup in tree: %w", gitPath, err)
+		return fileVersion{}, fmt.Errorf("%s: failed to lookup in tree: %w", gitPath, err)
 	}
 
 	r, err := f.Reader()
 	if err != nil {
-		return eventVersion{}, fmt.Errorf("%s: failed to open blob: %w", gitPath, err)
+		return fileVersion{}, fmt.Errorf("%s: failed to open blob: %w", gitPath, err)
 	}
 	defer r.Close()
 
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return eventVersion{}, fmt.Errorf("%s: failed to read blob: %w", gitPath, err)
+		return fileVersion{}, fmt.Errorf("%s: failed to read blob: %w", gitPath, err)
 	}
 
-	var ev Event
-	if err := json.Unmarshal(data, &ev); err != nil {
-		return eventVersion{}, fmt.Errorf("%s: failed to parse event JSON: %w", gitPath, err)
+	updatedAt, err := updatedAtFunc(gitPath, data)
+	if err != nil {
+		return fileVersion{}, err
 	}
 
-	return eventVersion{exists: true, hash: f.Hash, data: data, event: ev}, nil
+	return fileVersion{
+		exists:    true,
+		hash:      f.Hash,
+		data:      data,
+		updatedAt: updatedAt,
+	}, nil
 }
 
-// collectEventPaths returns the sorted union of event paths across all trees.
-func collectEventPaths(trees ...*object.Tree) ([]string, error) {
+// collectPaths returns the sorted union of file paths across all trees.
+func collectPaths(include IncludePathFunc, trees ...*object.Tree) ([]string, error) {
 	seen := make(map[string]struct{})
+
 	for _, tree := range trees {
 		if tree == nil {
 			continue
 		}
 
-		err := tree.Files().ForEach(
-			func(f *object.File) error {
-				if p := path.Clean(f.Name); isEventPath(p) {
-					seen[p] = struct{}{}
-				}
-				return nil
-			},
-		)
+		err := tree.Files().ForEach(func(f *object.File) error {
+			p := path.Clean(f.Name)
+			if include(p) {
+				seen[p] = struct{}{}
+			}
+			return nil
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to collect event paths: %w", err)
+			return nil, fmt.Errorf("failed to collect paths: %w", err)
 		}
 	}
 
@@ -294,10 +315,6 @@ func collectEventPaths(trees ...*object.Tree) ([]string, error) {
 
 	sort.Strings(paths)
 	return paths, nil
-}
-
-func isEventPath(gitPath string) bool {
-	return path.Dir(gitPath) == EventsDirName && path.Ext(gitPath) == ".json"
 }
 
 // billyPath converts a slash-delimited git path to a native filesystem path just to make sure everything is ok.

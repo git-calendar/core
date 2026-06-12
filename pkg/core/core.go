@@ -9,6 +9,7 @@ import (
 
 	"github.com/git-calendar/core/pkg/export"
 	"github.com/git-calendar/core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/gitmerge"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/cache"
@@ -80,7 +81,7 @@ func (c *Core) syncCalendar(cal *calendar) error {
 		return err
 	}
 
-	localCommit, remoteCommit, err := getCommits(cal.repository)
+	localCommit, remoteCommit, err := gitmerge.GetCommits(cal.repository, GitBranchName, GitRemoteName)
 	if err != nil {
 		return err
 	}
