@@ -3,7 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
+	"path"
 	"reflect"
 	"slices"
 	"time"
@@ -426,60 +426,59 @@ func (c *Core) removeCurrentChild(event *Event) error {
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	event.UpdatedAt = time.Now() // force new time
 
-	// -------- write to disk --------
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
-		return fmt.Errorf("the specified event.Calendar doesn't exist")
+		return fmt.Errorf("calendar not found: %s", event.Calendar)
 	}
 	if cal.repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	// ensure events directory exists
-	dirPath := c.fs.Join(event.Calendar, EventsDirName)
-	if err := c.fs.MkdirAll(dirPath, 0o755); err != nil {
-		return fmt.Errorf("failed mkdir events: %w", err)
+	wt, err := cal.repository.Worktree()
+	if err != nil {
+		return fmt.Errorf("worktree: %w", err)
 	}
 
 	filename := fmt.Sprintf("%s.json", event.Id)
-	filePath := c.fs.Join(dirPath, filename)
+	gitPath := path.Join(EventsDirName, filename)
 
-	// create truncates/overwrites the file if it exists
-	file, err := c.fs.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+	// ensure events directory exists
+	if err := wt.Filesystem.MkdirAll(EventsDirName, 0o755); err != nil {
+		return fmt.Errorf("mkdir events: %w", err)
 	}
 
-	err = event.WriteToFile(file, cal.EncryptionKey)
+	// create truncates/overwrites the file if it exists
+	file, err := wt.Filesystem.Create(gitPath)
 	if err != nil {
-		return fmt.Errorf("failed to write event to file: %w", err)
+		return fmt.Errorf("failed to create event file: %w", err)
 	}
 	defer file.Close()
 
-	// -------- add to git repo --------
-	w, err := cal.repository.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
+	if err := event.WriteToFile(file, cal.EncryptionKey); err != nil {
+		return fmt.Errorf("write event file: %w", err)
+	}
+
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close event file: %w", err)
 	}
 
 	// stage
-	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
-	if _, err := w.Add(gitPath); err != nil {
-		return fmt.Errorf("git add: %w", err)
+	if _, err := wt.Add(gitPath); err != nil {
+		return fmt.Errorf("git add %q: %w", gitPath, err)
 	}
 
 	// commit
-	_, err = w.Commit(commitMsg, &gogit.CommitOptions{
+	_, err = wt.Commit(commitMsg, &gogit.CommitOptions{
 		Author: &object.Signature{
 			Name:  GitAuthorName,
 			Email: "",
 			When:  time.Now(),
 		},
 	})
-
 	if err != nil && !errors.Is(err, gogit.ErrEmptyCommit) {
 		return fmt.Errorf("failed to git commit: %w", err)
 	}
+
 	return nil
 }
 
@@ -487,44 +486,36 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	event, ok := c.events[eventId]
 	if !ok {
-		return fmt.Errorf("failed to find event by id")
-	}
-	filename := fmt.Sprintf("%s.json", eventId)
-
-	// -------- remove from disk --------
-	filePath := c.fs.Join(event.Calendar, EventsDirName, filename)
-	if err := c.fs.Remove(filePath); err != nil {
-		// TODO maybe continue, to clean the git from this file
-		return fmt.Errorf("failed to remove file from disk: %w", err)
+		return fmt.Errorf("event not found: %s", eventId)
 	}
 
-	// -------- remove from git --------
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
-		return fmt.Errorf("calendar doesn't exist")
+		return fmt.Errorf("calendar not found: %s", event.Calendar)
 	}
 	if cal.repository == nil {
 		return fmt.Errorf("calendar repo not initialized")
 	}
 
-	w, err := cal.repository.Worktree()
+	wt, err := cal.repository.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	gitPath := filepath.ToSlash(c.fs.Join(EventsDirName, filename))
-	if _, err := w.Remove(gitPath); err != nil {
-		return fmt.Errorf("git remove: %w", err)
+	gitPath := path.Join(EventsDirName, fmt.Sprintf("%s.json", eventId))
+
+	if _, err := wt.Remove(gitPath); err != nil {
+		return fmt.Errorf("git remove %q: %w", gitPath, err)
 	}
 
-	_, err = w.Commit(commitMsg, &gogit.CommitOptions{
+	_, err = wt.Commit(commitMsg, &gogit.CommitOptions{
 		Author: &object.Signature{
 			Name:  GitAuthorName,
 			Email: "",
 			When:  time.Now(),
 		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, gogit.ErrEmptyCommit) {
 		return fmt.Errorf("failed to git commit: %w", err)
 	}
 

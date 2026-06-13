@@ -15,12 +15,12 @@ import (
 )
 
 func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
-	fmt.Println("pushing", cal.Name)
-
 	repoUrl, err := repoUrlFromCalendar(cal)
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("pushing", cal.Name)
 
 	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
 	return ignoreUpToDate(cal.repository.Push(&gogit.PushOptions{
@@ -31,12 +31,12 @@ func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
 }
 
 func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
-	fmt.Println("fetching", cal.Name)
-
 	repoUrl, err := repoUrlFromCalendar(cal)
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("fetching", cal.Name)
 
 	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
 	return ignoreUpToDate(cal.repository.Fetch(&gogit.FetchOptions{
