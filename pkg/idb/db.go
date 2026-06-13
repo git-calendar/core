@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"syscall/js"
 	"time"
@@ -270,8 +271,8 @@ func (idb *IndexedDB) ReadDir(p string) ([]os.FileInfo, error) {
 
 	rangeObj := js.Global().Get("IDBKeyRange").Call(
 		"bound",
-		fullpath,
-		fullpath+"\uffff",
+		prefix,
+		prefix+"\uffff",
 	)
 
 	txKeys := NewTx()
@@ -285,39 +286,66 @@ func (idb *IndexedDB) ReadDir(p string) ([]os.FileInfo, error) {
 		return nil, os.ErrNotExist
 	}
 
-	length := result.Length()
-	keys := make([]string, 0, length)
-	for idx := range length {
-		key := result.Index(idx).String()
-		if key == fullpath {
-			continue
-		}
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-		rest := key[len(prefix):]
-		if strings.Contains(rest, "/") {
+	type child struct {
+		key string
+		dir bool
+	}
+
+	children := map[string]child{}
+
+	for i := 0; i < result.Length(); i++ {
+		key := result.Index(i).String()
+		rest := strings.TrimPrefix(key, prefix)
+		if rest == "" || rest == key {
 			continue
 		}
 
-		keys = append(keys, key)
+		name, _, nested := strings.Cut(rest, "/")
+		if name == "" {
+			continue
+		}
+
+		if nested {
+			children[name] = child{key: prefix + name, dir: true}
+			continue
+		}
+
+		if _, exists := children[name]; !exists {
+			children[name] = child{key: key}
+		}
 	}
 
 	txInfos := NewTx()
-	infoReqs := make([]interface{ Result() js.Value }, len(keys))
+	infoReqs := map[string]*Operation{}
 
-	for idx, key := range keys {
-		infoReqs[idx] = txInfos.Get(infoStoreName, key)
+	for name, ch := range children {
+		if ch.dir {
+			continue
+		}
+		infoReqs[name] = txInfos.Get(infoStoreName, ch.key)
 	}
 
 	if err := txInfos.Commit(idb.jsDB); err != nil {
 		return nil, err
 	}
 
-	files := make([]os.FileInfo, 0, len(keys))
-	for idx := range keys {
-		files = append(files, FileInfoFromJS(infoReqs[idx].Result()))
+	files := make([]os.FileInfo, 0, len(children))
+
+	for name, ch := range children {
+		if ch.dir {
+			files = append(files, &IDBFileInfo{
+				name: name,
+				mode: os.ModeDir | 0o755,
+			})
+			continue
+		}
+
+		files = append(files, FileInfoFromJS(infoReqs[name].Result()))
 	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name() < files[j].Name()
+	})
 
 	return files, nil
 }
