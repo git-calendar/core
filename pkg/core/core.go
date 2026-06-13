@@ -9,6 +9,7 @@ import (
 
 	"github.com/git-calendar/core/pkg/export"
 	"github.com/git-calendar/core/pkg/filesystem"
+	"github.com/git-calendar/core/pkg/gitmerge"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/cache"
@@ -50,87 +51,64 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 	return err
 }
 
-// Update all remotes for all repositories.
-func (c *Core) PushAll() error {
-	var errs error
-	for _, cal := range c.calendars {
-		remotes, err := cal.repository.Remotes()
-		if err != nil {
-			errs = errors.Join(err)
-		}
-
-		for _, remote := range remotes {
-			err = remote.Push(&gogit.PushOptions{})
-			if err == gogit.NoErrAlreadyUpToDate {
-				continue // this is ok
-			}
-			if err != nil {
-				errs = errors.Join(err)
-			}
-		}
-	}
-	return errs
-}
-
-func (c *Core) PullAll() error {
+// SyncAll tries to synchronize all calendars with its remotes.
+func (c *Core) SyncAll() error {
 	var resultErr error
 
 	for _, cal := range c.calendars {
 		if cal == nil || cal.repository == nil {
-			continue
+			continue // important to check here; syncCalendar and other do assume this
 		}
 
-		fmt.Println("pulling", cal.Name)
-
-		wt, err := cal.repository.Worktree()
-		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get worktree: %w", cal.Name, err))
-			continue
-		}
-		if wt == nil {
-			continue
-		}
-
-		remote, err := cal.repository.Remote("origin")
-		if err != nil {
-			if errors.Is(err, gogit.ErrRemoteNotFound) {
-				continue // this is ok
-			}
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: get remote: %w", cal.Name, err))
-			continue
-		}
-
-		cfg := remote.Config()
-		if cfg == nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote has no config", cal.Name))
-			continue
-		}
-		if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: remote must have exactly one non-empty URL", cal.Name))
-			continue
-		}
-		repoURL, err := url.Parse(cfg.URLs[0])
-		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: parse remote URL: %w", cal.Name, err))
-			continue
-		}
-
-		finalURL, auth := prepareRepoUrl(repoURL, c.proxyUrl)
-		err = wt.Pull(&gogit.PullOptions{
-			RemoteName: "origin",
-			RemoteURL:  finalURL.String(),
-			Auth:       auth,
-		})
-		if errors.Is(err, gogit.NoErrAlreadyUpToDate) {
-			continue // this is ok
-		}
-		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: pull from origin failed: %w", cal.Name, err))
-			continue
+		if err := c.syncCalendar(cal); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%q: sync failed: %w", cal.Name, err))
 		}
 	}
 
+	if err := c.LoadCalendars(); err != nil { // reload events from disk
+		resultErr = errors.Join(resultErr, err)
+	}
+
 	return resultErr
+}
+
+// syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
+func (c *Core) syncCalendar(cal *calendar) error {
+	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
+		if errors.Is(err, gogit.ErrRemoteNotFound) {
+			return nil // this is ok
+		}
+		return err
+	}
+
+	localCommit, remoteCommit, err := gitmerge.GetCommits(cal.repository, GitBranchName, GitRemoteName)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case localCommit.Hash == remoteCommit.Hash:
+		return nil // already in sync
+
+	case isAncestor(localCommit, remoteCommit):
+		// remote is ahead
+		return fastForwardCalendar(cal, remoteCommit.Hash)
+
+	case isAncestor(remoteCommit, localCommit):
+		// local is ahead
+		return pushCalendar(cal, c.proxyUrl)
+
+	default:
+		// cant simply push or pull (history diverged) -> try merge
+
+		fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
+		if err := mergeOriginMain(cal.repository); err != nil {
+			return fmt.Errorf("failed to merge: %w", err)
+		}
+		fmt.Printf("Custom merge successfull for %q\n", cal.Name)
+
+		return pushCalendar(cal, c.proxyUrl)
+	}
 }
 
 func (c *Core) ExportZip(calendar string) ([]byte, error) {

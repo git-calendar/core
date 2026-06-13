@@ -49,6 +49,8 @@ func TestAddInfinitelyRepeatingEventAndGetEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
+	eventIn.UpdatedAt = eventOut.UpdatedAt
+
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
@@ -96,6 +98,8 @@ func TestAddCountRepeatingEventAndGetEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
+	eventIn.UpdatedAt = eventOut.UpdatedAt
+
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}
@@ -144,6 +148,8 @@ func TestAddRepeatingEventsAndRemoveRepeatingEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
+	eventIn.UpdatedAt = eventOut.UpdatedAt
+
 	if !reflect.DeepEqual(eventIn, *eventOut) {
 		t.Errorf("events are not the same: \nin:  %+v\n!=\nout: %+v", eventIn, *eventOut)
 	}

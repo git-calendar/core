@@ -2,11 +2,14 @@ package core
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
 	"time"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
 )
@@ -82,6 +85,30 @@ func prepareRepoUrl(repoUrl *url.URL, proxyUrl *url.URL) (*url.URL, *http.BasicA
 	}
 
 	return &repo, auth
+}
+
+func repoUrlFromCalendar(cal *calendar) (*url.URL, error) {
+	remote, err := cal.repository.Remote(GitRemoteName)
+	if err != nil {
+		if errors.Is(err, gogit.ErrRemoteNotFound) {
+			return nil, err // this is ok
+		}
+		return nil, fmt.Errorf("%q: failed to get remote: %w", cal.Name, err)
+	}
+
+	cfg := remote.Config()
+	if cfg == nil {
+		return nil, fmt.Errorf("%q: remote has no config", cal.Name)
+	}
+	if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
+		return nil, fmt.Errorf("%q: remote must have exactly one non-empty URL", cal.Name)
+	}
+	repoURL, err := url.Parse(cfg.URLs[0])
+	if err != nil {
+		return nil, fmt.Errorf("%q: failed to parse remote URL: %w", cal.Name, err)
+	}
+
+	return repoURL, nil
 }
 
 // useCorsProxy returns a new URL that routes the original URL through the given CORS proxy.

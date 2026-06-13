@@ -424,6 +424,8 @@ func (c *Core) removeCurrentChild(event *Event) error {
 
 // Serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
+	event.UpdatedAt = time.Now() // force new time
+
 	// -------- write to disk --------
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
