@@ -81,7 +81,7 @@ func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.Fil
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return nil, os.ErrNotExist
 		}
-		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", pathOnly, err)
+		return nil, fmt.Errorf("failed to traverse to dir %q: %w", pathOnly, err)
 	}
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryHandle/getFileHandle
@@ -135,7 +135,7 @@ func (fs *OPFS) Remove(path string) error {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return os.ErrNotExist
 		}
-		return fmt.Errorf("failed to traverse to dir '%s': %w", dirPath, err)
+		return fmt.Errorf("failed to traverse to dir %q: %w", dirPath, err)
 	}
 
 	// OPFS FileSystemDirectoryHandle provides a native removeEntry method
@@ -291,7 +291,7 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 		if strings.Contains(err.Error(), "NotFoundError") {
 			return nil, os.ErrNotExist
 		}
-		return nil, fmt.Errorf("failed to traverse to dir '%s': %w", path, err)
+		return nil, fmt.Errorf("failed to traverse to dir %q: %w", path, err)
 	}
 
 	defer func() { // recover any panic

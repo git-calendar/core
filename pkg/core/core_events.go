@@ -29,7 +29,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("failed to insert into index tree: %w", err)
 	}
 
-	err := c.saveAndCommitEvent(&event, fmt.Sprintf("Added event '%s'", event.Id))
+	err := c.saveAndCommitEvent(&event, fmt.Sprintf("Added event %q", event.Id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to save event to repo: %w", err)
 	}
@@ -45,7 +45,7 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 
 	originalEvent, exists := c.events[event.Id]
 	if !exists {
-		return nil, fmt.Errorf("no event found with id '%s'", event.Id)
+		return nil, fmt.Errorf("no event found with id %q", event.Id)
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -98,7 +98,7 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 		return nil, fmt.Errorf("incorrect strategy provided")
 	}
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
-		return nil, fmt.Errorf("invalid update event: id '%s' does not match parent id '%s'", old.Id, new.Id)
+		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
 
 	switch strat {
@@ -125,7 +125,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	// delete file from disk + git
-	err = c.deleteAndCommitEvent(event.Id, fmt.Sprintf("Delete event '%s'", event.Id))
+	err = c.deleteAndCommitEvent(event.Id, fmt.Sprintf("Deleted event %q", event.Id))
 	if err != nil {
 		return fmt.Errorf("failed to delete event from git: %w", err)
 	}
@@ -157,7 +157,7 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, ok := c.events[id]
 	if !ok {
-		return nil, fmt.Errorf("event with id: '%s' doesn't exist", id)
+		return nil, fmt.Errorf("event with id: %q doesn't exist", id)
 	}
 	return e, nil
 }
@@ -244,7 +244,7 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 
 	// update parent event with the new exception
 	parent.Repeat.Exceptions = append(parent.Repeat.Exceptions, updated.Id)
-	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Added exception to parent '%s'", parent.Id)); err != nil {
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Added exception to parent %q", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to save parent event: %w", err)
 	}
 
@@ -282,7 +282,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 		parent.Repeat.Exceptions = exBefore
 	}
 
-	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Capped parent event '%s'", parent.Id)); err != nil {
+	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Capped parent event %q", parent.Id)); err != nil {
 		return nil, fmt.Errorf("failed to commit parent event: %w", err)
 	}
 
@@ -327,7 +327,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 		// rollback the parent cap
 		parent.Repeat = &originalRepeat
 		parent.Repeat.Exceptions = originalExceptions
-		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("Rolled back cap on parent event '%s'", parent.Id)); rbErr != nil {
+		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("Rolled back cap on parent event %q", parent.Id)); rbErr != nil {
 			return nil, fmt.Errorf("failed to create new event: %w; rollback also failed: %v", err, rbErr)
 		}
 		return nil, fmt.Errorf("failed to create new event: %w", err)
@@ -389,7 +389,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	}
 
 	if err := c.saveAndCommitEvent(parent,
-		fmt.Sprintf("Updated time series (parent '%s')", parent.Id),
+		fmt.Sprintf("Updated time series (parent %q)", parent.Id),
 	); err != nil {
 		return nil, fmt.Errorf("failed to save parent: %w", err)
 	}
@@ -410,7 +410,7 @@ func (c *Core) removeCurrentChild(event *Event) error {
 		parent.Repeat.Exceptions = append(parent.Repeat.Exceptions, newException)
 
 		// update/overwrite the file in repo
-		err := c.saveAndCommitEvent(parent, fmt.Sprintf("Updated event '%s'", event.Id))
+		err := c.saveAndCommitEvent(parent, fmt.Sprintf("Updated event %q", event.Id))
 		if err != nil {
 			return fmt.Errorf("failed to save event to repo: %w", err)
 		}
@@ -420,7 +420,7 @@ func (c *Core) removeCurrentChild(event *Event) error {
 	// cleanup the Parent if all Children are in Exceptions
 	// either (Count != 0 and Count = len(Exceptions)) or TODO: hard to know from the Until
 	if (parent.Repeat.Count != 0 && len(parent.Repeat.Exceptions) == parent.Repeat.Count) || (!parent.Repeat.Until.IsZero() && false) { // ughhh
-		err := c.deleteAndCommitEvent(parent.Id, fmt.Sprintf("Delete event '%s'", parent.Id))
+		err := c.deleteAndCommitEvent(parent.Id, fmt.Sprintf("Deleted event %q", parent.Id))
 		if err != nil {
 			return fmt.Errorf("failed to delete event from git: %w", err)
 		}

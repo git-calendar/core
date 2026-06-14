@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jedisct1/go-aes-siv v1.0.0
 	github.com/rdleal/intervalst v1.5.0
-	golang.org/x/crypto v0.52.0
+	golang.org/x/crypto v0.53.0
 )
 
 require (
@@ -30,9 +30,9 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/mobile v0.0.0-20251209145715-2553ed8ce294 // indirect
 	golang.org/x/mod v0.31.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
