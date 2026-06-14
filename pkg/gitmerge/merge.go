@@ -16,6 +16,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+var errNoMergeBase = errors.New("no merge base")
+
 // MergeRemoteIntoBranch performs a 3-way last-write-wins merge of origin/main -> main.
 func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	if repo == nil {
@@ -38,14 +40,18 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 		return nil
 	}
 
+	var baseTree *object.Tree
 	baseCommit, err := mergeBase(localCommit, remoteCommit)
-	if err != nil {
+	if errors.Is(err, errNoMergeBase) {
+		// unrelated histories -> treat this as a merge against an empty base
+		baseTree = nil
+	} else if err != nil {
 		return err
-	}
-
-	baseTree, err := baseCommit.Tree()
-	if err != nil {
-		return fmt.Errorf("load base tree: %w", err)
+	} else {
+		baseTree, err = baseCommit.Tree()
+		if err != nil {
+			return fmt.Errorf("load base tree: %w", err)
+		}
 	}
 
 	localTree, err := localCommit.Tree()
@@ -236,7 +242,7 @@ func mergeBase(a, b *object.Commit) (*object.Commit, error) {
 		return nil, fmt.Errorf("merge base %s / %s: %w", a.Hash, b.Hash, err)
 	}
 	if len(bases) == 0 {
-		return nil, fmt.Errorf("no merge base between %s and %s", a.Hash, b.Hash)
+		return nil, errNoMergeBase
 	}
 	return bases[0], nil
 }
@@ -255,6 +261,10 @@ func readFileVersion(
 	gitPath string,
 	updatedAtFunc UpdatedAtFunc,
 ) (fileVersion, error) {
+	if tree == nil {
+		return fileVersion{}, nil // missing file
+	}
+
 	f, err := tree.File(gitPath)
 	if errors.Is(err, object.ErrFileNotFound) {
 		return fileVersion{}, nil

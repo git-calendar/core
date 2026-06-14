@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/git-calendar/core/pkg/export"
 	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/git-calendar/core/pkg/gitmerge"
 	"github.com/go-git/go-billy/v5"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/uuid"
 )
@@ -169,15 +172,37 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 
-	repo, err := gogit.Init(storage, repoFS)
+	repo, err := gogit.InitWithOptions(storage, repoFS, gogit.InitOptions{
+		DefaultBranch: plumbing.NewBranchReferenceName(GitBranchName),
+	})
 	if errors.Is(err, gogit.ErrRepositoryAlreadyExists) {
 		repo, err = gogit.Open(storage, repoFS)
 		if err != nil {
 			return nil, err
 		}
+		return repo, nil
 	} else if err != nil {
 		return nil, err
 	}
 
+	if err := firstCommit(repo); err != nil {
+		return nil, fmt.Errorf("initial commit failed: %w", err)
+	}
 	return repo, nil
+}
+
+func firstCommit(repo *gogit.Repository) error {
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	_, err = wt.Commit("Initial calendar empty commit", &gogit.CommitOptions{
+		AllowEmptyCommits: true,
+		Author: &object.Signature{
+			Name: GitAuthorName,
+			When: time.Now(),
+		},
+	})
+	return err
 }
