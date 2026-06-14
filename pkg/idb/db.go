@@ -78,16 +78,21 @@ func New(name string, version int) (*IndexedDB, error) {
 }
 
 func (idb *IndexedDB) Create(filename string) (billy.File, error) {
+	if err := idb.MkdirAll(path.Dir(filename), 0o755); err != nil {
+		return nil, err
+	}
+
 	key := idb.absolutePath(filename)
 
 	tx := NewTx()
-	tx.Delete(contentStoreName, key) // clear old content if any
+	tx.Delete(contentStoreName, key)
 	tx.Put(infoStoreName, key, (&IDBFileInfo{
 		name:    path.Base(filename),
 		size:    0,
 		modTime: time.Now(),
 		mode:    0o666,
 	}).toJS())
+
 	if err := tx.Commit(idb.jsDB); err != nil {
 		return nil, fmt.Errorf("failed to create file %s in idb: %w", filename, err)
 	}
@@ -168,18 +173,56 @@ func (idb *IndexedDB) OpenFile(filename string, flag int, perm os.FileMode) (bil
 }
 
 func (idb *IndexedDB) Stat(name string) (os.FileInfo, error) {
+	key := idb.absolutePath(name)
+
 	tx := NewTx()
-	req := tx.Get(infoStoreName, idb.absolutePath(name))
+	req := tx.Get(infoStoreName, key)
 	if err := tx.Commit(idb.jsDB); err != nil {
 		return nil, err
 	}
 
 	result := req.Result()
-	if !result.Truthy() {
-		return nil, os.ErrNotExist
+	if result.Truthy() {
+		return FileInfoFromJS(result), nil
 	}
 
-	return FileInfoFromJS(result), nil
+	hasChildren, err := idb.hasChildren(name)
+	if err != nil {
+		return nil, err
+	}
+	if hasChildren {
+		return &IDBFileInfo{
+			name:    path.Base(path.Clean(name)),
+			modTime: time.Now(),
+			mode:    os.ModeDir | 0o755,
+		}, nil
+	}
+
+	return nil, os.ErrNotExist
+}
+
+func (idb *IndexedDB) hasChildren(name string) (bool, error) {
+	fullpath := idb.absolutePath(name)
+	prefix := strings.TrimSuffix(fullpath, "/") + "/"
+
+	rangeObj := js.Global().Get("IDBKeyRange").Call(
+		"bound",
+		prefix,
+		prefix+"\uffff",
+	)
+
+	tx := NewTx()
+	req := tx.GetAllKeys(infoStoreName, rangeObj)
+	if err := tx.Commit(idb.jsDB); err != nil {
+		return false, err
+	}
+
+	result := req.Result()
+	if result.IsNull() || result.IsUndefined() {
+		return false, nil
+	}
+
+	return result.Length() > 0, nil
 }
 
 func (idb *IndexedDB) Rename(oldpath, newpath string) error {
@@ -204,37 +247,49 @@ func (idb *IndexedDB) Rename(oldpath, newpath string) error {
 }
 
 func (idb *IndexedDB) Remove(name string) error {
+	key := idb.absolutePath(name)
+
 	info, err := idb.Stat(name)
 	if err != nil {
-		return os.ErrNotExist
-	}
+		if !os.IsNotExist(err) {
+			return err
+		}
 
-	key := idb.absolutePath(name)
+		entries, readErr := idb.ReadDir(name)
+		if readErr == nil && len(entries) > 0 {
+			return fmt.Errorf("directory not empty: %s", name)
+		}
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
+		}
+
+		// Missing / synthetic / corrupted empty entry.
+		// Delete anyway so RemoveAll can clean old bad records.
+		tx := NewTx()
+		tx.Delete(infoStoreName, key)
+		tx.Delete(contentStoreName, key)
+		return tx.Commit(idb.jsDB)
+	}
 
 	if !info.IsDir() {
 		tx := NewTx()
 		tx.Delete(infoStoreName, key)
 		tx.Delete(contentStoreName, key)
-		if err := tx.Commit(idb.jsDB); err != nil {
-			return err
-		}
-	} else {
-		entries, err := idb.ReadDir(name)
-		if err != nil {
-			return err
-		}
-		if len(entries) != 0 {
-			return errors.New("not empty")
-		}
-
-		tx := NewTx()
-		tx.Delete(infoStoreName, key)
-		if err := tx.Commit(idb.jsDB); err != nil {
-			return err
-		}
+		return tx.Commit(idb.jsDB)
 	}
 
-	return nil
+	entries, err := idb.ReadDir(name)
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return fmt.Errorf("directory not empty: %s", name)
+	}
+
+	tx := NewTx()
+	tx.Delete(infoStoreName, key)
+	tx.Delete(contentStoreName, key) // harmless for dirs
+	return tx.Commit(idb.jsDB)
 }
 
 func (idb *IndexedDB) Join(elem ...string) string {
@@ -340,7 +395,17 @@ func (idb *IndexedDB) ReadDir(p string) ([]os.FileInfo, error) {
 			continue
 		}
 
-		files = append(files, FileInfoFromJS(infoReqs[name].Result()))
+		result := infoReqs[name].Result()
+		if !result.Truthy() {
+			files = append(files, &IDBFileInfo{
+				name:    name,
+				modTime: time.Now(),
+				mode:    0o666,
+			})
+			continue
+		}
+
+		files = append(files, FileInfoFromJS(result))
 	}
 
 	sort.Slice(files, func(i, j int) bool {
@@ -453,8 +518,8 @@ func (idb *IndexedDB) renameDir(oldpath, newpath string) error {
 	}
 
 	for _, child := range children {
-		oldChild := path.Join(oldFull, child.Name())
-		newChild := path.Join(newFull, child.Name())
+		oldChild := path.Join(oldpath, child.Name())
+		newChild := path.Join(newpath, child.Name())
 
 		if child.IsDir() {
 			if err := idb.renameDir(oldChild, newChild); err != nil {

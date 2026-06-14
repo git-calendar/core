@@ -248,9 +248,6 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 
 // Removes and deletes the whole calendar.
 func (c *Core) RemoveCalendar(name string) error {
-	// remove from map
-	delete(c.calendars, name)
-
 	// remove dir from filesystem
 	if err := gogitutil.RemoveAll(c.fs, name); err != nil {
 		return fmt.Errorf("failed to remove repo directory: %w", err)
@@ -258,6 +255,9 @@ func (c *Core) RemoveCalendar(name string) error {
 
 	// try to remove encryption key
 	_ = c.fs.Remove(fmt.Sprintf("%s.key", name))
+
+	// remove from map
+	delete(c.calendars, name)
 
 	// TODO: This is the lazy way.
 	// LoadCalendars does full erase and load again for events map and tree. It also deletes all the repos, and reloads them from disk.
