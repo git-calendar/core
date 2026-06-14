@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// eventFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
 type eventFile struct {
 	Title       string      `json:"title,omitzero"`
 	Location    string      `json:"location,omitzero"`

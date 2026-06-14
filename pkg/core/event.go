@@ -15,17 +15,17 @@ import (
 //  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
 //  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
-	Id          uuid.UUID   `json:"id,omitzero"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
-	Title       string      `json:"title,omitzero"`    // Should not be empty.
-	Location    string      `json:"location,omitzero"` // Physical or virtual location (e.g., URL).
-	Description string      `json:"description,omitzero"`
-	From        time.Time   `json:"from,omitzero"`
-	To          time.Time   `json:"to,omitzero"`
-	Calendar    string      `json:"calendar,omitzero"`  // The name of the calendar the event belongs to.
-	Tag         string      `json:"tag,omitzero"`       // User-defined category or label.
-	ParentId    uuid.UUID   `json:"parent_id,omitzero"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
-	Repeat      *Repetition `json:"repeat,omitzero"`
-	UpdatedAt   time.Time   `json:"updated_at,omitzero"` // Used for git conflict resolution; latest wins.
+	Id          uuid.UUID   `json:"id"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
+	Title       string      `json:"title"`    // Should not be empty.
+	Location    string      `json:"location"` // Physical or virtual location (e.g., URL).
+	Description string      `json:"description"`
+	From        time.Time   `json:"from"`
+	To          time.Time   `json:"to"`
+	Calendar    string      `json:"calendar"`  // The name of the calendar the event belongs to.
+	Tag         string      `json:"tag"`       // User-defined category or label.
+	ParentId    uuid.UUID   `json:"parent_id"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
+	Repeat      *Repetition `json:"repeat"`
+	UpdatedAt   time.Time   `json:"updated_at"` // Used for git conflict resolution; latest wins.
 }
 
 // Repetition defines the recurrence rules for a Parent event.
@@ -33,11 +33,11 @@ type Event struct {
 // A Repetition object exists only on Parent events to generate Children.
 // A series must be capped by either Until (date) or Count (occurrences). Not both.
 type Repetition struct {
-	Frequency  Freq        `json:"frequency,omitzero"`  // The unit of time for recurrence (Day, Week, Month, etc.).
-	Interval   int         `json:"interval,omitzero"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
-	Until      time.Time   `json:"until,omitzero"`      // Hard stop date for the series. (Inclusive: occurrences starting BEFORE or even ON this time are included.)
-	Count      int         `json:"count,omitzero"`      // Total number of occurrences to generate.
-	Exceptions []uuid.UUID `json:"exceptions,omitzero"` // List of Child IDs that deviate from the base rule (edited or cancelled).
+	Frequency  Freq        `json:"frequency"`  // The unit of time for recurrence (Day, Week, Month, etc.).
+	Interval   int         `json:"interval"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
+	Until      time.Time   `json:"until"`      // Hard stop date for the series. (Inclusive: occurrences starting BEFORE or even ON this time are included.)
+	Count      int         `json:"count"`      // Total number of occurrences to generate.
+	Exceptions []uuid.UUID `json:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
 }
 
 func (e *Event) Validate() error {
