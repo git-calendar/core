@@ -70,8 +70,16 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 		}
 	}
 
+	newRepoCommitMsg := fmt.Sprintf("Updated event %q", event.Id)
+	if originalEvent.Calendar != event.Calendar {
+		newRepoCommitMsg = fmt.Sprintf("Moved event from another calendar %q", event.Id)
+		if err := c.deleteAndCommitEvent(originalEvent.Id, fmt.Sprintf("Moved event to another calendar %q", originalEvent.Id)); err != nil { // remote the old file from previous calendar/repo
+			return nil, err
+		}
+	}
+
 	c.events[event.Id] = &event
-	if err := c.saveAndCommitEvent(&event, fmt.Sprintf("Updated event '%s'", event.Id)); err != nil {
+	if err := c.saveAndCommitEvent(&event, newRepoCommitMsg); err != nil {
 		return nil, err
 	}
 
