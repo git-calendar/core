@@ -1,15 +1,10 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"strings"
 	"time"
 
-	"github.com/git-calendar/core/pkg/encryption"
-	"github.com/go-git/go-billy/v5"
 	"github.com/google/uuid"
 )
 
@@ -118,78 +113,4 @@ func (e Event) getTreeEndTime() time.Time {
 		}
 	}
 	return eventEnd
-}
-
-func (e Event) WriteToFile(file billy.File, key []byte) error {
-	// not needed to be stored in the file
-	id := e.Id
-	e.Id = uuid.Nil
-
-	// marshal normally
-	raw, err := json.MarshalIndent(e, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	if len(key) == 0 { // no encryption, just use the plaintext
-		_, err = file.Write(raw)
-		return err
-	}
-
-	if id == uuid.Nil {
-		return errors.New("event Id has to be set for encryption")
-	}
-
-	// unmarshal into generic map
-	var data map[string]any
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return err
-	}
-
-	// encrypt everything recursively
-	encData, err := encryption.EncryptFields(data, key, id[:])
-	if err != nil {
-		return err
-	}
-
-	// marshal again
-	finalRaw, err := json.MarshalIndent(encData, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	_, err = file.Write(finalRaw)
-	return err
-}
-
-func (e *Event) LoadFromFile(file billy.File, decryptionKey []byte) error {
-	raw, err := io.ReadAll(file)
-	if err != nil {
-		return fmt.Errorf("failed to read file '%s': %w\n", file.Name(), err)
-	}
-
-	e.Id, err = uuid.Parse(strings.Split(file.Name(), ".")[0]) // get event id from the name
-	if err != nil {
-		return fmt.Errorf("file name is not UUID.json but '%s': %w\n", file.Name(), err)
-	}
-
-	if len(decryptionKey) == 0 { // no encryption, just use the plaintext
-		return json.Unmarshal(raw, e)
-	}
-
-	var encryptedData map[string]any
-	if err := json.Unmarshal(raw, &encryptedData); err != nil {
-		return err
-	}
-
-	decryptedData, err := encryption.DecryptFields(encryptedData, decryptionKey, e.Id[:])
-	if err != nil {
-		return err
-	}
-
-	// eww (map to struct)
-	tmp, err1 := json.Marshal(decryptedData)
-	err2 := json.Unmarshal(tmp, e)
-
-	return errors.Join(err1, err2)
 }

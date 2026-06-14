@@ -154,7 +154,7 @@ func (c *Core) LoadCalendars() error {
 			defer file.Close()
 
 			var event Event
-			err = event.LoadFromFile(file, cal.EncryptionKey)
+			err = event.LoadFromFile(file, cal.Name, cal.EncryptionKey)
 			if err != nil {
 				fmt.Printf("failed to load event from file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
 				continue
@@ -299,8 +299,6 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 
 	delete(c.calendars, oldName)
 	c.calendars[newName] = calendar
-
-	// TODO: handle "calendar" field in its events
 
 	return nil
 }
