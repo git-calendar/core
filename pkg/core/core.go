@@ -48,6 +48,11 @@ func NewCore() *Core {
 
 // Sets a url for CORS proxy. This is only needed inside a browser.
 func (c *Core) SetCorsProxy(proxyUrl string) error {
+	if proxyUrl == "" {
+		c.proxyUrl = nil
+		return nil
+	}
+
 	var err error
 	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
 	c.proxyUrl, err = url.ParseRequestURI(trimmed)
