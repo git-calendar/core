@@ -14,7 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
+func pushCalendar(cal *Calendar, proxyUrl *url.URL) error {
 	repoUrl, err := repoUrlFromCalendar(cal)
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func pushCalendar(cal *calendar, proxyUrl *url.URL) error {
 	}))
 }
 
-func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
+func fetchCalendar(cal *Calendar, proxyUrl *url.URL) error {
 	repoUrl, err := repoUrlFromCalendar(cal)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func fetchCalendar(cal *calendar, proxyUrl *url.URL) error {
 	}))
 }
 
-func fastForwardCalendar(cal *calendar, hash plumbing.Hash) error {
+func fastForwardCalendar(cal *Calendar, hash plumbing.Hash) error {
 	fmt.Println("fast-forward", cal.Name)
 
 	wt, err := cal.repository.Worktree()

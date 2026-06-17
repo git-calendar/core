@@ -68,7 +68,7 @@ func TestListCalendars(t *testing.T) {
 			continue
 		}
 
-		if calendar.Encrypted {
+		if calendar.IsEncrypted() {
 			t.Fatal("calendar should not be encrypted")
 		}
 		if len(calendar.Tags) != 0 {
@@ -113,8 +113,12 @@ func TestListCalendars_WithRemote(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-		if calendar.RemoteUrl != remoteUrl {
-			t.Fatalf("remote url mismatch: got %v, want %v", calendar.RemoteUrl, remoteUrl)
+		rurl, err := calendar.RemoteURL()
+		if err != nil {
+			t.Fatalf("failed to get remote url: %v", err)
+		}
+		if rurl != remoteUrl {
+			t.Fatalf("remote url mismatch: got %v, want %v", rurl, remoteUrl)
 		}
 		found = true
 		break

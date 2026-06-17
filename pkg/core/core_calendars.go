@@ -43,7 +43,7 @@ func (c *Core) CreateCalendar(name, password string) error {
 		}
 	}
 
-	cal := calendar{
+	cal := Calendar{
 		Name:          name,
 		Tags:          []Tag{},
 		EncryptionKey: key,
@@ -60,35 +60,21 @@ func (c *Core) CreateCalendar(name, password string) error {
 }
 
 // ListCalendars returns calendar metadata.
-func (c *Core) ListCalendars() ([]CalendarInfo, error) {
+func (c *Core) ListCalendars() ([]Calendar, error) {
 	calendars := slices.Collect(maps.Values(c.calendars))
-	slices.SortFunc(calendars, func(a, b *calendar) int {
+
+	slices.SortFunc(calendars, func(a, b *Calendar) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 
-	result := make([]CalendarInfo, 0, len(calendars))
+	result := make([]Calendar, 0, len(calendars))
 
 	for _, cal := range calendars {
-		var remoteUrl string
-		if cal.repository != nil {
-			remote, err := cal.repository.Remote(GitRemoteName)
-			if err == nil {
-				cfg := remote.Config()
-				if cfg == nil {
-					return nil, fmt.Errorf("remote for calendar %q has no config", cal.Name)
-				}
-				if len(cfg.URLs) != 1 || cfg.URLs[0] == "" {
-					return nil, fmt.Errorf("remote for calendar %q must have exactly one non-empty URL, got %d", cal.Name, len(cfg.URLs))
-				}
-				remoteUrl = cfg.URLs[0]
-			}
-		}
-
-		result = append(result, CalendarInfo{
-			Name:      cal.Name,
-			Tags:      slices.Clone(cal.Tags),
-			Encrypted: cal.IsEncrypted(),
-			RemoteUrl: remoteUrl,
+		result = append(result, Calendar{
+			Name:          cal.Name,
+			Tags:          slices.Clone(cal.Tags),
+			EncryptionKey: slices.Clone(cal.EncryptionKey),
+			repository:    cal.repository,
 		})
 	}
 
@@ -127,7 +113,7 @@ func (c *Core) LoadCalendars() error {
 			keyFile.Close()
 		}
 
-		c.calendars[name] = &calendar{
+		c.calendars[name] = &Calendar{
 			Name:          name,
 			Tags:          nil, // TODO: load tags
 			EncryptionKey: key,
@@ -231,7 +217,8 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 			return fmt.Errorf("failed to write key to key file: %w", err)
 		}
 	}
-	c.calendars[calendarName] = &calendar{
+
+	c.calendars[calendarName] = &Calendar{
 		Name:          calendarName,
 		Tags:          nil, // TODO: load tags
 		EncryptionKey: key,

@@ -26,7 +26,7 @@ import (
 type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
-	calendars    map[string]*calendar
+	calendars    map[string]*Calendar
 	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
 	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
 }
@@ -81,7 +81,7 @@ func (c *Core) SyncAll() error {
 }
 
 // syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
-func (c *Core) syncCalendar(cal *calendar) error {
+func (c *Core) syncCalendar(cal *Calendar) error {
 	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
 		if errors.Is(err, gogit.ErrRemoteNotFound) {
 			return nil // this is ok
@@ -152,7 +152,7 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 func (c *Core) resetCore() {
 	c.intervalTree = NewIntervalTree()
 	c.events = make(map[uuid.UUID]*Event)
-	c.calendars = make(map[string]*calendar)
+	c.calendars = make(map[string]*Calendar)
 }
 
 // Loads, if exists, or creates new repository with the given name.

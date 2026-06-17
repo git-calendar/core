@@ -41,8 +41,12 @@ func TestUpdateRemote_ReplacesExistingRemote(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-		if calendar.RemoteUrl != newCalRemote {
-			t.Fatalf("remote url mismatch: got %v, want %v", calendar.RemoteUrl, newCalRemote)
+		remoteUrl, err := calendar.RemoteURL()
+		if err != nil {
+			t.Fatalf("failed to get remote url: %v", err)
+		}
+		if remoteUrl != newCalRemote {
+			t.Fatalf("remote url mismatch: got %v, want %v", remoteUrl, newCalRemote)
 		}
 		found = true
 		break
@@ -85,8 +89,12 @@ func TestUpdateRemote_DeletesWhenEmpty(t *testing.T) {
 		if calendar.Name != TestCalendarName {
 			continue
 		}
-		if calendar.RemoteUrl != "" {
-			t.Fatalf("remote url mismatch: got %v, want \"\"", calendar.RemoteUrl)
+		remoteUrl, err := calendar.RemoteURL()
+		if err != nil {
+			t.Fatalf("failed to get remote url: %v", err)
+		}
+		if remoteUrl != "" {
+			t.Fatalf("remote url mismatch: got %v, want \"\"", remoteUrl)
 		}
 		found = true
 		break

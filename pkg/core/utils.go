@@ -87,7 +87,7 @@ func prepareRepoUrl(repoUrl *url.URL, proxyUrl *url.URL) (*url.URL, *http.BasicA
 	return &repo, auth
 }
 
-func repoUrlFromCalendar(cal *calendar) (*url.URL, error) {
+func repoUrlFromCalendar(cal *Calendar) (*url.URL, error) {
 	remote, err := cal.repository.Remote(GitRemoteName)
 	if err != nil {
 		if errors.Is(err, gogit.ErrRemoteNotFound) {
