@@ -28,19 +28,9 @@ func (c *Core) CreateCalendar(name, password string) error {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
 	}
 
-	var key []byte = nil
-	if len(password) != 0 {
-		key = encryption.DeriveKey(password, []byte(name))
-
-		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", name))
-		if err != nil {
-			return fmt.Errorf("failed to create key file: %w", err)
-		}
-		defer keyFile.Close()
-
-		if _, err = keyFile.Write(key); err != nil {
-			return fmt.Errorf("failed to write key to key file: %w", err)
-		}
+	key, err := c.createKeyFile(name, password)
+	if err != nil {
+		return err
 	}
 
 	cal := Calendar{
@@ -99,16 +89,15 @@ func (c *Core) LoadCalendars() error {
 
 		repo, err := c.initCalendarRepo(name)
 		if err != nil {
-			fmt.Printf("failed to init/load %q repository: %v", name, err)
+			fmt.Printf("failed to init/load %q repository: %v\n", name, err)
 			continue
 		}
 
 		var key []byte = nil
 		keyFile, err := c.fs.Open(fmt.Sprintf("%s.key", name))
 		if err == nil {
-			key, err = io.ReadAll(keyFile)
-			if err != nil {
-				fmt.Printf("failed to read encryption key for %q repository: %v", name, err)
+			if key, err = io.ReadAll(keyFile); err != nil {
+				fmt.Printf("failed to read encryption key for %q repository: %v\n", name, err)
 			}
 			keyFile.Close()
 		}
@@ -203,19 +192,9 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	var key []byte = nil
-	if len(password) != 0 {
-		key = encryption.DeriveKey(password, []byte(calendarName))
-
-		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
-		if err != nil {
-			return fmt.Errorf("failed to create key file: %w", err)
-		}
-		defer keyFile.Close()
-
-		if _, err = keyFile.Write(key); err != nil {
-			return fmt.Errorf("failed to write key to key file: %w", err)
-		}
+	key, err := c.createKeyFile(calendarName, password)
+	if err != nil {
+		return err
 	}
 
 	c.calendars[calendarName] = &Calendar{
@@ -324,4 +303,24 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 	}
 
 	return nil
+}
+
+// ------------------------------------------------ Helpers -------------------------------------------------
+
+func (c *Core) createKeyFile(calendarName, password string) ([]byte, error) {
+	var key []byte
+	if len(password) != 0 {
+		key = encryption.DeriveKey(password, []byte(calendarName))
+
+		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create key file: %w", err)
+		}
+		defer keyFile.Close()
+
+		if _, err = keyFile.Write(key); err != nil {
+			return nil, fmt.Errorf("failed to write key to key file: %w", err)
+		}
+	}
+	return key, nil
 }
