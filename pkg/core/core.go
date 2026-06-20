@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/git-calendar/core/pkg/export"
@@ -61,16 +62,29 @@ func (c *Core) SetCorsProxy(proxyUrl string) error {
 
 // SyncAll tries to synchronize all calendars with its remotes.
 func (c *Core) SyncAll() error {
-	var resultErr error
+	var wg sync.WaitGroup
+	errs := make(chan error, len(c.calendars))
 
 	for _, cal := range c.calendars {
 		if cal == nil || cal.repository == nil {
 			continue // important to check here; syncCalendar and other do assume this
 		}
 
-		if err := c.syncCalendar(cal); err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("%q: sync failed: %w", cal.Name, err))
-		}
+		wg.Add(1)
+		go func() {
+			if err := c.syncCalendar(cal); err != nil {
+				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait() // wait for all calendar syncs to finish
+	close(errs)
+
+	var resultErr error
+	for err := range errs { // collect all errors
+		resultErr = errors.Join(resultErr, err)
 	}
 
 	if err := c.LoadCalendars(); err != nil { // reload events from disk
