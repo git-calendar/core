@@ -52,10 +52,18 @@ jobs:
       - name: Build WASM
         run: make prod_build_web # just web for now
 
+      - name: Compress (Zstd and Brotli)
+        run: |
+          zstd -7 main.wasm -o main.wasm.zst
+          brotli -q 11 main.wasm -o main.wasm.br
+
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
-          files: build/web/core.wasm
+          files: |
+            build/web/core.wasm
+            build/web/core.wasm.zst
+            build/web/core.wasm.br
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
