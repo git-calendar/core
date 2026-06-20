@@ -110,7 +110,7 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 		// cant simply push or pull (history diverged) -> try merge
 
 		fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
-		if err := mergeOriginMain(cal.repository); err != nil {
+		if err := mergeOriginMain(cal.repository, cal.Name, cal.EncryptionKey); err != nil {
 			return fmt.Errorf("failed to merge: %w", err)
 		}
 		fmt.Printf("Custom merge successfull for %q\n", cal.Name)

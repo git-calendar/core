@@ -101,7 +101,11 @@ func (e *Event) LoadFromFile(file billy.File, calendar string, decryptionKey []b
 		return fmt.Errorf("failed to read file %q: %w", file.Name(), err)
 	}
 
-	id, err := uuid.Parse(strings.TrimSuffix(path.Base(file.Name()), ".json")) // get event id from the name
+	return e.LoadFromBytes(raw, file.Name(), calendar, decryptionKey)
+}
+
+func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decryptionKey []byte) error {
+	id, err := uuid.Parse(strings.TrimSuffix(path.Base(name), ".json")) // get event id from the name
 	if err != nil {
 		return err
 	}

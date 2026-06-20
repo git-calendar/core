@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -92,22 +91,19 @@ func isAncestor(a, b *object.Commit) bool {
 }
 
 // mergeOriginMain is an "adapter" for gitmerge.MergeRemoteIntoBranch.
-func mergeOriginMain(repo *gogit.Repository) error {
+func mergeOriginMain(repo *gogit.Repository, calendar string, encryptionKey []byte) error {
 	return gitmerge.MergeRemoteIntoBranch(repo, gitmerge.Options{
 		BranchName: GitBranchName,
 		RemoteName: GitRemoteName,
-
 		AuthorName: GitAuthorName,
-
 		IncludePath: func(gitPath string) bool {
 			return path.Dir(gitPath) == EventsDirName &&
 				path.Ext(gitPath) == ".json"
 		},
-
 		UpdatedAt: func(gitPath string, data []byte) (time.Time, error) {
 			var ev Event
-			if err := json.Unmarshal(data, &ev); err != nil {
-				return time.Time{}, fmt.Errorf("%s: failed to parse event JSON: %w", gitPath, err)
+			if err := ev.LoadFromBytes(data, path.Base(gitPath), calendar, encryptionKey); err != nil {
+				return time.Time{}, fmt.Errorf("%s: failed to load event: %w", gitPath, err)
 			}
 
 			return ev.UpdatedAt, nil
