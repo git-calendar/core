@@ -52,20 +52,20 @@ func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.Export
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
 
-func (a *Api) UpdateRemote(calendar string, remoteUrl string) error {
+func (a *Api) UpdateRemote(calendar string, remoteUrl string, readonly bool) error {
 	parsed, err := url.Parse(remoteUrl)
 	if err != nil {
 		return fmt.Errorf("remoteUrl is invalid: %w", err)
 	}
-	return a.inner.UpdateRemote(calendar, parsed)
+	return a.inner.UpdateRemote(calendar, parsed, readonly)
 }
 
-func (a *Api) CloneCalendar(repoUrl, password string) error {
+func (a *Api) CloneCalendar(repoUrl, password string, readonly bool) error {
 	parsedUrl, err := url.Parse(repoUrl)
 	if err != nil {
 		return fmt.Errorf("repoUrl is invalid: %w", err)
 	}
-	return a.inner.CloneCalendar(parsedUrl, password)
+	return a.inner.CloneCalendar(parsedUrl, password, readonly)
 }
 
 func (a *Api) ListCalendars() (string, error) {

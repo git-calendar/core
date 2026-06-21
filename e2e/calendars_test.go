@@ -98,7 +98,7 @@ func TestListCalendars_WithRemote(t *testing.T) {
 
 	remoteUrl := "https://github.com/git-calendar/calendar.git"
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl(remoteUrl))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(remoteUrl), false)
 	if err != nil {
 		t.Fatalf("failed to update remotes: %v", err)
 	}

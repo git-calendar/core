@@ -129,6 +129,7 @@ func (c *Core) LoadCalendars() error {
 			Tags:          meta.Tags,
 			EncryptionKey: key,
 			repository:    repo,
+			Readonly:      c.isCalendarReadonly(name),
 		}
 	}
 
@@ -177,7 +178,7 @@ func (c *Core) LoadCalendars() error {
 }
 
 // Clones a repository/calendar from url, using CORS proxy, if specified.
-func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
+func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) error {
 	calendarName := calendarNameFromUrl(repoUrl)
 	if cal, ok := c.calendars[calendarName]; ok || cal != nil {
 		return errors.New("calendar with this name already exists")
@@ -240,6 +241,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 		Tags:          meta.Tags,
 		EncryptionKey: key,
 		repository:    repo,
+		Readonly:      readonly,
 	}
 
 	if err := c.updateReadonlyFile(calendarName, readonly); err != nil {
