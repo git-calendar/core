@@ -23,3 +23,19 @@ type Repetition struct {
 	Count      int
 	Exceptions []string
 }
+
+// A DTO for Kotlin/Swift to use as the calendar structure.
+//
+// This calendar isn't used in Go itself, but serves as a "shape definition" for `gomobile` to bind it into Kotlin/Swift.
+type Calendar struct {
+	Name      string
+	Tags      []Tag
+	RemoteUrl string
+	Encrypted bool
+	Readonly  bool
+}
+
+type Tag struct {
+	Name  string
+	Color string
+}
