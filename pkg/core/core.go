@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/uuid"
 )
@@ -97,10 +98,25 @@ func (c *Core) SyncAll() error {
 // syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
 func (c *Core) syncCalendar(cal *Calendar) error {
 	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
-		if errors.Is(err, gogit.ErrRemoteNotFound) {
+		switch {
+		case errors.Is(err, gogit.ErrRemoteNotFound):
 			return nil // this is ok
+
+		case errors.Is(err, transport.ErrEmptyRemoteRepository):
+			// remote exists, but has no commits yet
+			// if we have local commits -> initialize by pushing
+			localCommit, err := gitmerge.GetLocalCommit(cal.repository, GitBranchName)
+			if err != nil {
+				return err
+			}
+			if localCommit == nil {
+				return nil // local and remote are both empty
+			}
+			return pushCalendar(cal, c.proxyUrl)
+
+		default:
+			return fmt.Errorf("fetch: %w", err)
 		}
-		return err
 	}
 
 	localCommit, remoteCommit, err := gitmerge.GetCommits(cal.repository, GitBranchName, GitRemoteName)
