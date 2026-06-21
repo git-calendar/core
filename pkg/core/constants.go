@@ -1,8 +1,9 @@
 package core
 
 const (
-	IndexFileName     string = "index.json"
-	RichIndexFileName string = "index-rich.json"
+	MetadataFileName string = "metadata.json"
+	// IndexFileName     string = "index.json"
+	// RichIndexFileName string = "index-rich.json"
 
 	EventsDirName string = "events"
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 )
 
@@ -28,9 +30,11 @@ func (c *Core) CreateCalendar(name, password string) error {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
 	}
 
-	key, err := c.createKeyFile(name, password)
-	if err != nil {
-		return err
+	var key []byte = nil
+	if len(password) != 0 {
+		if key, err = c.createKeyFile(name, password); err != nil {
+			return err
+		}
 	}
 
 	cal := Calendar{
@@ -38,11 +42,20 @@ func (c *Core) CreateCalendar(name, password string) error {
 		Tags:          []Tag{},
 		EncryptionKey: key,
 		repository:    repo,
+		Readonly:      false,
 	}
 	if err := cal.Validate(); err != nil {
-		_ = gogitutil.RemoveAll(c.fs, name) // cleanup
-		_ = c.fs.Remove(fmt.Sprintf("%s.key", name))
+		c.RemoveCalendar(name) // cleanup
 		return fmt.Errorf("calendar invalid: %w", err)
+	}
+
+	meta := metadata{
+		Tags:      slices.Clone(cal.Tags),
+		Encrypted: cal.IsEncrypted(),
+	}
+	if err := meta.Save(repo); err != nil {
+		c.RemoveCalendar(name) // cleanup
+		return fmt.Errorf("failed to save metadata to file: %w", err)
 	}
 
 	c.calendars[name] = &cal
@@ -65,6 +78,7 @@ func (c *Core) ListCalendars() ([]Calendar, error) {
 			Tags:          slices.Clone(cal.Tags),
 			EncryptionKey: slices.Clone(cal.EncryptionKey),
 			repository:    cal.repository,
+			Readonly:      cal.Readonly,
 		})
 	}
 
@@ -93,6 +107,7 @@ func (c *Core) LoadCalendars() error {
 			continue
 		}
 
+		// load key file
 		var key []byte = nil
 		keyFile, err := c.fs.Open(fmt.Sprintf("%s.key", name))
 		if err == nil {
@@ -102,9 +117,16 @@ func (c *Core) LoadCalendars() error {
 			keyFile.Close()
 		}
 
+		// load metadata
+		var meta metadata
+		if err := meta.Load(repo); err != nil {
+			fmt.Printf("failed to load metadata for %q repository: %v\n", name, err)
+			continue
+		}
+
 		c.calendars[name] = &Calendar{
 			Name:          name,
-			Tags:          nil, // TODO: load tags
+			Tags:          meta.Tags,
 			EncryptionKey: key,
 			repository:    repo,
 		}
@@ -182,31 +204,53 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string) error {
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
 	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
 	// clone now
-	newRepo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
+	repo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: GitRemoteName,
 		URL:        finalUrl.String(),
 		Auth:       auth,
 	})
 	if err != nil {
 		c.RemoveCalendar(calendarName) // even on error, clone might create a directory, so let's delete it
+		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+			return fmt.Errorf("git clone failed: %w: maybe you wanted to init instead?", err)
+		}
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	key, err := c.createKeyFile(calendarName, password)
-	if err != nil {
-		return err
+	// load metadata
+	var meta metadata
+	if err := meta.Load(repo); err != nil {
+		c.RemoveCalendar(calendarName)
+		return fmt.Errorf("failed to load metadata for %q repository: %w\n", calendarName, err)
+	}
+
+	var key []byte
+	if meta.Encrypted {
+		if len(password) == 0 {
+			c.RemoveCalendar(calendarName)
+			return fmt.Errorf("calendar %q is encrypted, but you did not specify a decryption password", calendarName)
+		}
+		if key, err = c.createKeyFile(calendarName, password); err != nil {
+			return err
+		}
 	}
 
 	c.calendars[calendarName] = &Calendar{
 		Name:          calendarName,
-		Tags:          nil, // TODO: load tags
+		Tags:          meta.Tags,
 		EncryptionKey: key,
-		repository:    newRepo,
+		repository:    repo,
 	}
 
-	// repair the remote url (set the pure url with auth, without proxy)
-	if err := c.UpdateRemote(calendarName, repoUrl); err != nil {
-		return err
+	if err := c.updateReadonlyFile(calendarName, readonly); err != nil {
+		fmt.Printf("WARN: failed to update calendar read-only file: %v", err)
+	}
+
+	if c.proxyUrl != nil {
+		// repair the remote url (set the pure url with auth, without proxy)
+		if err := c.UpdateRemote(calendarName, repoUrl, readonly); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -253,11 +297,19 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 			return fmt.Errorf("failed to rename the encryption key file: %w", err)
 		}
 	}
+	if c.isCalendarReadonly(oldName) {
+		if err := c.fs.Rename(fmt.Sprintf("%s.readonly", oldName), fmt.Sprintf("%s.readonly", newName)); err != nil {
+			_ = c.fs.Rename(newName, oldName)                                               // try to rename repo back
+			_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName)) // try to rename key back (maybe it didn't exist in the first place, mehh)
+			return fmt.Errorf("failed to rename the encryption key file: %w", err)
+		}
+	}
 
 	newRepo, err := c.initCalendarRepo(newName)
 	if err != nil {
-		_ = c.fs.Rename(newName, oldName)                                               // try to rename repo back
-		_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName)) // try to rename key back (maybe it didn't exist in the first place, mehh)
+		_ = c.fs.Rename(newName, oldName)                                                         // try to rename repo back
+		_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName))           // try to rename key back (maybe it didn't exist in the first place, mehh)
+		_ = c.fs.Rename(fmt.Sprintf("%s.readonly", newName), fmt.Sprintf("%s.readonly", oldName)) // try to rename readonly sign back (maybe it didn't exist in the first place, mehh)
 		return fmt.Errorf("failed to load new repo dir: %w", err)
 	}
 	calendar.Name = newName
@@ -269,7 +321,7 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	return nil
 }
 
-func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
+func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) error {
 	cal, ok := c.calendars[calendar]
 	if !ok || cal == nil {
 		return fmt.Errorf("calendar not found: %s", calendar)
@@ -302,25 +354,56 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL) error {
 		return fmt.Errorf("failed to set remote: %w", err)
 	}
 
+	if err := c.updateReadonlyFile(calendar, readonly); err != nil {
+		fmt.Printf("WARN: failed to update calendar read-only file: %v", err)
+	}
+
 	return nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
 func (c *Core) createKeyFile(calendarName, password string) ([]byte, error) {
-	var key []byte
-	if len(password) != 0 {
-		key = encryption.DeriveKey(password, []byte(calendarName))
+	key := encryption.DeriveKey(password, []byte(calendarName))
 
-		keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create key file: %w", err)
-		}
-		defer keyFile.Close()
-
-		if _, err = keyFile.Write(key); err != nil {
-			return nil, fmt.Errorf("failed to write key to key file: %w", err)
-		}
+	keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key file: %w", err)
 	}
+	defer keyFile.Close()
+
+	if _, err = keyFile.Write(key); err != nil {
+		return nil, fmt.Errorf("failed to write key to key file: %w", err)
+	}
+
 	return key, nil
+}
+
+func (c *Core) updateReadonlyFile(calendarName string, readonly bool) error {
+	path := fmt.Sprintf("%s.readonly", calendarName)
+
+	if readonly {
+		file, err := c.fs.Create(path)
+		if err != nil {
+			return fmt.Errorf("failed to create readonly file: %w", err)
+		}
+
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close readonly file: %w", err)
+		}
+
+		return nil
+	}
+
+	if err := c.fs.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove readonly file: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Core) isCalendarReadonly(calendarName string) bool {
+	path := fmt.Sprintf("%s.readonly", calendarName)
+	_, err := c.fs.Stat(path)
+	return err == nil
 }
