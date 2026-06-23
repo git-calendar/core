@@ -19,6 +19,10 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("an event with this id already exists")
 	}
 
+	if cal, ok := c.calendars[event.Calendar]; !ok || cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
+	}
+
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
@@ -46,6 +50,10 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 	originalEvent, exists := c.events[event.Id]
 	if !exists {
 		return nil, fmt.Errorf("no event found with id %q", event.Id)
+	}
+
+	if cal, ok := c.calendars[event.Calendar]; !ok || cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -100,6 +108,9 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
+	if cal, ok := c.calendars[new.Calendar]; !ok || cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
+	}
 
 	switch strat {
 	case Current:
@@ -117,6 +128,10 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 func (c *Core) RemoveEvent(event Event) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
+	}
+
+	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
+		return fmt.Errorf("the events calendar is read-only")
 	}
 
 	err := c.intervalTree.RemoveEvent(event)
@@ -138,6 +153,10 @@ func (c *Core) RemoveEvent(event Event) error {
 func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
+	}
+
+	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
+		return fmt.Errorf("the events calendar is read-only")
 	}
 
 	switch strat {
