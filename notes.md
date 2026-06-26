@@ -16,7 +16,7 @@
   - [x] connect repeating event exceptions
     - exception needs to have uuid
     - time encoded inside uuidv8
-  - [ ] config file per repo
+  - [ ] config file per repo?
     - tags
   - [ ] better tests
   - [x] load repositories
@@ -28,7 +28,7 @@
       - github-pages?
       - custom http file server?
 - [x] encryption
-  - [x] storing a key (in opfs?)
+  - [x] storing a key
   - values-only
   - deterministic? (same input <=> same output)
     - +good git diffs
@@ -47,15 +47,20 @@
 │   ├── .git/
 │   ├── events/
 │   │   └── <UUID>.json
+│   ├── tags/
+│   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
 ├── shared/
 │   ├── .git/
 │   ├── events/
 │   │   └── <UUID>.json
+│   ├── tags/
+│   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
 ├── main.key
+├── shared.readonly
 └── shared.key
 ```
 
