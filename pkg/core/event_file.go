@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// eventFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
-type eventFile struct {
+// eventInFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
+type eventInFile struct {
 	Title       string      `json:"title,omitzero"`
 	Location    string      `json:"location,omitzero"`
 	Description string      `json:"description,omitzero"`
@@ -27,7 +27,7 @@ type eventFile struct {
 	UpdatedAt   time.Time   `json:"updated_at,omitzero"`
 }
 
-func (ef eventFile) toEvent(id uuid.UUID, calendar string) Event {
+func (ef eventInFile) toEvent(id uuid.UUID, calendar string) Event {
 	return Event{
 		Id:          id,
 		Title:       ef.Title,
@@ -43,8 +43,8 @@ func (ef eventFile) toEvent(id uuid.UUID, calendar string) Event {
 	}
 }
 
-func (e Event) fileData() eventFile {
-	return eventFile{
+func (e Event) fileData() eventInFile {
+	return eventInFile{
 		Title:       e.Title,
 		Location:    e.Location,
 		Description: e.Description,
@@ -110,7 +110,7 @@ func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decrypti
 		return err
 	}
 
-	var data eventFile
+	var data eventInFile
 
 	if len(decryptionKey) == 0 { // no encryption, just use the plaintext
 		if err := json.Unmarshal(raw, &data); err != nil {
