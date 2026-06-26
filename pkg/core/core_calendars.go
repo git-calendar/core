@@ -49,15 +49,6 @@ func (c *Core) CreateCalendar(name, password string) error {
 		return fmt.Errorf("calendar invalid: %w", err)
 	}
 
-	meta := metadata{
-		Tags:      slices.Clone(cal.Tags),
-		Encrypted: cal.IsEncrypted(),
-	}
-	if err := meta.Save(repo); err != nil {
-		c.RemoveCalendar(name) // cleanup
-		return fmt.Errorf("failed to save metadata to file: %w", err)
-	}
-
 	c.calendars[name] = &cal
 	return nil
 }
@@ -117,16 +108,11 @@ func (c *Core) LoadCalendars() error {
 			keyFile.Close()
 		}
 
-		// load metadata
-		var meta metadata
-		if err := meta.Load(repo); err != nil {
-			fmt.Printf("failed to load metadata for %q repository: %v\n", name, err)
-			continue
-		}
+		// load tags TODO
 
 		c.calendars[name] = &Calendar{
 			Name:          name,
-			Tags:          meta.Tags,
+			Tags:          nil, // TODO
 			EncryptionKey: key,
 			repository:    repo,
 			Readonly:      c.isCalendarReadonly(name),
@@ -218,27 +204,16 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	// load metadata
-	var meta metadata
-	if err := meta.Load(repo); err != nil {
-		c.RemoveCalendar(calendarName)
-		return fmt.Errorf("failed to load metadata for %q repository: %w\n", calendarName, err)
-	}
+	// load tags TODO
 
-	var key []byte
-	if meta.Encrypted {
-		if len(password) == 0 {
-			c.RemoveCalendar(calendarName)
-			return fmt.Errorf("calendar %q is encrypted, but you did not specify a decryption password", calendarName)
-		}
-		if key, err = c.createKeyFile(calendarName, password); err != nil {
-			return err
-		}
+	key, err := c.createKeyFile(calendarName, password)
+	if err != nil {
+		return err
 	}
 
 	c.calendars[calendarName] = &Calendar{
 		Name:          calendarName,
-		Tags:          meta.Tags,
+		Tags:          nil, // TODO
 		EncryptionKey: key,
 		repository:    repo,
 		Readonly:      readonly,

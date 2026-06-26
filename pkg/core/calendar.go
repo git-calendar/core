@@ -18,17 +18,17 @@ type Calendar struct {
 	repository *gogit.Repository
 }
 
-type Tag struct {
-	Name  string `json:"name,omitzero"`
-	Color string `json:"color,omitzero"`
-}
-
 func (cal *Calendar) Validate() error {
 	if cal == nil {
 		return nil
 	}
 	if cal.Name == "" {
-		return errors.New("name cannot be empty")
+		return errors.New("calendar name cannot be empty")
+	}
+	for _, t := range cal.Tags {
+		if err := t.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -62,8 +62,8 @@ func (cal *Calendar) RemoteURL() (string, error) {
 func (cal *Calendar) MarshalJSON() ([]byte, error) {
 	type calendarJSON struct {
 		Name      string `json:"name"`
-		Tags      []Tag  `json:"tags,omitempty"`
-		RemoteURL string `json:"remote_url,omitempty"`
+		Tags      []Tag  `json:"tags"`
+		RemoteURL string `json:"remote_url"`
 		Encrypted bool   `json:"encrypted"`
 		Readonly  bool   `json:"readonly"`
 	}
