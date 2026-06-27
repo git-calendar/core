@@ -122,13 +122,13 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	return nil
 }
 
-// applyLWW applies last-write-wins strategy to an event file from three versions (base, local, remote).
+// applyLWW applies last-write-wins strategy to a file from three versions (base, local, remote).
 func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote fileVersion) error {
 	switch {
 	case base.exists && !remote.exists: // remote deleted -> delete wins
 		if local.exists {
 			if _, err := wt.Remove(gitPath); err != nil {
-				return fmt.Errorf("%s: failed to remove an event which was deleted on remote: %w", gitPath, err)
+				return fmt.Errorf("%s: failed to remove a file which was deleted on remote: %w", gitPath, err)
 			}
 		}
 
@@ -229,7 +229,7 @@ func GetLocalCommit(repo *gogit.Repository, branchName string) (*object.Commit, 
 
 	commit, err := repo.CommitObject(ref.Hash())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load local commit: %w", err)
+		return nil, err
 	}
 
 	return commit, nil

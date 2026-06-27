@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
+	"os"
+	"path"
+	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 )
@@ -75,9 +77,59 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 
 	return json.Marshal(calendarJSON{
 		Name:      cal.Name,
-		Tags:      slices.Clone(cal.Tags),
+		Tags:      cal.Tags,
 		RemoteURL: remoteURL,
 		Encrypted: cal.IsEncrypted(),
 		Readonly:  cal.Readonly,
 	})
+}
+
+func (cal *Calendar) LoadTags() error {
+	wt, err := cal.repository.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	tags, err := readTagFiles(wt, cal.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to load tags: %w", err)
+	}
+
+	cal.Tags = tags
+
+	return nil
+}
+
+func readTagFiles(wt *gogit.Worktree, key []byte) ([]Tag, error) {
+	entries, err := wt.Filesystem.ReadDir(TagsDirName)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tags dir %q: %w", TagsDirName, err)
+	}
+
+	var tags []Tag
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		gitPath := path.Join(TagsDirName, entry.Name())
+		file, err := wt.Filesystem.Open(gitPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open tag %q: %w", gitPath, err)
+		}
+		defer file.Close()
+
+		var tag Tag
+		if err := tag.LoadFromFile(file, key); err != nil {
+			return nil, fmt.Errorf("failed to load tag %q: %w", gitPath, err)
+		}
+
+		tags = append(tags, tag)
+	}
+
+	return tags, nil
 }

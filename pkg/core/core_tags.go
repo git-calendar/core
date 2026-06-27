@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"slices"
-	"strings"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -41,32 +39,7 @@ func (c *Core) CreateTag(calendar string, tag Tag) error {
 
 	cal.Tags = append(cal.Tags, tag)
 
-	return commitWorktree(wt, fmt.Sprintf("Updated tag %s", tag.Id))
-}
-
-// LoadTags loads tags for selected calendars. If none are passed, all calendars are loaded.
-func (c *Core) LoadTags(calendars ...string) error {
-	if len(calendars) == 0 {
-		for calendar := range c.calendars {
-			calendars = append(calendars, calendar)
-		}
-	}
-
-	for _, calendar := range calendars {
-		cal, wt, err := c.tagWorktree(calendar)
-		if err != nil {
-			return err
-		}
-
-		tags, err := readTagFiles(wt, cal.EncryptionKey)
-		if err != nil {
-			return fmt.Errorf("failed to load tags for calendar %q: %w", calendar, err)
-		}
-
-		cal.Tags = tags
-	}
-
-	return nil
+	return commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
 }
 
 // DeleteTag deletes one tag from a calendar repository.
@@ -128,40 +101,6 @@ func writeTagFile(wt *gogit.Worktree, key []byte, tag Tag) error {
 	}
 
 	return nil
-}
-
-func readTagFiles(wt *gogit.Worktree, key []byte) ([]Tag, error) {
-	entries, err := wt.Filesystem.ReadDir(TagsDirName)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read tags dir %q: %w", TagsDirName, err)
-	}
-
-	var tags []Tag
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-
-		gitPath := path.Join(TagsDirName, entry.Name())
-		file, err := wt.Filesystem.Open(gitPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open tag %q: %w", gitPath, err)
-		}
-		defer file.Close()
-
-		var tag Tag
-		if err := tag.LoadFromFile(file, key); err != nil {
-			return nil, fmt.Errorf("failed to load tag %q: %w", gitPath, err)
-		}
-
-		tags = append(tags, tag)
-	}
-
-	return tags, nil
 }
 
 func commitWorktree(wt *gogit.Worktree, message string) error {

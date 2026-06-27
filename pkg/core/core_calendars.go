@@ -103,20 +103,24 @@ func (c *Core) LoadCalendars() error {
 		keyFile, err := c.fs.Open(fmt.Sprintf("%s.key", name))
 		if err == nil {
 			if key, err = io.ReadAll(keyFile); err != nil {
-				fmt.Printf("failed to read encryption key for %q repository: %v\n", name, err)
+				fmt.Printf("failed to read encryption key for %q calendar: %v\n", name, err)
 			}
 			keyFile.Close()
 		}
 
-		// load tags TODO
-
-		c.calendars[name] = &Calendar{
+		cal := &Calendar{
 			Name:          name,
-			Tags:          nil, // TODO
 			EncryptionKey: key,
 			repository:    repo,
 			Readonly:      c.isCalendarReadonly(name),
 		}
+
+		// load tags
+		if err := cal.LoadTags(); err != nil {
+			fmt.Printf("WARN: failed to load tags for %q calendar: %v\n", cal.Name, err)
+		}
+
+		c.calendars[name] = cal
 	}
 
 	// load tree + events
@@ -126,7 +130,7 @@ func (c *Core) LoadCalendars() error {
 		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
 		eventEntries, _ := eventsDir.ReadDir("/")
 		for _, eventEntry := range eventEntries {
-			if eventEntry.IsDir() {
+			if eventEntry.IsDir() || !strings.HasSuffix(eventEntry.Name(), ".json") {
 				continue
 			}
 
@@ -204,24 +208,30 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	// load tags TODO
-
-	key, err := c.createKeyFile(calendarName, password)
-	if err != nil {
-		return err
+	var key []byte = nil
+	if len(password) != 0 {
+		if key, err = c.createKeyFile(calendarName, password); err != nil {
+			return err
+		}
 	}
 
-	c.calendars[calendarName] = &Calendar{
+	cal := &Calendar{
 		Name:          calendarName,
-		Tags:          nil, // TODO
 		EncryptionKey: key,
 		repository:    repo,
 		Readonly:      readonly,
 	}
 
-	if err := c.updateReadonlyFile(calendarName, readonly); err != nil {
-		fmt.Printf("WARN: failed to update calendar read-only file: %v", err)
+	// load tags
+	if err := cal.LoadTags(); err != nil {
+		fmt.Printf("WARN: failed to load tags for %q calendar: %v\n", cal.Name, err)
 	}
+
+	if err := c.updateReadonlyFile(calendarName, readonly); err != nil {
+		fmt.Printf("WARN: failed to update calendar read-only file: %v\n", err)
+	}
+
+	c.calendars[calendarName] = cal
 
 	if c.proxyUrl != nil {
 		// repair the remote url (set the pure url with auth, without proxy)

@@ -21,7 +21,7 @@ type eventInFile struct {
 	Description string      `json:"description,omitzero"`
 	From        time.Time   `json:"from,omitzero"`
 	To          time.Time   `json:"to,omitzero"`
-	Tag         string      `json:"tag,omitzero"`
+	Tag         uuid.UUID   `json:"tag,omitzero"`
 	ParentId    uuid.UUID   `json:"parent_id,omitzero"`
 	Repeat      *Repetition `json:"repeat,omitzero"`
 	UpdatedAt   time.Time   `json:"updated_at,omitzero"`

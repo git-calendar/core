@@ -22,7 +22,7 @@ type Event struct {
 	From        time.Time   `json:"from"`
 	To          time.Time   `json:"to"`
 	Calendar    string      `json:"calendar"`  // The name of the calendar the event belongs to.
-	Tag         string      `json:"tag"`       // User-defined category or label.
+	Tag         uuid.UUID   `json:"tag"`       // User-defined category or label.
 	ParentId    uuid.UUID   `json:"parent_id"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
 	Repeat      *Repetition `json:"repeat"`
 	UpdatedAt   time.Time   `json:"updated_at"` // Used for git conflict resolution; latest wins.
