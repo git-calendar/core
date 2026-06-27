@@ -19,8 +19,12 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("an event with this id already exists")
 	}
 
-	if cal, ok := c.calendars[event.Calendar]; !ok || cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
 	}
 
 	if err := event.Validate(); err != nil {
@@ -52,8 +56,12 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("no event found with id %q", event.Id)
 	}
 
-	if cal, ok := c.calendars[event.Calendar]; !ok || cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -108,8 +116,12 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
-	if cal, ok := c.calendars[new.Calendar]; !ok || cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is either missing or is read-only")
+	cal, ok := c.calendars[new.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
 	}
 
 	switch strat {

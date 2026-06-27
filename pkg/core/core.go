@@ -72,12 +72,12 @@ func (c *Core) SyncAll() error {
 		}
 
 		wg.Add(1)
-		go func() {
+		go func(cal *Calendar) {
+			defer wg.Done()
 			if err := c.syncCalendar(cal); err != nil {
 				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
 			}
-			wg.Done()
-		}()
+		}(cal)
 	}
 
 	wg.Wait() // wait for all calendar syncs to finish
@@ -125,6 +125,17 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 	}
 
 	switch {
+	case localCommit == nil && remoteCommit == nil:
+		return nil
+
+	case localCommit == nil:
+		// local has no commits
+		return fastForwardCalendar(cal, remoteCommit.Hash)
+
+	case remoteCommit == nil:
+		// remote has no commits
+		return pushCalendar(cal, c.proxyUrl)
+
 	case localCommit.Hash == remoteCommit.Hash:
 		return nil // already in sync
 

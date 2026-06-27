@@ -43,7 +43,7 @@
 
 ```
 .git-calendar-data/
-├── main/
+├── default/
 │   ├── .git/
 │   ├── events/
 │   │   └── <UUID>.json
@@ -59,7 +59,7 @@
 │   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
-├── main.key
+├── default.key
 ├── shared.readonly
 └── shared.key
 ```
