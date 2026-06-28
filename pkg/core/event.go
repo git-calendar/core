@@ -25,7 +25,7 @@ type Event struct {
 	Tag         string      `json:"tag"`       // User-defined category or label.
 	ParentId    uuid.UUID   `json:"parent_id"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
 	Repeat      *Repetition `json:"repeat"`
-	UpdatedAt   time.Time   `json:"updated_at"` // Used for git conflict resolution; latest wins.
+	UpdatedAt   time.Time   `json:"-"` // Used for git conflict resolution; latest wins. Client doesn't need to see this.
 }
 
 // Repetition defines the recurrence rules for a Parent event.
