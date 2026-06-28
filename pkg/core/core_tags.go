@@ -42,8 +42,8 @@ func (c *Core) CreateTag(calendar string, tag Tag) error {
 	return commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
 }
 
-// DeleteTag deletes one tag from a calendar repository.
-func (c *Core) DeleteTag(calendar string, id uuid.UUID) error {
+// RemoveTag deletes one tag from a calendar repository.
+func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return errors.New("invalid tag id")
 	}

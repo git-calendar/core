@@ -21,7 +21,7 @@ type eventInFile struct {
 	Description string      `json:"description,omitzero"`
 	From        time.Time   `json:"from,omitzero"`
 	To          time.Time   `json:"to,omitzero"`
-	Tag         uuid.UUID   `json:"tag,omitzero"`
+	TagId       uuid.UUID   `json:"tag_id,omitzero"`
 	ParentId    uuid.UUID   `json:"parent_id,omitzero"`
 	Repeat      *Repetition `json:"repeat,omitzero"`
 	UpdatedAt   time.Time   `json:"updated_at,omitzero"`
@@ -36,7 +36,7 @@ func (ef eventInFile) toEvent(id uuid.UUID, calendar string) Event {
 		From:        ef.From,
 		To:          ef.To,
 		Calendar:    calendar,
-		Tag:         ef.Tag,
+		TagId:       ef.TagId,
 		ParentId:    ef.ParentId,
 		Repeat:      ef.Repeat,
 		UpdatedAt:   ef.UpdatedAt,
@@ -50,7 +50,7 @@ func (e Event) fileData() eventInFile {
 		Description: e.Description,
 		From:        e.From,
 		To:          e.To,
-		Tag:         e.Tag,
+		TagId:       e.TagId,
 		ParentId:    e.ParentId,
 		Repeat:      e.Repeat,
 		UpdatedAt:   e.UpdatedAt,

@@ -11,7 +11,7 @@ type Event struct {
 	From        string // RFC3339 format e.g., 2009-11-10T23:00:00Z (the default format of json.Marshal() for time.Time)
 	To          string // RFC3339 format e.g., 2009-11-10T23:00:00Z (the default format of json.Marshal() for time.Time)
 	Calendar    string
-	Tag         string
+	TagId       string
 	ParentId    string
 	Repeat      *Repetition
 }
@@ -36,6 +36,7 @@ type Calendar struct {
 }
 
 type Tag struct {
+	Id    string
 	Name  string
 	Color string
 }

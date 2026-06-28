@@ -243,7 +243,7 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					From:        firstStart,
 					To:          firstStart.Add(eventDuration),
 					Calendar:    curEvent.Calendar,
-					Tag:         curEvent.Tag,
+					TagId:       curEvent.TagId,
 					ParentId:    curEvent.Id,
 					Repeat:      curEvent.Repeat,
 				}
@@ -410,7 +410,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	parent.Description = new.Description
 	parent.From = parent.From.Add(fromDiff)
 	parent.To = parent.To.Add(toDiff)
-	parent.Tag = new.Tag
+	parent.TagId = new.TagId
 	parent.Calendar = new.Calendar
 
 	if needsReindex {
