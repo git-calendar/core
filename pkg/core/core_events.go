@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"reflect"
 	"slices"
 	"time"
 
@@ -116,6 +115,13 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
+	if old.IsParent() || new.IsParent() || old.ParentId == uuid.Nil || new.ParentId == uuid.Nil {
+		return nil, fmt.Errorf("repeating update requires child events")
+	}
+	if old.ParentId != new.ParentId {
+		return nil, fmt.Errorf("old and new child events have different parent ids")
+	}
+
 	cal, ok := c.calendars[new.Calendar]
 	if !ok {
 		return nil, fmt.Errorf("the specified calendar is missing")
@@ -268,7 +274,6 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
-
 	if parent.Repeat == nil {
 		return nil, fmt.Errorf("parent is not a repeating event, WTF")
 	}
@@ -288,92 +293,115 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	return c.CreateEvent(detachedEvent) // save as new
 }
 
-// Splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
+// updateFollowingChildren splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
 func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
-	parent, ok := c.events[new.ParentId]
+	parent, ok := c.events[old.ParentId]
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
-
-	// save originals for rollback
-	originalRepeat := *parent.Repeat
-	originalExceptions := append([]uuid.UUID{}, parent.Repeat.Exceptions...) // deep copy
-
-	until := addUnit(old.From, -1, old.Repeat.Frequency) // cap parent at start of change
-	if !until.After(parent.From) {
-		parent.Repeat = nil
-	} else {
-		parent.Repeat.Until = until
-		parent.Repeat.Count = 0 // enforce Until logic over Count
+	if parent.Repeat == nil {
+		return nil, fmt.Errorf("parent is not a repeating event")
 	}
 
-	// split exceptions
-	exBefore, exAfter := splitExceptions(originalExceptions, new.From)
-	if parent.Repeat != nil {
-		parent.Repeat.Exceptions = exBefore
+	// keep originals for rollback
+	originalRepeat := *parent.Repeat
+	originalExceptions := append([]uuid.UUID(nil), parent.Repeat.Exceptions...)
+
+	// find position in the series
+	_, splitIndex := firstOccurrenceAtOrAfter(old.From, parent)
+	if splitIndex == -1 {
+		return nil, fmt.Errorf("could not find occurrence at or after %s", old.From)
+	}
+
+	fromDiff := new.From.Sub(old.From)
+
+	// editing the first occurrence -> update entire series
+	if splitIndex == 0 {
+		return c.updateAllChildren(old, new)
+	}
+
+	// split exceptions before and after the edited occurrence
+	exBefore, exAfter := splitExceptions(originalExceptions, old.From)
+
+	// remove parent before we mutate it
+	if err := c.intervalTree.RemoveEvent(*parent); err != nil {
+		return nil, fmt.Errorf("failed to remove parent from interval tree: %w", err)
+	}
+
+	// ------------ cap the original parent ------------
+	previousStart := addUnit(old.From, -originalRepeat.Interval, originalRepeat.Frequency)
+	if !previousStart.After(parent.From) {
+		// only one occurrence left -> turn it into a basic (non-repeating) event
+		parent.Repeat = nil
+	} else {
+		// keep repeating but stop before the split point
+		capped := originalRepeat
+		capped.Until = previousStart
+		capped.Count = 0
+		capped.Exceptions = exBefore
+		parent.Repeat = &capped
+	}
+
+	// save the capped parent
+	if err := c.intervalTree.InsertEvent(*parent); err != nil {
+		parent.Repeat = &originalRepeat
+		parent.Repeat.Exceptions = originalExceptions
+		return nil, fmt.Errorf("failed to reinsert capped parent: %w", err)
 	}
 
 	if err := c.saveAndCommitEvent(parent, fmt.Sprintf("Capped parent event %q", parent.Id)); err != nil {
-		return nil, fmt.Errorf("failed to commit parent event: %w", err)
+		return nil, fmt.Errorf("failed to commit capped parent: %w", err)
 	}
 
-	// create the new parent for the second half of the time series
-	newEvent := *new             // shallow copy
-	newEvent.Id = uuid.New()     // assign new id
-	newEvent.ParentId = uuid.Nil // not child anymore
+	// ------------ create the new continuing series ------------
+	newEvent := *new
+	newEvent.Id = uuid.New()
+	newEvent.ParentId = uuid.Nil // this is now its own parent
 
-	if originalRepeat.Count != 0 && newEvent.Repeat != nil {
-		// shorten the repeat for the second half
-		_, elapsed := firstOccurrenceAtOrAfter(old.From, parent)
-		if elapsed <= 0 {
-			// the split is at the first occurance -> nothing to subtract (basically update all)
-			newEvent.Repeat.Count = originalRepeat.Count
-		} else {
-			remaining := originalRepeat.Count - elapsed
-			if remaining <= 0 {
+	if newEvent.Repeat != nil {
+		repeat := *newEvent.Repeat
+		repeat.Exceptions = nil
+
+		// adjust count for remaining occurrences
+		if originalRepeat.Count != 0 {
+			remaining := originalRepeat.Count - splitIndex
+			if remaining < 1 {
 				remaining = 1
 			}
-			newEvent.Repeat.Count = remaining
+			repeat.Count = remaining
 		}
+
+		// shift exceptions to the new parent
+		for _, ex := range exAfter {
+			exTime := getTimeFromUUID(ex).Add(fromDiff)
+			repeat.Exceptions = append(repeat.Exceptions, generateCustomUUID(newEvent.Id, exTime))
+		}
+
+		newEvent.Repeat = &repeat
 	}
 
-	// transform exceptions
-	fromDiff := newEvent.From.Sub(old.From)
-	if fromDiff != 0 {
-		for _, exc := range exAfter {
-			t := getTimeFromUUID(exc)
-			t = t.Add(fromDiff)
-			newEvent.Repeat.Exceptions = append(newEvent.Repeat.Exceptions, generateCustomUUID(newEvent.Id, t))
-		}
-	}
-	if newEvent.Repeat != nil && newEvent.Repeat.Count != 0 {
-		newEvent.Repeat.Count -= len(exAfter)
-		if newEvent.Repeat.Count < 1 {
-			newEvent.Repeat.Count = 1
-		}
-	}
-
-	createdEvent, err := c.CreateEvent(newEvent)
+	created, err := c.CreateEvent(newEvent)
 	if err != nil {
-		// rollback the parent cap
+		// rollback: restore original parent
+		_ = c.intervalTree.RemoveEvent(*parent)
 		parent.Repeat = &originalRepeat
 		parent.Repeat.Exceptions = originalExceptions
-		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("Rolled back cap on parent event %q", parent.Id)); rbErr != nil {
-			return nil, fmt.Errorf("failed to create new event: %w; rollback also failed: %v", err, rbErr)
+
+		if rbErr := c.intervalTree.InsertEvent(*parent); rbErr != nil {
+			return nil, fmt.Errorf("failed to create new series: %w; rollback failed too: %v", err, rbErr)
 		}
-		return nil, fmt.Errorf("failed to create new event: %w", err)
+		if rbErr := c.saveAndCommitEvent(parent, fmt.Sprintf("rolled back parent %q", parent.Id)); rbErr != nil {
+			return nil, fmt.Errorf("failed to create new series: %w; rollback failed too: %v", err, rbErr)
+		}
+		return nil, fmt.Errorf("failed to create new continuing series: %w", err)
 	}
 
-	return createdEvent, nil
+	return created, nil
 }
 
 // Updates the entire repeating series by only modifying the parent. That means all generated child events get updated as well.
 // Both old and new arguments are child events.
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
-	if old.IsParent() || new.IsParent() {
-		return nil, fmt.Errorf("updateRepeatingAll works with child events")
-	}
-
 	parent, ok := c.events[old.ParentId]
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
@@ -384,7 +412,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 
 	fromChanged := fromDiff != 0
 	toChanged := toDiff != 0
-	repeatChanged := !reflect.DeepEqual(old.Repeat, new.Repeat)
+	repeatChanged := repeatRuleChanged(parent.Repeat, new.Repeat)
 
 	needsReindex := fromChanged || toChanged || repeatChanged
 
@@ -394,15 +422,24 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		}
 	}
 
+	var exceptions []uuid.UUID
+	if parent.Repeat != nil {
+		exceptions = append(exceptions, parent.Repeat.Exceptions...) // copy
+	}
+
 	// shift all exceptions by the time fromDiff
-	if fromChanged && parent.Repeat != nil {
-		for i := range parent.Repeat.Exceptions {
-			parent.Repeat.Exceptions[i] = getShiftedUUID(parent.Repeat.Exceptions[i], fromDiff)
+	if fromChanged {
+		for i := range exceptions {
+			exceptions[i] = getShiftedUUID(exceptions[i], fromDiff)
 		}
 	}
 
-	if repeatChanged {
-		parent.Repeat = new.Repeat
+	if new.Repeat != nil {
+		repeat := *new.Repeat
+		repeat.Exceptions = exceptions
+		parent.Repeat = &repeat
+	} else {
+		parent.Repeat = nil
 	}
 
 	parent.Title = new.Title
