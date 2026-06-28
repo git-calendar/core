@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -226,4 +227,18 @@ func splitExceptions(exceptions []uuid.UUID, cutoff time.Time) (before, after []
 		}
 	}
 	return
+}
+
+func repeatRuleChanged(a, b *Repetition) bool {
+	if a == nil || b == nil {
+		return a != b
+	}
+
+	aa := *a
+	bb := *b
+
+	aa.Exceptions = nil
+	bb.Exceptions = nil
+
+	return !reflect.DeepEqual(aa, bb)
 }

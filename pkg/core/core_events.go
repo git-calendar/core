@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"reflect"
 	"slices"
 	"time"
 
@@ -99,6 +98,20 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	}
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
+	}
+	if old.IsParent() || new.IsParent() || old.ParentId == uuid.Nil || new.ParentId == uuid.Nil {
+		return nil, fmt.Errorf("repeating update requires child events")
+	}
+	if old.ParentId != new.ParentId {
+		return nil, fmt.Errorf("old and new child events have different parent ids")
+	}
+
+	cal, ok := c.calendars[new.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
 	}
 
 	switch strat {
@@ -339,10 +352,6 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 // Updates the entire repeating series by only modifying the parent. That means all generated child events get updated as well.
 // Both old and new arguments are child events.
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
-	if old.IsParent() || new.IsParent() {
-		return nil, fmt.Errorf("updateRepeatingAll works with child events")
-	}
-
 	parent, ok := c.events[old.ParentId]
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
@@ -353,7 +362,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 
 	fromChanged := fromDiff != 0
 	toChanged := toDiff != 0
-	repeatChanged := !reflect.DeepEqual(old.Repeat, new.Repeat)
+	repeatChanged := repeatRuleChanged(parent.Repeat, new.Repeat)
 
 	needsReindex := fromChanged || toChanged || repeatChanged
 
@@ -363,15 +372,24 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		}
 	}
 
+	var exceptions []uuid.UUID
+	if parent.Repeat != nil {
+		exceptions = append(exceptions, parent.Repeat.Exceptions...) // copy
+	}
+
 	// shift all exceptions by the time fromDiff
-	if fromChanged && parent.Repeat != nil {
-		for i := range parent.Repeat.Exceptions {
-			parent.Repeat.Exceptions[i] = getShiftedUUID(parent.Repeat.Exceptions[i], fromDiff)
+	if fromChanged {
+		for i := range exceptions {
+			exceptions[i] = getShiftedUUID(exceptions[i], fromDiff)
 		}
 	}
 
-	if repeatChanged {
-		parent.Repeat = new.Repeat
+	if new.Repeat != nil {
+		repeat := *new.Repeat
+		repeat.Exceptions = exceptions
+		parent.Repeat = &repeat
+	} else {
+		parent.Repeat = nil
 	}
 
 	parent.Title = new.Title
