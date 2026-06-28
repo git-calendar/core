@@ -13,33 +13,33 @@ import (
 )
 
 // CreateTag saves one tag into a calendar repository.
-func (c *Core) CreateTag(calendar string, tag Tag) error {
+func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 	if err := tag.Validate(); err != nil {
-		return fmt.Errorf("invalid tag: %w", err)
+		return nil, fmt.Errorf("invalid tag: %w", err)
 	}
 
 	cal, wt, err := c.tagWorktree(calendar)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if slices.ContainsFunc(cal.Tags, func(t Tag) bool {
 		return t.Id == tag.Id
 	}) {
-		return fmt.Errorf("tag already exists: %w", err)
+		return nil, fmt.Errorf("tag already exists")
 	}
 
 	gitPath := tag.getPath()
 	if err := writeTagFile(wt, cal.EncryptionKey, tag); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := wt.Add(gitPath); err != nil {
-		return fmt.Errorf("failed to git add %q: %w", gitPath, err)
+		return nil, fmt.Errorf("failed to git add %q: %w", gitPath, err)
 	}
 
 	cal.Tags = append(cal.Tags, tag)
 
-	return commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
+	return &tag, commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
 }
 
 // RemoveTag deletes one tag from a calendar repository.

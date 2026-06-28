@@ -43,9 +43,7 @@ func (a *Api) RemoveCalendar(name string) error { return a.inner.RemoveCalendar(
 func (a *Api) RenameCalendar(oldName, newName string) error {
 	return a.inner.RenameCalendar(oldName, newName)
 }
-
-func (a *Api) LoadCalendars() error { return a.inner.LoadCalendars() }
-
+func (a *Api) LoadCalendars() error                      { return a.inner.LoadCalendars() }
 func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
 func (a *Api) SyncAll() error                            { return a.inner.SyncAll() }
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
@@ -172,6 +170,37 @@ func (a *Api) GetEvents(from, to string) (string, error) {
 	}
 
 	return string(jsonBytes), nil
+}
+
+func (a *Api) CreateTag(calendar, tagJson string) (string, error) {
+	var tag core.Tag
+	err := json.Unmarshal([]byte(tagJson), &tag)
+	if err != nil {
+		fmt.Println("CalendarCore got: ", tagJson)
+		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
+	}
+
+	newTag, err := a.inner.CreateTag(calendar, tag)
+	if err != nil {
+		fmt.Println("CalendarCore got: ", tagJson)
+		return emptyJson, err
+	}
+
+	jsonBytes, err := json.Marshal(newTag)
+	if err != nil {
+		return emptyJson, err
+	}
+
+	return string(jsonBytes), nil
+}
+
+func (a *Api) RemoveTag(calendar, id string) error {
+	parsedId, err := uuid.Parse(id)
+	if err != nil {
+		return fmt.Errorf("invalid tag id: %w", err)
+	}
+
+	return a.inner.RemoveTag(calendar, parsedId)
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------

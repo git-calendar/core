@@ -90,6 +90,16 @@ func RegisterCallbacks(api *api.Api) {
 					return api.GetEvents(args[0].String(), args[1].String())
 				})
 			}),
+			"createTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.CreateTag(args[0].String(), args[1].String())
+				})
+			}),
+			"removeTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RemoveTag(args[0].String(), args[1].String())
+				})
+			}),
 			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.SetCorsProxy(args[0].String())
