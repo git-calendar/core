@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const TestCalendarName = "test"
-
 func TestRepeatingEvent_GetEvents_UntilWeekly_GeneratesOccurrencesInRange(t *testing.T) {
 	c := newTestCore(t)
 

@@ -25,7 +25,7 @@ func (t *Tag) Validate() error {
 	}
 	if t.Id != uuid.Nil {
 		// if id is set
-		if t.Id.Version() != 4 && t.Id.Version() != 8 { // enforce version
+		if t.Id.Version() != 4 { // enforce version
 			return errors.New("unsupported UUID version")
 		}
 	} else { // if id is unset

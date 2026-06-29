@@ -11,6 +11,8 @@ import (
 	"github.com/git-calendar/core/pkg/filesystem"
 )
 
+const TestCalendarName = "test"
+
 func TestCreateCalendar(t *testing.T) {
 	c := core.NewCore()
 

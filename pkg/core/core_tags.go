@@ -56,6 +56,9 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 	index := slices.IndexFunc(cal.Tags, func(t Tag) bool {
 		return t.Id == tag.Id
 	})
+	if index == -1 {
+		return nil, errors.New("tag with this id does not exist")
+	}
 
 	gitPath := tag.getPath()
 	if err := writeTagFile(wt, cal.EncryptionKey, tag); err != nil {
