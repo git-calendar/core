@@ -7,6 +7,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/go-git/go-billy/v5"
@@ -14,9 +15,10 @@ import (
 )
 
 type Tag struct {
-	Id    uuid.UUID `json:"id"`
-	Name  string    `json:"name"`
-	Color string    `json:"color"`
+	Id        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Color     string    `json:"color"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 func (t *Tag) Validate() error {
@@ -48,22 +50,25 @@ func (tag Tag) getPath() string {
 
 // tagFile represents a tag inside file.
 type tagInFile struct {
-	Name  string `json:"name,omitzero"`
-	Color string `json:"color,omitzero"`
+	Name      string    `json:"name,omitzero"`
+	Color     string    `json:"color,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
 }
 
 func (tf tagInFile) toTag(id uuid.UUID) Tag {
 	return Tag{
-		Id:    id,
-		Name:  tf.Name,
-		Color: tf.Color,
+		Id:        id,
+		Name:      tf.Name,
+		Color:     tf.Color,
+		UpdatedAt: tf.UpdatedAt,
 	}
 }
 
 func (e Tag) fileData() tagInFile {
 	return tagInFile{
-		Name:  e.Name,
-		Color: e.Color,
+		Name:      e.Name,
+		Color:     e.Color,
+		UpdatedAt: e.UpdatedAt,
 	}
 }
 

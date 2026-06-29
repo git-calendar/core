@@ -116,6 +116,8 @@ func (c *Core) tagWorktree(calendar string) (*Calendar, *gogit.Worktree, error) 
 }
 
 func writeTagFile(wt *gogit.Worktree, key []byte, tag Tag) error {
+	tag.UpdatedAt = time.Now() // force new time
+
 	if err := wt.Filesystem.MkdirAll(TagsDirName, 0o755); err != nil {
 		return fmt.Errorf("failed to create tags dir %q: %w", TagsDirName, err)
 	}
