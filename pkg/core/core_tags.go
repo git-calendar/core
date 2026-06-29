@@ -42,6 +42,34 @@ func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 	return &tag, commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
 }
 
+// UpdateTag updates tag based on its Id.
+func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
+	if err := tag.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid tag: %w", err)
+	}
+
+	cal, wt, err := c.tagWorktree(calendar)
+	if err != nil {
+		return nil, err
+	}
+
+	index := slices.IndexFunc(cal.Tags, func(t Tag) bool {
+		return t.Id == tag.Id
+	})
+
+	gitPath := tag.getPath()
+	if err := writeTagFile(wt, cal.EncryptionKey, tag); err != nil {
+		return nil, err
+	}
+	if _, err := wt.Add(gitPath); err != nil {
+		return nil, fmt.Errorf("failed to git add %q: %w", gitPath, err)
+	}
+
+	cal.Tags[index] = tag // replace
+
+	return &tag, commitWorktree(wt, fmt.Sprintf("Updated tag %s", tag.Id))
+}
+
 // RemoveTag deletes one tag from a calendar repository.
 func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
 	if id == uuid.Nil {

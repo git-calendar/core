@@ -95,6 +95,11 @@ func RegisterCallbacks(api *api.Api) {
 					return api.CreateTag(args[0].String(), args[1].String())
 				})
 			}),
+			"updateTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.UpdateTag(args[0].String(), args[1].String())
+				})
+			}),
 			"removeTag": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.RemoveTag(args[0].String(), args[1].String())

@@ -194,6 +194,28 @@ func (a *Api) CreateTag(calendar, tagJson string) (string, error) {
 	return string(jsonBytes), nil
 }
 
+func (a *Api) UpdateTag(calendar, tagJson string) (string, error) {
+	var tag core.Tag
+	err := json.Unmarshal([]byte(tagJson), &tag)
+	if err != nil {
+		fmt.Println("CalendarCore got: ", tagJson)
+		return emptyJson, fmt.Errorf("failed to unmarshal tag data: %w", err)
+	}
+
+	newTag, err := a.inner.UpdateTag(calendar, tag)
+	if err != nil {
+		fmt.Println("CalendarCore got: ", tagJson)
+		return emptyJson, err
+	}
+
+	jsonBytes, err := json.Marshal(newTag)
+	if err != nil {
+		return emptyJson, err
+	}
+
+	return string(jsonBytes), nil
+}
+
 func (a *Api) RemoveTag(calendar, id string) error {
 	parsedId, err := uuid.Parse(id)
 	if err != nil {
