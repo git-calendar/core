@@ -23,9 +23,9 @@ type Event struct {
 	To          time.Time   `json:"to"`
 	Calendar    string      `json:"calendar"`  // The name of the calendar the event belongs to.
 	TagId       *uuid.UUID  `json:"tag_id"`    // A user-defined tag/category. Can be nil.
-	ParentId    *uuid.UUID  `json:"parent_id"` // Specific for child events. It is uuid.Nil if the event is basic or parent.
+	ParentId    *uuid.UUID  `json:"parent_id"` // Specific for child events. It is nil (not uuid.Nil) if the event is basic or parent.
 	Repeat      *Repetition `json:"repeat"`
-	UpdatedAt   time.Time   `json:"-"` // Used for git conflict resolution; latest wins. Client doesn't need to see this.
+	UpdatedAt   time.Time   `json:"-"` // Used for git conflict resolution; latest wins. Client doesn't need to see this -> json:"-".
 }
 
 // Repetition defines the recurrence rules for a Parent event.
@@ -92,11 +92,11 @@ func (e Event) IsBasic() bool {
 }
 
 func (e Event) IsChild() bool {
-	return e.ParentId != nil && *e.ParentId != uuid.Nil
+	return e.ParentId != nil
 }
 
 func (e Event) IsParent() bool {
-	return (e.ParentId == nil || *e.ParentId == uuid.Nil) && e.Repeat != nil
+	return e.ParentId == nil && e.Repeat != nil
 }
 
 // Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of a repeating Parent event and returns its To.

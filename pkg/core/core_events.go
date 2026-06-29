@@ -292,7 +292,7 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	detachedEvent := *updated    // shallow copy
 	detachedEvent.Repeat = nil   // not repeating anymore
 	detachedEvent.ParentId = nil // not child anymore
-	detachedEvent.Id = uuid.Nil  // set to nil; CreateEvent will asign a new one
+	detachedEvent.Id = uuid.Nil  // set to uuid.Nil; CreateEvent will asign a new one
 
 	return c.CreateEvent(detachedEvent) // save as new
 }
