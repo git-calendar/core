@@ -64,6 +64,10 @@ func (c *Core) ListCalendars() ([]Calendar, error) {
 	result := make([]Calendar, 0, len(calendars))
 
 	for _, cal := range calendars {
+		slices.SortFunc(cal.Tags, func(a, b Tag) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+
 		result = append(result, Calendar{
 			Name:          cal.Name,
 			Tags:          slices.Clone(cal.Tags),
