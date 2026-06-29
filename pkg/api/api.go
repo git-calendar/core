@@ -177,7 +177,7 @@ func (a *Api) CreateTag(calendar, tagJson string) (string, error) {
 	err := json.Unmarshal([]byte(tagJson), &tag)
 	if err != nil {
 		fmt.Println("CalendarCore got: ", tagJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
+		return emptyJson, fmt.Errorf("failed to unmarshal tag data: %w", err)
 	}
 
 	newTag, err := a.inner.CreateTag(calendar, tag)
