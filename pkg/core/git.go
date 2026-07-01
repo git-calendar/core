@@ -101,12 +101,27 @@ func mergeOriginMain(repo *gogit.Repository, calendar string, encryptionKey []by
 				path.Ext(gitPath) == ".json"
 		},
 		UpdatedAt: func(gitPath string, data []byte) (time.Time, error) {
-			var ev Event
-			if err := ev.LoadFromBytes(data, path.Base(gitPath), calendar, encryptionKey); err != nil {
-				return time.Time{}, fmt.Errorf("%s: failed to load event: %w", gitPath, err)
-			}
+			dir := path.Dir(gitPath)
+			base := path.Base(gitPath)
 
-			return ev.UpdatedAt, nil
+			switch dir {
+			case EventsDirName:
+				var ev Event
+				if err := ev.LoadFromBytes(data, base, calendar, encryptionKey); err != nil {
+					return time.Time{}, err
+				}
+				return ev.UpdatedAt, nil
+
+			case TagsDirName:
+				var tg Tag
+				if err := tg.LoadFromBytes(data, base, encryptionKey); err != nil {
+					return time.Time{}, err
+				}
+				return tg.UpdatedAt, nil
+
+			default:
+				return time.Time{}, fmt.Errorf("unsupported directory: %s", dir)
+			}
 		},
 	})
 }

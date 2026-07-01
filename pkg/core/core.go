@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/uuid"
 )
@@ -28,8 +29,8 @@ type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
 	calendars    map[string]*Calendar
-	fs           billy.Filesystem // root "/" for OPFS, "$HOME" for classic FS
-	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/?url=https://github.com/...) (only needed for the browser!)
+	fs           billy.Filesystem // root "/" for OPFS/IDB, "$HOME" for classic FS
+	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/https://github.com/...) (only needed for the browser!)
 }
 
 // A "constructor" for Core.
@@ -71,12 +72,12 @@ func (c *Core) SyncAll() error {
 		}
 
 		wg.Add(1)
-		go func() {
+		go func(cal *Calendar) {
+			defer wg.Done()
 			if err := c.syncCalendar(cal); err != nil {
 				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
 			}
-			wg.Done()
-		}()
+		}(cal)
 	}
 
 	wg.Wait() // wait for all calendar syncs to finish
@@ -97,10 +98,25 @@ func (c *Core) SyncAll() error {
 // syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
 func (c *Core) syncCalendar(cal *Calendar) error {
 	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
-		if errors.Is(err, gogit.ErrRemoteNotFound) {
+		switch {
+		case errors.Is(err, gogit.ErrRemoteNotFound):
 			return nil // this is ok
+
+		case errors.Is(err, transport.ErrEmptyRemoteRepository):
+			// remote exists, but has no commits yet
+			// if we have local commits -> initialize by pushing
+			localCommit, err := gitmerge.GetLocalCommit(cal.repository, GitBranchName)
+			if err != nil {
+				return err
+			}
+			if localCommit == nil {
+				return nil // local and remote are both empty
+			}
+			return pushCalendar(cal, c.proxyUrl)
+
+		default:
+			return fmt.Errorf("fetch: %w", err)
 		}
-		return err
 	}
 
 	localCommit, remoteCommit, err := gitmerge.GetCommits(cal.repository, GitBranchName, GitRemoteName)
@@ -109,6 +125,17 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 	}
 
 	switch {
+	case localCommit == nil && remoteCommit == nil:
+		return nil
+
+	case localCommit == nil:
+		// local has no commits
+		return fastForwardCalendar(cal, remoteCommit.Hash)
+
+	case remoteCommit == nil:
+		// remote has no commits
+		return pushCalendar(cal, c.proxyUrl)
+
 	case localCommit.Hash == remoteCommit.Hash:
 		return nil // already in sync
 

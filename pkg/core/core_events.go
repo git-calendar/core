@@ -18,6 +18,14 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, fmt.Errorf("an event with this id already exists")
 	}
 
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
+	}
+
 	if err := event.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
@@ -45,6 +53,14 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 	originalEvent, exists := c.events[event.Id]
 	if !exists {
 		return nil, fmt.Errorf("no event found with id %q", event.Id)
+	}
+
+	cal, ok := c.calendars[event.Calendar]
+	if !ok {
+		return nil, fmt.Errorf("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return nil, fmt.Errorf("the specified calendar is read-only")
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -99,7 +115,7 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
-	if old.IsParent() || new.IsParent() || old.ParentId == uuid.Nil || new.ParentId == uuid.Nil {
+	if !old.IsChild() || !new.IsChild() {
 		return nil, fmt.Errorf("repeating update requires child events")
 	}
 	if old.ParentId != new.ParentId {
@@ -132,6 +148,10 @@ func (c *Core) RemoveEvent(event Event) error {
 		return fmt.Errorf("invalid event: %w", err)
 	}
 
+	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
+		return fmt.Errorf("the events calendar is read-only")
+	}
+
 	err := c.intervalTree.RemoveEvent(event)
 	if err != nil {
 		return fmt.Errorf("failed to delete event from interval tree: %w", err)
@@ -151,6 +171,14 @@ func (c *Core) RemoveEvent(event Event) error {
 func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 	if err := event.Validate(); err != nil {
 		return fmt.Errorf("invalid event: %w", err)
+	}
+
+	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
+		return fmt.Errorf("the events calendar is read-only")
+	}
+
+	if !event.IsChild() {
+		return errors.New("event has to be a child to be removed using this method")
 	}
 
 	switch strat {
@@ -225,8 +253,8 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 					From:        firstStart,
 					To:          firstStart.Add(eventDuration),
 					Calendar:    curEvent.Calendar,
-					Tag:         curEvent.Tag,
-					ParentId:    curEvent.Id,
+					TagId:       curEvent.TagId,
+					ParentId:    &curEvent.Id,
 					Repeat:      curEvent.Repeat,
 				}
 				// ignore exceptions
@@ -246,7 +274,7 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 
 // Updates single generated/child event by adding it to its Parent repeat exceptions and creating a brand new event instead.
 func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
-	parent, ok := c.events[updated.ParentId]
+	parent, ok := c.events[*updated.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
@@ -261,17 +289,17 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	}
 
 	// detach updated from repeating time series
-	detachedEvent := *updated         // shallow copy
-	detachedEvent.Repeat = nil        // not repeating anymore
-	detachedEvent.ParentId = uuid.Nil // not child anymore
-	detachedEvent.Id = uuid.Nil       // set to nil; CreateEvent will asign a new one
+	detachedEvent := *updated    // shallow copy
+	detachedEvent.Repeat = nil   // not repeating anymore
+	detachedEvent.ParentId = nil // not child anymore
+	detachedEvent.Id = uuid.Nil  // set to uuid.Nil; CreateEvent will asign a new one
 
 	return c.CreateEvent(detachedEvent) // save as new
 }
 
 // updateFollowingChildren splits the time series into two by stopping the original parent event from repeating further and creating brand new parent with updated properties.
 func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
-	parent, ok := c.events[old.ParentId]
+	parent, ok := c.events[*old.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
@@ -332,7 +360,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	// ------------ create the new continuing series ------------
 	newEvent := *new
 	newEvent.Id = uuid.New()
-	newEvent.ParentId = uuid.Nil // this is now its own parent
+	newEvent.ParentId = nil // this is now its own parent
 
 	if newEvent.Repeat != nil {
 		repeat := *newEvent.Repeat
@@ -378,7 +406,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 // Updates the entire repeating series by only modifying the parent. That means all generated child events get updated as well.
 // Both old and new arguments are child events.
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
-	parent, ok := c.events[old.ParentId]
+	parent, ok := c.events[*old.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
 		return nil, fmt.Errorf("no valid parent found")
 	}
@@ -423,7 +451,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	parent.Description = new.Description
 	parent.From = parent.From.Add(fromDiff)
 	parent.To = parent.To.Add(toDiff)
-	parent.Tag = new.Tag
+	parent.TagId = new.TagId
 	parent.Calendar = new.Calendar
 
 	if needsReindex {
@@ -442,7 +470,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 }
 
 func (c *Core) removeCurrentChild(event *Event) error {
-	parent, ok := c.events[event.ParentId]
+	parent, ok := c.events[*event.ParentId] // we check nil pointer in RemoveRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
 		return fmt.Errorf("no valid parent found")
 	}

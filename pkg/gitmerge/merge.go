@@ -36,32 +36,46 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	if err != nil {
 		return err
 	}
-	if localCommit.Hash == remoteCommit.Hash {
+
+	if localCommit == nil && remoteCommit == nil {
+		// completely empty repo local as well as remote
+		return nil
+	}
+
+	if localCommit != nil && remoteCommit != nil && localCommit.Hash == remoteCommit.Hash {
+		// same commits, no need to merge
 		return nil
 	}
 
 	var baseTree *object.Tree
-	baseCommit, err := mergeBase(localCommit, remoteCommit)
-	if errors.Is(err, errNoMergeBase) {
-		// unrelated histories -> treat this as a merge against an empty base
-		baseTree = nil
-	} else if err != nil {
-		return err
-	} else {
-		baseTree, err = baseCommit.Tree()
-		if err != nil {
-			return fmt.Errorf("load base tree: %w", err)
+	if localCommit != nil && remoteCommit != nil {
+		baseCommit, err := mergeBase(localCommit, remoteCommit)
+		if errors.Is(err, errNoMergeBase) {
+			baseTree = nil // unrelated histories -> empty base
+		} else if err != nil {
+			return err
+		} else {
+			baseTree, err = baseCommit.Tree()
+			if err != nil {
+				return fmt.Errorf("load base tree: %w", err)
+			}
 		}
 	}
 
-	localTree, err := localCommit.Tree()
-	if err != nil {
-		return fmt.Errorf("load local tree: %w", err)
+	var localTree *object.Tree
+	if localCommit != nil {
+		localTree, err = localCommit.Tree()
+		if err != nil {
+			return fmt.Errorf("load local tree: %w", err)
+		}
 	}
 
-	remoteTree, err := remoteCommit.Tree()
-	if err != nil {
-		return fmt.Errorf("load remote tree: %w", err)
+	var remoteTree *object.Tree
+	if remoteCommit != nil {
+		remoteTree, err = remoteCommit.Tree()
+		if err != nil {
+			return fmt.Errorf("load remote tree: %w", err)
+		}
 	}
 
 	paths, err := collectPaths(opts.IncludePath, baseTree, localTree, remoteTree)
@@ -93,13 +107,13 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	commitMsg := fmt.Sprintf("Merge '%s/%s' (LWW)", opts.RemoteName, opts.BranchName)
 
 	_, err = wt.Commit(commitMsg, &gogit.CommitOptions{
-		Parents: []plumbing.Hash{localCommit.Hash, remoteCommit.Hash},
+		Parents:           commitParents(localCommit, remoteCommit),
+		AllowEmptyCommits: true,
 		Author: &object.Signature{
 			Name:  opts.AuthorName,
 			Email: opts.AuthorEmail,
 			When:  time.Now(),
 		},
-		AllowEmptyCommits: true,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to commit merge: %w", err)
@@ -108,13 +122,13 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 	return nil
 }
 
-// applyLWW applies last-write-wins strategy to an event file from three versions (base, local, remote).
+// applyLWW applies last-write-wins strategy to a file from three versions (base, local, remote).
 func applyLWW(wt *gogit.Worktree, gitPath string, base, local, remote fileVersion) error {
 	switch {
 	case base.exists && !remote.exists: // remote deleted -> delete wins
 		if local.exists {
 			if _, err := wt.Remove(gitPath); err != nil {
-				return fmt.Errorf("%s: failed to remove an event which was deleted on remote: %w", gitPath, err)
+				return fmt.Errorf("%s: failed to remove a file which was deleted on remote: %w", gitPath, err)
 			}
 		}
 
@@ -186,19 +200,14 @@ func GetCommits(
 	branchName string,
 	remoteName string,
 ) (local, remote *object.Commit, err error) {
-	localRef, err := localBranchRef(repo, branchName)
+	local, err = GetLocalCommit(repo, branchName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to load local commit: %w", err)
 	}
 
 	remoteRef, err := remoteBranchRef(repo, remoteName, branchName)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	local, err = repo.CommitObject(localRef.Hash())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load local commit: %w", err)
 	}
 
 	remote, err = repo.CommitObject(remoteRef.Hash())
@@ -207,6 +216,23 @@ func GetCommits(
 	}
 
 	return local, remote, nil
+}
+
+func GetLocalCommit(repo *gogit.Repository, branchName string) (*object.Commit, error) {
+	ref, err := localBranchRef(repo, branchName)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return commit, nil
 }
 
 func localBranchRef(repo *gogit.Repository, branchName string) (*plumbing.Reference, error) {
@@ -330,4 +356,18 @@ func collectPaths(include IncludePathFunc, trees ...*object.Tree) ([]string, err
 // billyPath converts a slash-delimited git path to a native filesystem path just to make sure everything is ok.
 func billyPath(fs billy.Filesystem, gitPath string) string {
 	return fs.Join(strings.Split(path.Clean(gitPath), "/")...)
+}
+
+func commitParents(local, remote *object.Commit) []plumbing.Hash {
+	parents := make([]plumbing.Hash, 0, 2)
+
+	if local != nil {
+		parents = append(parents, local.Hash)
+	}
+
+	if remote != nil && (local == nil || remote.Hash != local.Hash) {
+		parents = append(parents, remote.Hash)
+	}
+
+	return parents
 }

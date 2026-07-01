@@ -16,7 +16,7 @@
   - [x] connect repeating event exceptions
     - exception needs to have uuid
     - time encoded inside uuidv8
-  - [ ] config file per repo
+  - [ ] config file per repo?
     - tags
   - [ ] better tests
   - [x] load repositories
@@ -29,7 +29,7 @@
       - github-pages?
       - custom http file server?
 - [x] encryption
-  - [x] storing a key (in opfs?)
+  - [x] storing a key
   - values-only
   - deterministic? (same input <=> same output)
     - +good git diffs
@@ -44,9 +44,11 @@
 
 ```
 .git-calendar-data/
-├── main/
+├── default/
 │   ├── .git/
 │   ├── events/
+│   │   └── <UUID>.json
+│   ├── tags/
 │   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
@@ -54,15 +56,18 @@
 │   ├── .git/
 │   ├── events/
 │   │   └── <UUID>.json
+│   ├── tags/
+│   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
-├── main.key
+├── default.key
+├── shared.readonly
 └── shared.key
 ```
 
 
 ### Testing Web/Wasm parts:
-(there are no wasm only test at this time, but could be useful)
+(there are no wasm-only tests at this time, but could be useful)
 
 Install [wasmbrowsertest](https://github.com/agnivade/wasmbrowsertest):
 ```sh

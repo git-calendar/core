@@ -21,12 +21,12 @@ func TestUpdateRemote_ReplacesExistingRemote(t *testing.T) {
 	oldCalRemote := "https://github.com/git-calendar/old-calendar.git"
 	newCalRemote := "https://github.com/git-calendar/new-calendar.git"
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl(oldCalRemote))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(oldCalRemote), false)
 	if err != nil {
 		t.Fatalf("failed to set initial remotes: %v", err)
 	}
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl(newCalRemote))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl(newCalRemote), false)
 	if err != nil {
 		t.Fatalf("failed to replace remotes: %v", err)
 	}
@@ -69,12 +69,12 @@ func TestUpdateRemote_DeletesWhenEmpty(t *testing.T) {
 		_ = c.RemoveCalendar(TestCalendarName)
 	})
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"), false)
 	if err != nil {
 		t.Fatalf("failed to set remotes: %v", err)
 	}
 
-	err = c.UpdateRemote(TestCalendarName, nil)
+	err = c.UpdateRemote(TestCalendarName, nil, false)
 	if err != nil {
 		t.Fatalf("failed to clear remotes: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestUpdateRemote_MissingCalendar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"))
+	err = c.UpdateRemote(TestCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"), false)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

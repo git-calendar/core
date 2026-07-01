@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const TestCalendarName = "test"
-
 func TestRepeatingEvent_GetEvents_UntilWeekly_GeneratesOccurrencesInRange(t *testing.T) {
 	c := newTestCore(t)
 
@@ -150,7 +148,7 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 	if detached.Repeat != nil {
 		t.Fatalf("detached event should not repeat")
 	}
-	if detached.ParentId != uuid.Nil {
+	if detached.ParentId != nil {
 		t.Fatalf("detached event should not have parent id, got %s", detached.ParentId)
 	}
 	if detached.Title != updated.Title {
@@ -226,7 +224,7 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 		t.Fatalf("failed to update child event with Following strategy: %v", err)
 	}
 
-	if newParent.ParentId != uuid.Nil {
+	if newParent.ParentId != nil {
 		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentId)
 	}
 	if newParent.Title != updated.Title {
@@ -282,7 +280,7 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 	if err != nil {
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
-	if newParent.ParentId != uuid.Nil {
+	if newParent.ParentId != nil {
 		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentId)
 	}
 

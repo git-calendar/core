@@ -27,7 +27,7 @@ func RegisterCallbacks(api *api.Api) {
 			}),
 			"cloneCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.CloneCalendar(args[0].String(), args[1].String())
+					return nil, api.CloneCalendar(args[0].String(), args[1].String(), args[2].Bool())
 				})
 			}),
 			"removeCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -52,7 +52,7 @@ func RegisterCallbacks(api *api.Api) {
 			}),
 			"updateRemote": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.UpdateRemote(args[0].String(), args[1].String())
+					return nil, api.UpdateRemote(args[0].String(), args[1].String(), args[2].Bool())
 				})
 			}),
 			"createEvent": js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -88,6 +88,21 @@ func RegisterCallbacks(api *api.Api) {
 			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return api.GetEvents(args[0].String(), args[1].String())
+				})
+			}),
+			"createTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.CreateTag(args[0].String(), args[1].String())
+				})
+			}),
+			"updateTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.UpdateTag(args[0].String(), args[1].String())
+				})
+			}),
+			"removeTag": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.RemoveTag(args[0].String(), args[1].String())
 				})
 			}),
 			"setCorsProxy": js.FuncOf(func(this js.Value, args []js.Value) any {

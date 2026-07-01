@@ -14,20 +14,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// eventFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
-type eventFile struct {
+// eventInFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
+type eventInFile struct {
 	Title       string      `json:"title,omitzero"`
 	Location    string      `json:"location,omitzero"`
 	Description string      `json:"description,omitzero"`
 	From        time.Time   `json:"from,omitzero"`
 	To          time.Time   `json:"to,omitzero"`
-	Tag         string      `json:"tag,omitzero"`
-	ParentId    uuid.UUID   `json:"parent_id,omitzero"`
+	TagId       *uuid.UUID  `json:"tag_id,omitzero"`
+	ParentId    *uuid.UUID  `json:"parent_id,omitzero"`
 	Repeat      *Repetition `json:"repeat,omitzero"`
 	UpdatedAt   time.Time   `json:"updated_at,omitzero"`
 }
 
-func (ef eventFile) toEvent(id uuid.UUID, calendar string) Event {
+func (ef eventInFile) toEvent(id uuid.UUID, calendar string) Event {
 	return Event{
 		Id:          id,
 		Title:       ef.Title,
@@ -36,21 +36,21 @@ func (ef eventFile) toEvent(id uuid.UUID, calendar string) Event {
 		From:        ef.From,
 		To:          ef.To,
 		Calendar:    calendar,
-		Tag:         ef.Tag,
+		TagId:       ef.TagId,
 		ParentId:    ef.ParentId,
 		Repeat:      ef.Repeat,
 		UpdatedAt:   ef.UpdatedAt,
 	}
 }
 
-func (e Event) fileData() eventFile {
-	return eventFile{
+func (e Event) fileData() eventInFile {
+	return eventInFile{
 		Title:       e.Title,
 		Location:    e.Location,
 		Description: e.Description,
 		From:        e.From,
 		To:          e.To,
-		Tag:         e.Tag,
+		TagId:       e.TagId,
 		ParentId:    e.ParentId,
 		Repeat:      e.Repeat,
 		UpdatedAt:   e.UpdatedAt,
@@ -110,7 +110,7 @@ func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decrypti
 		return err
 	}
 
-	var data eventFile
+	var data eventInFile
 
 	if len(decryptionKey) == 0 { // no encryption, just use the plaintext
 		if err := json.Unmarshal(raw, &data); err != nil {
