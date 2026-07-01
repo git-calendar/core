@@ -231,13 +231,25 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 		return nil, err
 	}
 
-	if err := firstCommit(repo); err != nil {
-		return nil, fmt.Errorf("initial commit failed: %w", err)
+	// create initial commit if the repository has no commits yet
+	if err := ensureInitialCommit(repo); err != nil {
+		return nil, fmt.Errorf("ensure initial commit failed: %w", err)
 	}
+
 	return repo, nil
 }
 
-func firstCommit(repo *gogit.Repository) error {
+// ensureInitialCommit creates an empty initial commit only if none exist.
+func ensureInitialCommit(repo *gogit.Repository) error {
+	_, err := repo.Head()
+	if err == nil {
+		// HEAD exists -> repo already has commits
+		return nil
+	}
+	if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("check head: %w", err)
+	}
+
 	wt, err := repo.Worktree()
 	if err != nil {
 		return err
