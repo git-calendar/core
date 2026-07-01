@@ -20,6 +20,7 @@
     - tags
   - [ ] better tests
   - [x] load repositories
+- [ ] Undo function (git reset HEAD~1)
 - [ ] iCalendar compatibility
   - [ ] import (periodical & one-time)
   - [ ] export
