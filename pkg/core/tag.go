@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Tag represents a user-defined category/label for multiple events within one calendar.
 type Tag struct {
 	Id        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -48,7 +49,7 @@ func (tag Tag) getPath() string {
 
 // ----------------------------------------------------------------
 
-// tagFile represents a tag inside file.
+// tagInFile represents a tag inside file.
 type tagInFile struct {
 	Name      string    `json:"name,omitzero"`
 	Color     string    `json:"color,omitzero"`

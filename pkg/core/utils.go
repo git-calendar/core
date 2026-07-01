@@ -229,6 +229,7 @@ func splitExceptions(exceptions []uuid.UUID, cutoff time.Time) (before, after []
 	return
 }
 
+// repeatRuleChanged checks if Repetition differs.
 func repeatRuleChanged(a, b *Repetition) bool {
 	if a == nil || b == nil {
 		return a != b
