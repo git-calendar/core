@@ -53,9 +53,10 @@ jobs:
         run: make prod_build_web # just web for now
 
       - name: Compress (Zstd and Brotli)
+        working-directory: build/web
         run: |
-          zstd -7 main.wasm -o main.wasm.zst
-          brotli -q 11 main.wasm -o main.wasm.br
+          zstd -7 core.wasm -o core.wasm.zst
+          brotli -q 11 core.wasm -o core.wasm.br
 
       - name: Release
         uses: softprops/action-gh-release@v3
