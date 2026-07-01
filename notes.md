@@ -66,7 +66,7 @@
 
 
 ### Testing Web/Wasm parts:
-(there are no wasm only test at this time, but could be useful)
+(there are no wasm-only tests at this time, but could be useful)
 
 Install [wasmbrowsertest](https://github.com/agnivade/wasmbrowsertest):
 ```sh
