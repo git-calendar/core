@@ -204,7 +204,7 @@ func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 }
 
 // Returns an array of events which fall into the specified interval [from, to].
-func (c *Core) GetEvents(from, to time.Time) []Event {
+func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 	// query the interval tree
 	intervalsMatched, found := c.intervalTree.tree.AllIntersections(from, to)
 	if !found {
@@ -217,7 +217,12 @@ func (c *Core) GetEvents(from, to time.Time) []Event {
 		for _, eId := range intersection {
 			curEvent, ok := c.events[eId]
 			if !ok {
-				fmt.Printf("event with id: '%v' doesn't exist in events map WTF\n", eId)
+				fmt.Printf("event with id: %q doesn't exist in events map WTF\n", eId)
+				continue
+			}
+
+			// skip filtered out events
+			if filter != nil && !checkFilter(curEvent, filter) {
 				continue
 			}
 

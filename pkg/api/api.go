@@ -152,7 +152,7 @@ func (a *Api) GetEvent(id string) (string, error) {
 	return string(jsonBytes), nil
 }
 
-func (a *Api) GetEvents(from, to string) (string, error) {
+func (a *Api) GetEvents(from, to string, filterJson string) (string, error) {
 	// parse both time strings
 	f, err1 := time.Parse(time.RFC3339, from)
 	t, err2 := time.Parse(time.RFC3339, to)
@@ -160,8 +160,15 @@ func (a *Api) GetEvents(from, to string) (string, error) {
 		return emptyJsonArr, fmt.Errorf("invalid from/to parameter: %w", err)
 	}
 
+	var filter core.GetEventsFilter
+	if filterJson != "" {
+		if err := json.Unmarshal([]byte(filterJson), &filter); err != nil {
+			return emptyJsonArr, err
+		}
+	}
+
 	// pass the args to inner api
-	events := a.inner.GetEvents(f, t)
+	events := a.inner.GetEvents(f, t, filter)
 
 	// marshal to json
 	jsonBytes, err := json.Marshal(events)

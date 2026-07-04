@@ -27,7 +27,7 @@ func TestRepeatingEvent_GetEvents_UntilWeekly_GeneratesOccurrencesInRange(t *tes
 		t.Fatalf("stored parent should be repeating")
 	}
 
-	events := c.GetEvents(startTime, startTime.AddDate(1, 0, 0))
+	events := c.GetEvents(startTime, startTime.AddDate(1, 0, 0), nil)
 	if len(events) != 53 {
 		t.Fatalf("expected 53 weekly events in 2026, got %d: %+v", len(events), events)
 	}
@@ -44,7 +44,7 @@ func TestRepeatingEvent_GetEvents_CountWeekly_GeneratesExactCount(t *testing.T) 
 		Count:     count,
 	})
 
-	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, count*7+1))
+	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, count*7+1), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 7),
@@ -66,7 +66,7 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 		Count:     count,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
@@ -84,7 +84,7 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 	storedParent := requireEvent(t, c, parent.Id)
 	assertParentHasException(t, storedParent, removed.Id)
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	assertNoEventAt(t, events, removed.From)
 	if len(events) != count-1 {
 		t.Fatalf("expected %d events after delete, got %d: %+v", count-1, len(events), events)
@@ -118,7 +118,7 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 		Count:     count,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 
 	updated := cloneEvent(target)
@@ -134,7 +134,7 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 	storedParent := requireEvent(t, c, parent.Id)
 	assertParentHasException(t, storedParent, target.Id)
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
@@ -207,7 +207,7 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	}
 	createEvent(t, c, parent)
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 21))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 21), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 	previous := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
@@ -265,7 +265,7 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 	}
 	createEvent(t, c, parent)
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 21))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 21), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
 	updated := cloneEvent(target)
@@ -300,7 +300,7 @@ func TestRepeatingEvent_Update_Following_CarriesAndShiftsFutureExceptions(t *tes
 		Until:     startTime.AddDate(0, 0, 10),
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
 	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
@@ -323,7 +323,7 @@ func TestRepeatingEvent_Update_Following_CarriesAndShiftsFutureExceptions(t *tes
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1).Add(shift),
@@ -343,7 +343,7 @@ func TestRepeatingEvent_Update_Following_FirstChild_ShiftBackDoesNotKeepOriginal
 		Count:     3,
 	})
 
-	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, 3))
+	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, 3), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := -2 * time.Hour
@@ -356,7 +356,7 @@ func TestRepeatingEvent_Update_Following_FirstChild_ShiftBackDoesNotKeepOriginal
 		t.Fatalf("failed to update first child with Following strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3))
+	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3), nil)
 	assertEventStarts(t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 1).Add(shift),
@@ -375,7 +375,7 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 		Until:     startTime.AddDate(0, 0, 10),
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
 	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
@@ -396,7 +396,7 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
@@ -416,7 +416,7 @@ func TestRepeatingEvent_Update_Following_SplitsExceptionsAtOriginalTargetTime(t 
 		Until:     startTime.AddDate(0, 0, 10),
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
 	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	third := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 
@@ -439,7 +439,7 @@ func TestRepeatingEvent_Update_Following_SplitsExceptionsAtOriginalTargetTime(t 
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 11))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 11), nil)
 	requireEventAt(t, events, startTime)
 	requireEventAt(t, events, second.From.Add(shift))
 	requireEventAt(t, events, startTime.AddDate(0, 0, 3).Add(shift))
@@ -457,7 +457,7 @@ func TestRepeatingEvent_Update_Following_CountSeriesKeepsRemainingSlotsAfterFutu
 		Count:     count,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count+1))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count+1), nil)
 	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
@@ -480,7 +480,7 @@ func TestRepeatingEvent_Update_Following_CountSeriesKeepsRemainingSlotsAfterFutu
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count+1))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count+1), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1).Add(shift),
@@ -500,7 +500,7 @@ func TestRepeatingEvent_Update_All_ShiftsWholeSeriesFromChild(t *testing.T) {
 		Count:     5,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 6, 0))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 6, 0), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := 2 * time.Hour
@@ -522,7 +522,7 @@ func TestRepeatingEvent_Update_All_ShiftsWholeSeriesFromChild(t *testing.T) {
 		t.Fatalf("parent title mismatch: expected %q, got %q", updated.Title, storedParent.Title)
 	}
 
-	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 6, 0).Add(shift))
+	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 6, 0).Add(shift), nil)
 	assertEventStarts(t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 1, 0).Add(shift),
@@ -542,14 +542,14 @@ func TestRepeatingEvent_Update_All_ShiftsExceptionsAndKeepsDeletedChildHidden(t 
 		Count:     3,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	middle := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
 	if err := c.RemoveRepeatingEvent(middle, core.Current); err != nil {
 		t.Fatalf("failed to remove middle child: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 3))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := -time.Hour
@@ -563,7 +563,7 @@ func TestRepeatingEvent_Update_All_ShiftsExceptionsAndKeepsDeletedChildHidden(t 
 		t.Fatalf("failed to update child event with All strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3))
+	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3), nil)
 	assertEventStarts(t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
@@ -581,14 +581,14 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 		Count:     3,
 	})
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	middle := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
 	if err := c.RemoveRepeatingEvent(middle, core.Current); err != nil {
 		t.Fatalf("failed to remove middle child: %v", err)
 	}
 
-	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 3))
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := -time.Hour
@@ -608,7 +608,7 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 		t.Fatalf("failed to update child event with All strategy: %v", err)
 	}
 
-	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 5))
+	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 5), nil)
 	assertEventStarts(t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
@@ -643,7 +643,7 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 		t.Fatalf("failed to update standard event to repeating: %v", err)
 	}
 
-	events := c.GetEvents(startTime, startTime.AddDate(0, 1, 0))
+	events := c.GetEvents(startTime, startTime.AddDate(0, 1, 0), nil)
 	assertEventStarts(t, events,
 		startTime,
 		startTime.AddDate(0, 0, 7),

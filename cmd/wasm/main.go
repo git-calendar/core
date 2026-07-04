@@ -87,7 +87,10 @@ func RegisterCallbacks(api *api.Api) {
 			}),
 			"getEvents": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return api.GetEvents(args[0].String(), args[1].String())
+					if args[2].IsNull() {
+						return api.GetEvents(args[0].String(), args[1].String(), "")
+					}
+					return api.GetEvents(args[0].String(), args[1].String(), args[2].String())
 				})
 			}),
 			"createTag": js.FuncOf(func(this js.Value, args []js.Value) any {

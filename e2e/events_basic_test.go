@@ -190,7 +190,7 @@ func TestAddEventsAndGetThemByInterval(t *testing.T) {
 		}
 	}
 
-	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -225,7 +225,7 @@ func TestAddNormalEventsAndRemoveEvent(t *testing.T) {
 		}
 	}
 
-	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != numEvents {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -236,7 +236,7 @@ func TestAddNormalEventsAndRemoveEvent(t *testing.T) {
 		t.Errorf("failed to remove event: %v", err)
 	}
 
-	eventsOut = c.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut = c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != numEvents-1 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -278,7 +278,7 @@ func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 		c.RemoveEvent(events[i])
 	}
 
-	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0))
+	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != 0 {
 		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), 0)
 		t.Errorf("eventsOut: %v", eventsOut)
@@ -330,4 +330,149 @@ func TestUpdateStandardEvent(t *testing.T) {
 	if !eventOut.To.Equal(updatedEvent.To) {
 		t.Errorf("time was not updated, got: %s", eventOut.To)
 	}
+}
+
+func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
+	c := core.NewCore()
+
+	calendarA := TestCalendarName + "-filter-a"
+	calendarB := TestCalendarName + "-filter-b"
+
+	if err := c.CreateCalendar(calendarA, ""); err != nil {
+		t.Fatalf("failed to create calendar A: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(calendarA)
+	})
+
+	if err := c.CreateCalendar(calendarB, ""); err != nil {
+		t.Fatalf("failed to create calendar B: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(calendarB)
+	})
+
+	from := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+
+	tagA := uuid.New()
+	tagB := uuid.New()
+
+	matchingID := uuid.New()
+	wrongTagID := uuid.New()
+	wrongCalendarID := uuid.New()
+
+	events := []core.Event{
+		{
+			Id:       matchingID,
+			Calendar: calendarA,
+			Title:    "matching event",
+			From:     from,
+			To:       to,
+			TagId:    uuidPtr(tagA),
+		},
+		{
+			Id:       wrongTagID,
+			Calendar: calendarA,
+			Title:    "wrong tag",
+			From:     from,
+			To:       to,
+			TagId:    uuidPtr(tagB),
+		},
+		{
+			Id:       wrongCalendarID,
+			Calendar: calendarB,
+			Title:    "wrong calendar",
+			From:     from,
+			To:       to,
+			TagId:    uuidPtr(tagA),
+		},
+	}
+
+	for _, e := range events {
+		if _, err := c.CreateEvent(e); err != nil {
+			t.Fatalf("failed to create event %q: %v", e.Title, err)
+		}
+	}
+
+	got := c.GetEvents(from.Add(-time.Hour), to.Add(time.Hour), core.GetEventsFilter{
+		calendarA: {tagA},
+	})
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 event, got %d: %#v", len(got), got)
+	}
+
+	if got[0].Id != matchingID {
+		t.Errorf("expected event %s, got %s", matchingID, got[0].Id)
+	}
+}
+
+func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
+	c := core.NewCore()
+
+	calendar := TestCalendarName + "-nil-filter"
+
+	if err := c.CreateCalendar(calendar, ""); err != nil {
+		t.Fatalf("failed to create calendar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(calendar)
+	})
+
+	from := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+
+	tagA := uuid.New()
+	tagB := uuid.New()
+
+	eventA := core.Event{
+		Id:       uuid.New(),
+		Calendar: calendar,
+		Title:    "event A",
+		From:     from,
+		To:       to,
+		TagId:    uuidPtr(tagA),
+	}
+	eventB := core.Event{
+		Id:       uuid.New(),
+		Calendar: calendar,
+		Title:    "event B",
+		From:     from.Add(30 * time.Minute),
+		To:       to.Add(30 * time.Minute),
+		TagId:    uuidPtr(tagB),
+	}
+
+	if _, err := c.CreateEvent(eventA); err != nil {
+		t.Fatalf("failed to create event A: %v", err)
+	}
+	if _, err := c.CreateEvent(eventB); err != nil {
+		t.Fatalf("failed to create event B: %v", err)
+	}
+
+	got := c.GetEvents(from.Add(-time.Hour), to.Add(time.Hour), nil)
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 events, got %d: %#v", len(got), got)
+	}
+
+	if !hasEvent(got, eventA.Id) {
+		t.Errorf("missing event A")
+	}
+	if !hasEvent(got, eventB.Id) {
+		t.Errorf("missing event B")
+	}
+}
+
+func uuidPtr(id uuid.UUID) *uuid.UUID {
+	return &id
+}
+
+func hasEvent(events []core.Event, id uuid.UUID) bool {
+	for _, e := range events {
+		if e.Id == id {
+			return true
+		}
+	}
+	return false
 }

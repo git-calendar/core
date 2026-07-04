@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -242,4 +243,19 @@ func repeatRuleChanged(a, b *Repetition) bool {
 	bb.Exceptions = nil
 
 	return !reflect.DeepEqual(aa, bb)
+}
+
+type GetEventsFilter map[string][]uuid.UUID // map[Calendar.Name]Tag.Id
+
+func checkFilter(e *Event, f GetEventsFilter) bool {
+	tags, ok := f[e.Calendar]
+	if !ok {
+		return false // doesn't satisfy filtered calendars
+	}
+	if e.TagId == nil {
+		return true
+	}
+	return slices.ContainsFunc(tags, func(u uuid.UUID) bool {
+		return u == *e.TagId
+	})
 }
