@@ -251,7 +251,6 @@ func TestCalendarNameFromUrl(t *testing.T) {
 }
 
 func TestCustomUUIDs(t *testing.T) {
-	type args struct{}
 	tests := []struct {
 		name     string
 		parentId uuid.UUID
