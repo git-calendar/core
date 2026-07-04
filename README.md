@@ -1,5 +1,4 @@
 # Git Calendar Core
-[![Go Report Card](https://goreportcard.com/badge/github.com/git-calendar/core)](https://goreportcard.com/report/github.com/git-calendar/core)
 [![Go version](https://img.shields.io/github/go-mod/go-version/git-calendar/core)](./go.mod)
 [![Go](https://github.com/git-calendar/core/actions/workflows/go.yaml/badge.svg)](https://github.com/git-calendar/core/actions/workflows/go.yaml)
 [![License](https://img.shields.io/github/license/git-calendar/core)](./LICENSE.txt)
