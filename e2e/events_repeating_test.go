@@ -107,6 +107,93 @@ func TestRepeatingEvent_Remove_Current_RejectsParentEvent(t *testing.T) {
 	}
 }
 
+func TestRepeatingEvent_Remove_Current_RemovesOnlyTargetChild(t *testing.T) {
+	c := newTestCore(t)
+
+	const count = 5
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	parent := createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Count:     count,
+	})
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
+
+	err := c.RemoveRepeatingEvent(target, core.Current)
+	if err != nil {
+		t.Fatalf("failed to remove current child: %v", err)
+	}
+
+	storedParent := requireEvent(t, c, parent.Id)
+	assertParentHasException(t, storedParent, target.Id)
+
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	assertEventStarts(t, events,
+		startTime,
+		startTime.AddDate(0, 0, 1),
+		startTime.AddDate(0, 0, 3),
+		startTime.AddDate(0, 0, 4),
+	)
+	assertNoEventAt(t, events, target.From)
+}
+
+func TestRepeatingEvent_Remove_Following_RemovesTargetAndFollowingChildren(t *testing.T) {
+	c := newTestCore(t)
+
+	const count = 5
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Count:     count,
+	})
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
+
+	err := c.RemoveRepeatingEvent(target, core.Following)
+	if err != nil {
+		t.Fatalf("failed to remove following children: %v", err)
+	}
+
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	assertEventStarts(t, events,
+		startTime,
+		startTime.AddDate(0, 0, 1),
+	)
+
+	assertNoEventAt(t, events, startTime.AddDate(0, 0, 2))
+	assertNoEventAt(t, events, startTime.AddDate(0, 0, 3))
+	assertNoEventAt(t, events, startTime.AddDate(0, 0, 4))
+}
+
+func TestRepeatingEvent_Remove_All_RemovesWholeSeries(t *testing.T) {
+	c := newTestCore(t)
+
+	const count = 5
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Count:     count,
+	})
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
+
+	err := c.RemoveRepeatingEvent(target, core.All)
+	if err != nil {
+		t.Fatalf("failed to remove whole repeating series: %v", err)
+	}
+
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	if len(events) != 0 {
+		t.Fatalf("expected whole repeating series to be removed, got %d events", len(events))
+	}
+}
+
 func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 	c := newTestCore(t)
 
@@ -615,6 +702,61 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 		startTime.AddDate(0, 0, 3).Add(shift),
 	)
 	assertNoEventAt(t, events, startTime.AddDate(0, 0, 1).Add(shift))
+}
+
+func TestRepeatingEvent_RemoveFollowingThenUpdateAllShiftTime_DoesNotLoseEvents(t *testing.T) {
+	c := newTestCore(t)
+
+	const count = 5
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	duration := time.Hour
+
+	createRepeatingEvent(t, c, "Daily event", startTime, duration, core.Repetition{
+		Frequency: core.Day,
+		Interval:  1,
+		Count:     count,
+	})
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	third := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
+
+	if err := c.RemoveRepeatingEvent(third, core.Following); err != nil {
+		t.Fatalf("failed to remove following from 3rd: %v", err)
+	}
+
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
+	assertEventStarts(t, events, startTime, startTime.AddDate(0, 0, 1))
+
+	second := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
+
+	newFrom := second.From.Add(-time.Hour)
+	newTo := second.To.Add(-time.Hour)
+
+	// Model this the way a real caller would build a child update:
+	// only the mutable fields, no Repeat field carried over — children
+	// don't own the repeat rule, the parent does.
+	newEvent := second
+	newEvent.From = newFrom
+	newEvent.To = newTo
+	newEvent.Repeat = nil
+
+	updated, err := c.UpdateRepeatingEvent(second, newEvent, core.All)
+	if err != nil {
+		t.Fatalf("failed to update with All strategy: %v", err)
+	}
+	if updated == nil {
+		t.Fatalf("expected updated event, got nil")
+	}
+
+	// Both remaining occurrences must survive the shift, just moved -1h.
+	events = c.GetEvents(startTime.Add(-2*time.Hour), startTime.AddDate(0, 0, count), nil)
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events after All-strategy time shift, got %d: %+v", len(events), events)
+	}
+
+	expectedFirst := startTime.Add(-time.Hour)
+	expectedSecond := startTime.AddDate(0, 0, 1).Add(-time.Hour)
+	assertEventStarts(t, events, expectedFirst, expectedSecond)
 }
 
 func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {

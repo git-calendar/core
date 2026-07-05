@@ -184,11 +184,10 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 	switch strat {
 	case Current:
 		return c.removeCurrentChild(&event)
-	// TODO:
-	// case Following:
-	// 	return c.removeFollowingChildren(&event)
-	// case All:
-	// 	return c.removeAllChildren(&event)
+	case Following:
+		return c.removeFollowingChildren(&event)
+	case All:
+		return c.removeAllChildren(&event)
 	default:
 		return fmt.Errorf("update strategy %d isn't implemented", strat)
 	}
@@ -505,6 +504,55 @@ func (c *Core) removeCurrentChild(event *Event) error {
 	}
 
 	return nil
+}
+
+func (c *Core) removeFollowingChildren(event *Event) error {
+	parent, ok := c.events[*event.ParentId] // we check nil pointer in RemoveRepeatingEvent
+	if !ok || parent == nil || !parent.IsParent() {
+		return errors.New("no valid parent found")
+	}
+
+	// if its the first occurance, we might as well delete all
+	if parent.From.Equal(event.From) {
+		return c.removeAllChildren(event)
+	}
+
+	// remove the parent from the tree using its CURRENT (pre-mutation) state
+	if err := c.intervalTree.RemoveEvent(*parent); err != nil {
+		return fmt.Errorf("failed to remove parent from interval tree: %w", err)
+	}
+
+	// ------------ cap the original parent ------------
+	previousStart := addUnit(event.From, -parent.Repeat.Interval, parent.Repeat.Frequency)
+	if !previousStart.After(parent.From) {
+		// only one occurrence left -> turn it into a basic (non-repeating) event
+		parent.Repeat = nil
+	} else {
+		// keep repeating but stop before the deleted one
+		parent.Repeat.Until = dateOnly(previousStart) // the From time of the last not deleteded occurance
+		parent.Repeat.Count = 0
+	}
+
+	if err := c.intervalTree.InsertEvent(*parent); err != nil {
+		return fmt.Errorf("failed to reinsert parent into interval tree: %w", err)
+	}
+
+	// update parent file in repo
+	err := c.saveAndCommitEvent(parent, fmt.Sprintf("Updated event %q", event.Id))
+	if err != nil {
+		return fmt.Errorf("failed to save event to repo: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Core) removeAllChildren(event *Event) error {
+	parent, ok := c.events[*event.ParentId] // we check nil pointer in RemoveRepeatingEvent
+	if !ok || parent == nil || !parent.IsParent() {
+		return errors.New("no valid parent found")
+	}
+
+	return c.RemoveEvent(*parent)
 }
 
 // Serializes event to JSON, saves to file, stages and commits with given message.
