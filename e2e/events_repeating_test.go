@@ -325,8 +325,8 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	if oldParent.Repeat == nil {
 		t.Fatalf("old parent should still repeat before the split")
 	}
-	if !oldParent.Repeat.Until.Equal(previous.From) {
-		t.Fatalf("old parent Until mismatch: expected %s, got %s", previous.From, oldParent.Repeat.Until)
+	if !oldParent.Repeat.Until.Equal(dateOnly(previous.From)) {
+		t.Fatalf("old parent Until mismatch: expected %s, got %s", dateOnly(previous.From), oldParent.Repeat.Until)
 	}
 	if oldParent.Repeat.Count != 0 {
 		t.Fatalf("old parent Count should be reset to 0, got %d", oldParent.Repeat.Count)
@@ -937,4 +937,12 @@ func eventStarts(events []core.Event) []time.Time {
 	}
 
 	return starts
+}
+
+func dateOnly(t time.Time) time.Time {
+	return time.Date(
+		t.Year(), t.Month(), t.Day(),
+		0, 0, 0, 0,
+		t.Location(),
+	)
 }

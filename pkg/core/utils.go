@@ -259,3 +259,19 @@ func checkFilter(e *Event, f GetEventsFilter) bool {
 		return u == *e.TagId
 	})
 }
+
+func dateOnly(t time.Time) time.Time {
+	return time.Date(
+		t.Year(), t.Month(), t.Day(),
+		0, 0, 0, 0,
+		t.Location(),
+	)
+}
+
+func dateAfter(a, b time.Time) bool {
+	return dateOnly(a).After(dateOnly(b))
+}
+
+func endOfDay(t time.Time) time.Time {
+	return dateOnly(t).Add(24*time.Hour - time.Nanosecond)
+}

@@ -15,15 +15,15 @@ import (
 // Creates a new event and save it into git.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
 	if _, ok := c.events[event.Id]; ok && event.Id != uuid.Nil {
-		return nil, fmt.Errorf("an event with this id already exists")
+		return nil, errors.New("an event with this id already exists")
 	}
 
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
-		return nil, fmt.Errorf("the specified calendar is missing")
+		return nil, errors.New("the specified calendar is missing")
 	}
 	if cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is read-only")
+		return nil, errors.New("the specified calendar is read-only")
 	}
 
 	if err := event.Validate(); err != nil {
@@ -57,10 +57,10 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
-		return nil, fmt.Errorf("the specified calendar is missing")
+		return nil, errors.New("the specified calendar is missing")
 	}
 	if cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is read-only")
+		return nil, errors.New("the specified calendar is read-only")
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -110,24 +110,24 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 		return nil, fmt.Errorf("invalid new event: %w", err)
 	}
 	if !strat.IsValid() {
-		return nil, fmt.Errorf("incorrect strategy provided")
+		return nil, errors.New("incorrect strategy provided")
 	}
 	if old.Id != new.Id { // check if the event we are changing is the original Parent
 		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.Id, new.Id)
 	}
 	if !old.IsChild() || !new.IsChild() {
-		return nil, fmt.Errorf("repeating update requires child events")
+		return nil, errors.New("repeating update requires child events")
 	}
-	if old.ParentId != new.ParentId {
-		return nil, fmt.Errorf("old and new child events have different parent ids")
+	if *old.ParentId != *new.ParentId {
+		return nil, errors.New("old and new child events have different parent ids")
 	}
 
 	cal, ok := c.calendars[new.Calendar]
 	if !ok {
-		return nil, fmt.Errorf("the specified calendar is missing")
+		return nil, errors.New("the specified calendar is missing")
 	}
 	if cal.Readonly {
-		return nil, fmt.Errorf("the specified calendar is read-only")
+		return nil, errors.New("the specified calendar is read-only")
 	}
 
 	switch strat {
@@ -149,12 +149,7 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
-		return fmt.Errorf("the events calendar is read-only")
-	}
-
-	err := c.intervalTree.RemoveEvent(event)
-	if err != nil {
-		return fmt.Errorf("failed to delete event from interval tree: %w", err)
+		return errors.New("the events calendar is read-only")
 	}
 
 	// delete file from disk + git
@@ -174,7 +169,7 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 	}
 
 	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
-		return fmt.Errorf("the events calendar is read-only")
+		return errors.New("the events calendar is read-only")
 	}
 
 	if !event.IsChild() {
@@ -240,7 +235,7 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 
 			for firstStart.Before(to) { // while child event fits in the wanted interval
 				// logic when repeating until
-				if curEvent.Repeat.Count == 0 && firstStart.After(curEvent.Repeat.Until) {
+				if curEvent.Repeat.Count == 0 && dateAfter(firstStart, curEvent.Repeat.Until) {
 					break // new event exceeded the repetition end (Until)
 				}
 				// logic for repeating only N times (count)
@@ -280,10 +275,10 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 	parent, ok := c.events[*updated.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
-		return nil, fmt.Errorf("no valid parent found")
+		return nil, errors.New("no valid parent found")
 	}
 	if parent.Repeat == nil {
-		return nil, fmt.Errorf("parent is not a repeating event, WTF")
+		return nil, errors.New("parent is not a repeating event, WTF")
 	}
 
 	// update parent event with the new exception
@@ -305,10 +300,10 @@ func (c *Core) updateCurrentChild(updated *Event) (*Event, error) {
 func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	parent, ok := c.events[*old.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
-		return nil, fmt.Errorf("no valid parent found")
+		return nil, errors.New("no valid parent found")
 	}
 	if parent.Repeat == nil {
-		return nil, fmt.Errorf("parent is not a repeating event")
+		return nil, errors.New("parent is not a repeating event")
 	}
 
 	// keep originals for rollback
@@ -344,7 +339,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	} else {
 		// keep repeating but stop before the split point
 		capped := originalRepeat
-		capped.Until = previousStart
+		capped.Until = dateOnly(previousStart)
 		capped.Count = 0
 		capped.Exceptions = exBefore
 		parent.Repeat = &capped
@@ -412,7 +407,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	parent, ok := c.events[*old.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
-		return nil, fmt.Errorf("no valid parent found")
+		return nil, errors.New("no valid parent found")
 	}
 
 	fromDiff := new.From.Sub(old.From)
@@ -476,7 +471,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 func (c *Core) removeCurrentChild(event *Event) error {
 	parent, ok := c.events[*event.ParentId] // we check nil pointer in RemoveRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
-		return fmt.Errorf("no valid parent found")
+		return errors.New("no valid parent found")
 	}
 
 	// if exception doesn't exist yet
@@ -564,7 +559,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 		return fmt.Errorf("calendar not found: %s", event.Calendar)
 	}
 	if cal.repository == nil {
-		return fmt.Errorf("calendar repo not initialized")
+		return errors.New("calendar repo not initialized")
 	}
 
 	wt, err := cal.repository.Worktree()
@@ -627,7 +622,7 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 		return fmt.Errorf("calendar not found: %s", event.Calendar)
 	}
 	if cal.repository == nil {
-		return fmt.Errorf("calendar repo not initialized")
+		return errors.New("calendar repo not initialized")
 	}
 
 	wt, err := cal.repository.Worktree()

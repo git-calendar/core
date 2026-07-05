@@ -35,7 +35,7 @@ type Event struct {
 type Repetition struct {
 	Frequency  Freq        `json:"frequency"`  // The unit of time for recurrence (Day, Week, Month, etc.).
 	Interval   int         `json:"interval"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
-	Until      time.Time   `json:"until"`      // Hard stop date for the series. (Inclusive: occurrences starting BEFORE or even ON this time are included.)
+	Until      time.Time   `json:"until"`      // Hard stop date for the series. It should just be a date, with time zeroed out (2026-01-01T00:00:00Z). If not, time should be ignored. It is inclusive.
 	Count      int         `json:"count"`      // Total number of occurrences to generate.
 	Exceptions []uuid.UUID `json:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
 }
@@ -83,6 +83,9 @@ func (r *Repetition) Validate() error {
 	if !r.Until.IsZero() && r.Count > 0 {
 		return errors.New("Count must be 0 when Until date is set")
 	}
+	if !r.Until.IsZero() {
+		r.Until = dateOnly(r.Until) // normalize to zeroed time
+	}
 
 	return nil
 }
@@ -107,8 +110,12 @@ func (e Event) getTreeEndTime() time.Time {
 
 	eventEnd := e.To
 	if e.Repeat != nil {
-		eventEnd = e.Repeat.Until // if repeating, use interval [From, Repetition.Until]
-		if e.Repeat.Count >= 1 {  // if repeating on count basis
+		eventEnd = e.Repeat.Until // if repeating, use interval [From, Repetition.Until T 23:59:59]
+		if !eventEnd.IsZero() {
+			// bump to end of that calendar day so the tree key covers the full last occurrence, not just midnight
+			eventEnd = endOfDay(eventEnd)
+		}
+		if e.Repeat.Count >= 1 { // if repeating on count basis
 			eventEnd = addUnit(e.To, e.Repeat.Interval*e.Repeat.Count, e.Repeat.Frequency)
 		}
 	}
