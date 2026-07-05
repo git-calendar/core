@@ -153,9 +153,14 @@ func (c *Core) RemoveEvent(event Event) error {
 	}
 
 	// delete file from disk + git
-	err = c.deleteAndCommitEvent(event.Id, fmt.Sprintf("Deleted event %q", event.Id))
+	err := c.deleteAndCommitEvent(event.Id, fmt.Sprintf("Deleted event %q", event.Id))
 	if err != nil {
 		return fmt.Errorf("failed to delete event from git: %w", err)
+	}
+
+	err = c.intervalTree.RemoveEvent(event)
+	if err != nil {
+		return fmt.Errorf("failed to delete event from interval tree: %w", err)
 	}
 
 	delete(c.events, event.Id)
@@ -441,8 +446,8 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 		repeat := *new.Repeat
 		repeat.Exceptions = exceptions
 		parent.Repeat = &repeat
-	} else {
-		parent.Repeat = nil
+	} else if parent.Repeat != nil {
+		parent.Repeat.Exceptions = exceptions
 	}
 
 	parent.Title = new.Title
