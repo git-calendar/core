@@ -298,9 +298,11 @@ func (idb *IndexedDB) Join(elem ...string) string {
 
 func (idb *IndexedDB) MkdirAll(p string, perm os.FileMode) error {
 	parts := strings.Split(path.Clean(p), "/")
-	var currentPath string = idb.root
+	currentPath := idb.root
+	now := time.Now()
 
 	tx := NewTx()
+	changed := false
 
 	for _, part := range parts {
 		if part == "." || part == "" {
@@ -308,13 +310,31 @@ func (idb *IndexedDB) MkdirAll(p string, perm os.FileMode) error {
 		}
 
 		currentPath = idb.Join(currentPath, part)
+
+		existing, err := idb.Stat(currentPath)
+		if err == nil {
+			if !existing.IsDir() {
+				return fmt.Errorf("%s exists and is not a directory", currentPath)
+			}
+			continue
+		}
+
+		if !os.IsNotExist(err) {
+			return err
+		}
+
 		info := IDBFileInfo{
 			name:    part,
-			modTime: time.Now(),
+			modTime: now,
 			mode:    os.ModeDir | perm,
 		}
 
 		tx.Put(infoStoreName, currentPath, info.toJS())
+		changed = true
+	}
+
+	if !changed {
+		return nil
 	}
 
 	return tx.Commit(idb.jsDB)
@@ -559,5 +579,15 @@ func (idb *IndexedDB) applyFlags(f *IDBFile, flag int) error {
 
 func (idb *IndexedDB) absolutePath(p string) string {
 	p = path.Clean(p)
-	return path.Join(idb.root, p)
+	root := path.Clean(idb.root)
+
+	if p == "." || p == "/" {
+		return root
+	}
+
+	if p == root || strings.HasPrefix(p, root+"/") {
+		return p
+	}
+
+	return idb.Join(root, strings.TrimPrefix(p, "/"))
 }
