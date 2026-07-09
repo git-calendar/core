@@ -66,9 +66,13 @@ func isGitRequest(destUrl *url.URL) bool {
 	return gitPathRegex.MatchString(destUrl.Path)
 }
 
+func isHealthCheck(r *http.Request) bool {
+	return r.URL.Path == "/" && r.Method == http.MethodGet
+}
+
 // ------------------- middleware -------------------
 
-// Rate limits by IP.
+// Rate limits by IP. Skips health-check (GET /).
 func rateLimit(next http.Handler) http.Handler {
 	var err error
 	var store limiter.Store
@@ -97,7 +101,14 @@ func rateLimit(next http.Handler) http.Handler {
 		panic(err)
 	}
 
-	return middleware.Handle(next)
+	// wrap the middleware to skip rate limiting for health checks
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isHealthCheck(r) {
+			next.ServeHTTP(w, r) // bypass rate limiter for health checks
+			return
+		}
+		middleware.Handle(next).ServeHTTP(w, r) // apply rate-limiting
+	})
 }
 
 // Adds CORS headers to allow any browser to use this endpoint.
@@ -130,6 +141,9 @@ func accessLog(next http.Handler) http.Handler {
 
 		duration := time.Since(start) // stop timer
 
+		if isHealthCheck(r) {
+			return // don't log healthchecks
+		}
 		slog.Info("access",
 			"method", r.Method,
 			"status", ww.status,

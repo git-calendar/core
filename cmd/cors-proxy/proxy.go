@@ -48,6 +48,12 @@ func main() {
 }
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	if isHealthCheck(r) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("git calendar cors proxy"))
+		return
+	}
+
 	// get the destination url from path
 	destUrl := targetUrl(r.URL)
 	if destUrl == nil {
@@ -55,6 +61,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// only allow git-like requests
 	if !isGitRequest(destUrl) {
 		http.Error(w, "this is a git-only proxy", http.StatusBadRequest)
 		return
