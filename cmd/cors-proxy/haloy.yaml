@@ -1,0 +1,11 @@
+name: cors-proxy
+server: haloy-api.firu.dev
+
+domains:
+  - domain: cors-proxy.firu.dev
+
+env:
+  - name: PRODUCTION
+    value: "true"
+  - name: RATE_IP_SOURCE_HEADER
+    value: x-forwarded-for # set by haloy-proxy

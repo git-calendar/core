@@ -210,7 +210,7 @@ type config struct {
 	UpstreamTimeout time.Duration `env:"UPSTREAM_TIMEOUT,default=15s"`
 	MaxResponseSize int64         `env:"MAX_RESPONSE_SIZE,default=1048576"` // 1MiB
 	AllowedHosts    []string      `env:"ALLOWED_HOSTS,default=github.com,raw.githubusercontent.com,gitlab.com,codeberg.org"`
-	RateTokens      uint64        `env:"RATE_TOKENS,default=40"` // 40 req/min should be ok for legit usage
+	RateTokens      uint64        `env:"RATE_TOKENS,default=60"` // 60 req/min should be ok for legit usage
 	RateInterval    time.Duration `env:"RATE_INTERVAL,default=1m"`
 	IpSourceHeader  string        `env:"RATE_IP_SOURCE_HEADER"` // for reverse proxy etc.
 }
