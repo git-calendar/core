@@ -12,22 +12,31 @@ import (
 	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/go-git/go-billy/v5"
 	"github.com/google/uuid"
+	rrule "github.com/teambition/rrule-go"
 )
 
 // eventInFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
 type eventInFile struct {
-	Title       string      `json:"title,omitzero"`
-	Location    string      `json:"location,omitzero"`
-	Description string      `json:"description,omitzero"`
-	From        time.Time   `json:"from,omitzero"`
-	To          time.Time   `json:"to,omitzero"`
-	TagId       *uuid.UUID  `json:"tag_id,omitzero"`
-	ParentId    *uuid.UUID  `json:"parent_id,omitzero"`
-	Repeat      *Repetition `json:"repeat,omitzero"`
-	UpdatedAt   time.Time   `json:"updated_at,omitzero"`
+	Title       string     `json:"title,omitzero"`
+	Location    string     `json:"location,omitzero"`
+	Description string     `json:"description,omitzero"`
+	From        time.Time  `json:"from,omitzero"`
+	To          time.Time  `json:"to,omitzero"`
+	TagId       *uuid.UUID `json:"tag_id,omitzero"`
+	ParentId    *uuid.UUID `json:"parent_id,omitzero"`
+	Repeat      string     `json:"repeat,omitzero"`
+	UpdatedAt   time.Time  `json:"updated_at,omitzero"`
 }
 
-func (ef eventInFile) toEvent(id uuid.UUID, calendar string) Event {
+func (ef eventInFile) toEvent(id uuid.UUID, calendar string) (Event, error) {
+	var repeat *rrule.Set
+	if ef.Repeat != "" {
+		var err error
+		repeat, err = rrule.StrToRRuleSet(ef.Repeat)
+		if err != nil {
+			return Event{}, fmt.Errorf("invalid recurrence: %w", err)
+		}
+	}
 	return Event{
 		Id:          id,
 		Title:       ef.Title,
@@ -38,12 +47,16 @@ func (ef eventInFile) toEvent(id uuid.UUID, calendar string) Event {
 		Calendar:    calendar,
 		TagId:       ef.TagId,
 		ParentId:    ef.ParentId,
-		Repeat:      ef.Repeat,
+		Repeat:      repeat,
 		UpdatedAt:   ef.UpdatedAt,
-	}
+	}, nil
 }
 
 func (e Event) fileData() eventInFile {
+	var repeat string
+	if e.Repeat != nil {
+		repeat = e.Repeat.String()
+	}
 	return eventInFile{
 		Title:       e.Title,
 		Location:    e.Location,
@@ -52,7 +65,7 @@ func (e Event) fileData() eventInFile {
 		To:          e.To,
 		TagId:       e.TagId,
 		ParentId:    e.ParentId,
-		Repeat:      e.Repeat,
+		Repeat:      repeat,
 		UpdatedAt:   e.UpdatedAt,
 	}
 }
@@ -110,36 +123,29 @@ func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decrypti
 		return err
 	}
 
-	var data eventInFile
-
-	if len(decryptionKey) == 0 { // no encryption, just use the plaintext
-		if err := json.Unmarshal(raw, &data); err != nil {
+	if len(decryptionKey) != 0 {
+		var encrypted map[string]any
+		if err := json.Unmarshal(raw, &encrypted); err != nil {
 			return err
 		}
-
-		*e = data.toEvent(id, calendar)
-		return nil
+		decrypted, err := encryption.DecryptFields(encrypted, decryptionKey, id[:])
+		if err != nil {
+			return err
+		}
+		raw, err = json.Marshal(decrypted)
+		if err != nil {
+			return err
+		}
 	}
 
-	var encrypted map[string]any
-	if err := json.Unmarshal(raw, &encrypted); err != nil {
+	var data eventInFile
+	if err := json.Unmarshal(raw, &data); err != nil {
 		return err
 	}
-
-	decrypted, err := encryption.DecryptFields(encrypted, decryptionKey, id[:])
+	loaded, err := data.toEvent(id, calendar)
 	if err != nil {
 		return err
 	}
-
-	// eww (map to struct conversion)
-	tmp, err := json.Marshal(decrypted)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(tmp, &data); err != nil {
-		return err
-	}
-
-	*e = data.toEvent(id, calendar)
+	*e = loaded
 	return nil
 }

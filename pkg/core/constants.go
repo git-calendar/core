@@ -12,24 +12,6 @@ const (
 	GitBranchName string = "main"
 )
 
-// ------- Repeating frequency -------
-
-// Repeating frequency.
-type Freq int
-
-const (
-	Invalid Freq = iota // ints default value 0 is invalid
-	Day                 // Repeat daily.
-	Week                // Repeat weekly.
-	Month               // Repeat monthly.
-	Year                // Repeat yearly.
-	_max                // boundary for validation
-)
-
-func (t Freq) IsValid() bool {
-	return t > Invalid && t <= _max
-}
-
 // ------- Repeating update strategy -------
 
 type UpdateStrategy int

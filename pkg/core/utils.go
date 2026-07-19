@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -15,60 +14,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
 )
-
-func addUnit(t time.Time, value int, unit Freq) time.Time {
-	switch unit {
-	case Day:
-		return t.AddDate(0, 0, value)
-	case Week:
-		return t.AddDate(0, 0, 7*value)
-	case Month:
-		return t.AddDate(0, value, 0)
-	case Year:
-		return t.AddDate(value, 0, 0)
-	default:
-		return t
-	}
-}
-
-// firstOccurrenceAtOrAfter returns the first start time >= searchStart (or zero time if none reasonable).
-// Also returns how many steps from the original (0 = original event time).
-func firstOccurrenceAtOrAfter(searchStart time.Time, ev *Event) (time.Time, int) {
-	if ev.Repeat == nil {
-		if !searchStart.After(ev.From) {
-			return ev.From, 0
-		}
-		return time.Time{}, -1 // none in range
-	}
-
-	current := ev.From
-	steps := 0
-	const maxSteps = 36500 // safety limit (~100 years for freq=Daily)
-
-	for current.Before(searchStart) && steps < maxSteps {
-		current = addUnit(current, ev.Repeat.Interval, ev.Repeat.Frequency)
-		steps++
-	}
-
-	if current.IsZero() || steps >= maxSteps {
-		return time.Time{}, -1
-	}
-
-	return current, steps
-}
-
-func containsTime(exceptions []uuid.UUID, t time.Time) bool {
-	for _, ex := range exceptions {
-		exTime := getTimeFromUUID(ex)
-		if exTime.IsZero() {
-			continue
-		}
-		if exTime.Equal(t) {
-			return true
-		}
-	}
-	return false
-}
 
 // prepareRepoUrl extracts the auth (http://USER:PASS@example.com/...) from repoUrl and returns a new url using proxyUrl if present.
 func prepareRepoUrl(repoUrl *url.URL, proxyUrl *url.URL) (*url.URL, *http.BasicAuth) {
@@ -197,54 +142,6 @@ func getTimeFromUUID(id uuid.UUID) time.Time {
 	return time.Unix(int64(unix32), 0)
 }
 
-// getShiftedUUID returns a copy of a UUIDv8 with its custom 32-bit timestamp (stored in bytes 12–15, big-endian) shifted by the given duration.
-// Returns uuid.Nil if the input id is not v8.
-func getShiftedUUID(id uuid.UUID, duration time.Duration) uuid.UUID {
-	if id.Version() != 8 {
-		return uuid.Nil
-	}
-
-	// extract original timestamp (big-endian bytes 12-15)
-	origTime := binary.BigEndian.Uint32(id[12:16])
-
-	// calculate shift in whole seconds
-	secondsShift := int64(duration.Seconds())
-	shiftedTime := uint32(int64(origTime) + secondsShift)
-
-	// create new UUID and write back
-	newId := id // UUID is [16]byte, so this is a value copy
-	binary.BigEndian.PutUint32(newId[12:16], shiftedTime)
-
-	return newId
-}
-
-// splitExceptions returns two exceptions groups. One with exceptions before and one with exceptions after the specified cutoff.
-func splitExceptions(exceptions []uuid.UUID, cutoff time.Time) (before, after []uuid.UUID) {
-	for _, ex := range exceptions {
-		if getTimeFromUUID(ex).Before(cutoff) {
-			before = append(before, ex)
-		} else {
-			after = append(after, ex)
-		}
-	}
-	return
-}
-
-// repeatRuleChanged checks if Repetition differs.
-func repeatRuleChanged(a, b *Repetition) bool {
-	if a == nil || b == nil {
-		return a != b
-	}
-
-	aa := *a
-	bb := *b
-
-	aa.Exceptions = nil
-	bb.Exceptions = nil
-
-	return !reflect.DeepEqual(aa, bb)
-}
-
 type GetEventsFilter map[string][]uuid.UUID // map[Calendar.Name]Tag.Id
 
 func checkFilter(e *Event, f GetEventsFilter) bool {
@@ -258,20 +155,4 @@ func checkFilter(e *Event, f GetEventsFilter) bool {
 	return slices.ContainsFunc(tags, func(u uuid.UUID) bool {
 		return u == *e.TagId
 	})
-}
-
-func dateOnly(t time.Time) time.Time {
-	return time.Date(
-		t.Year(), t.Month(), t.Day(),
-		0, 0, 0, 0,
-		t.Location(),
-	)
-}
-
-func dateAfter(a, b time.Time) bool {
-	return dateOnly(a).After(dateOnly(b))
-}
-
-func endOfDay(t time.Time) time.Time {
-	return dateOnly(t).Add(24*time.Hour - time.Nanosecond)
 }

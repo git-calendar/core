@@ -2,22 +2,20 @@
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/google/uuid"
+	rrule "github.com/teambition/rrule-go"
 )
 
 func TestRepeatingEvent_GetEvents_UntilWeekly_GeneratesOccurrencesInRange(t *testing.T) {
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, core.Repetition{
-		Frequency: core.Week,
-		Interval:  1,
-		Until:     startTime.AddDate(1, 0, 0),
-	})
+	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, recurrenceUntilEndOfDay(t, startTime, "WEEKLY", startTime.AddDate(1, 0, 0)))
 
 	stored := requireEvent(t, c, parent.Id)
 	if !stored.From.Equal(parent.From) {
@@ -38,14 +36,16 @@ func TestRepeatingEvent_GetEvents_CountWeekly_GeneratesExactCount(t *testing.T) 
 
 	const count = 6
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, core.Repetition{
-		Frequency: core.Week,
-		Interval:  1,
-		Count:     count,
-	})
+	createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, recurrenceWithCount(t, startTime, "WEEKLY", count))
 
 	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, count*7+1), nil)
-	assertEventStarts(t, events,
+	for _, event := range events {
+		if event.Repeat != nil {
+			t.Fatalf("generated child %s should not own its parent's recurrence", event.Id)
+		}
+	}
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 7),
 		startTime.AddDate(0, 0, 14),
@@ -60,14 +60,11 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 
 	const count = 6
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
 		startTime.AddDate(0, 0, 2),
@@ -82,7 +79,7 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 	}
 
 	storedParent := requireEvent(t, c, parent.Id)
-	assertParentHasException(t, storedParent, removed.Id)
+	assertParentHasException(t, storedParent, removed.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	assertNoEventAt(t, events, removed.From)
@@ -95,11 +92,7 @@ func TestRepeatingEvent_Remove_Current_RejectsParentEvent(t *testing.T) {
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     3,
-	})
+	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
 
 	err := c.RemoveRepeatingEvent(parent, core.Current)
 	if err == nil {
@@ -112,11 +105,7 @@ func TestRepeatingEvent_Remove_Current_RemovesOnlyTargetChild(t *testing.T) {
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	parent := createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
@@ -127,10 +116,11 @@ func TestRepeatingEvent_Remove_Current_RemovesOnlyTargetChild(t *testing.T) {
 	}
 
 	storedParent := requireEvent(t, c, parent.Id)
-	assertParentHasException(t, storedParent, target.Id)
+	assertParentHasException(t, storedParent, target.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
 		startTime.AddDate(0, 0, 3),
@@ -144,11 +134,7 @@ func TestRepeatingEvent_Remove_Following_RemovesTargetAndFollowingChildren(t *te
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
@@ -159,7 +145,8 @@ func TestRepeatingEvent_Remove_Following_RemovesTargetAndFollowingChildren(t *te
 	}
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
 	)
@@ -174,11 +161,7 @@ func TestRepeatingEvent_Remove_All_RemovesWholeSeries(t *testing.T) {
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	_ = createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
@@ -199,16 +182,12 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	parent := createRepeatingEvent(t, c, "Daily event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 
-	updated := cloneEvent(target)
+	updated := cloneEvent(t, target)
 	updated.Title = "Daily event - update"
 	updated.From = target.From.Add(time.Hour)
 	updated.To = target.To.Add(time.Hour)
@@ -219,10 +198,11 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 	}
 
 	storedParent := requireEvent(t, c, parent.Id)
-	assertParentHasException(t, storedParent, target.Id)
+	assertParentHasException(t, storedParent, target.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
 		startTime.AddDate(0, 0, 2).Add(time.Hour),
@@ -247,11 +227,7 @@ func TestRepeatingEvent_Update_StrategiesRejectParentEvents(t *testing.T) {
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     3,
-	})
+	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
 
 	tests := []struct {
 		name     string
@@ -264,7 +240,7 @@ func TestRepeatingEvent_Update_StrategiesRejectParentEvents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			updated := cloneEvent(parent)
+			updated := cloneEvent(t, parent)
 			updated.Title = "Should fail"
 
 			_, err := c.UpdateRepeatingEvent(parent, updated, tt.strategy)
@@ -286,11 +262,7 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 		Title:    "Daily Meeting",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
-		Repeat: &core.Repetition{
-			Frequency: core.Day,
-			Interval:  1,
-			Until:     startTime.AddDate(0, 1, 0),
-		},
+		Repeat:   recurrenceUntilEndOfDay(t, startTime, "DAILY", startTime.AddDate(0, 1, 0)),
 	}
 	createEvent(t, c, parent)
 
@@ -298,13 +270,9 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 	previous := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
-	updated := cloneEvent(target)
+	updated := cloneEvent(t, target)
 	updated.Title = "Daily Meeting - New Phase"
-	updated.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 1, 0),
-	}
+	updated.Repeat = recurrenceUntilEndOfDay(t, updated.From, "DAILY", startTime.AddDate(0, 1, 0))
 
 	newParent, err := c.UpdateRepeatingEvent(target, updated, core.Following)
 	if err != nil {
@@ -325,11 +293,10 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	if oldParent.Repeat == nil {
 		t.Fatalf("old parent should still repeat before the split")
 	}
-	if !oldParent.Repeat.Until.Equal(dateOnly(previous.From)) {
-		t.Fatalf("old parent Until mismatch: expected %s, got %s", dateOnly(previous.From), oldParent.Repeat.Until)
-	}
-	if oldParent.Repeat.Count != 0 {
-		t.Fatalf("old parent Count should be reset to 0, got %d", oldParent.Repeat.Count)
+	wantRRule := recurrenceUntil(t, oldParent.From, "DAILY", previous.From).GetRRule().OrigOptions.RRuleString()
+	gotRRule := oldParent.Repeat.GetRRule().OrigOptions.RRuleString()
+	if gotRRule != wantRRule {
+		t.Fatalf("old parent RRULE mismatch: expected %q, got %q", wantRRule, gotRRule)
 	}
 }
 
@@ -344,24 +311,16 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 		Title:    "Daily Meeting",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
-		Repeat: &core.Repetition{
-			Frequency: core.Day,
-			Interval:  1,
-			Until:     startTime.AddDate(0, 1, 0),
-		},
+		Repeat:   recurrenceUntilEndOfDay(t, startTime, "DAILY", startTime.AddDate(0, 1, 0)),
 	}
 	createEvent(t, c, parent)
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 21), nil)
 	target := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
 
-	updated := cloneEvent(target)
+	updated := cloneEvent(t, target)
 	updated.Title = "Daily Meeting - New Phase"
-	updated.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 1, 0),
-	}
+	updated.Repeat = recurrenceUntilEndOfDay(t, updated.From, "DAILY", startTime.AddDate(0, 1, 0))
 
 	newParent, err := c.UpdateRepeatingEvent(target, updated, core.Following)
 	if err != nil {
@@ -372,8 +331,8 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 	}
 
 	oldParent := requireEvent(t, c, parentId)
-	if oldParent.Repeat != nil && !oldParent.Repeat.Until.After(oldParent.From) {
-		t.Fatalf("old parent has invalid repetition boundary: From=%s Until=%s", oldParent.From, oldParent.Repeat.Until)
+	if oldParent.Repeat != nil {
+		t.Fatalf("old parent should not repeat when only its first occurrence remains; got RRULE %q", oldParent.Repeat.GetRRule().OrigOptions.RRuleString())
 	}
 }
 
@@ -381,14 +340,10 @@ func TestRepeatingEvent_Update_Following_CarriesAndShiftsFutureExceptions(t *tes
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	})
+	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, recurrenceUntilEndOfDay(t, startTime, "DAILY", startTime.AddDate(0, 0, 10)))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
-	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
+	second := cloneEvent(t, requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
 	if err := c.RemoveRepeatingEvent(fourth, core.Current); err != nil {
@@ -396,14 +351,10 @@ func TestRepeatingEvent_Update_Following_CarriesAndShiftsFutureExceptions(t *tes
 	}
 
 	shift := time.Hour
-	updatedSecond := cloneEvent(second)
+	updatedSecond := cloneEvent(t, second)
 	updatedSecond.From = second.From.Add(shift)
 	updatedSecond.To = second.To.Add(shift)
-	updatedSecond.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	}
+	updatedSecond.Repeat = recurrenceUntilEndOfDay(t, updatedSecond.From, "DAILY", startTime.AddDate(0, 0, 10))
 
 	_, err := c.UpdateRepeatingEvent(second, updatedSecond, core.Following)
 	if err != nil {
@@ -411,7 +362,8 @@ func TestRepeatingEvent_Update_Following_CarriesAndShiftsFutureExceptions(t *tes
 	}
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1).Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
@@ -424,17 +376,13 @@ func TestRepeatingEvent_Update_Following_FirstChild_ShiftBackDoesNotKeepOriginal
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     3,
-	})
+	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
 
 	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, 3), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := -2 * time.Hour
-	updatedFirst := cloneEvent(first)
+	updatedFirst := cloneEvent(t, first)
 	updatedFirst.From = first.From.Add(shift)
 	updatedFirst.To = first.To.Add(shift)
 
@@ -444,7 +392,8 @@ func TestRepeatingEvent_Update_Following_FirstChild_ShiftBackDoesNotKeepOriginal
 	}
 
 	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 1).Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
@@ -456,27 +405,19 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	})
+	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, recurrenceUntilEndOfDay(t, startTime, "DAILY", startTime.AddDate(0, 0, 10)))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
-	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
+	second := cloneEvent(t, requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
 	if err := c.RemoveRepeatingEvent(fourth, core.Current); err != nil {
 		t.Fatalf("failed to remove fourth child: %v", err)
 	}
 
-	updatedSecond := cloneEvent(second)
+	updatedSecond := cloneEvent(t, second)
 	updatedSecond.Title = "Daily Standup - New Phase"
-	updatedSecond.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	}
+	updatedSecond.Repeat = nil // children do not own the recurrence
 
 	_, err := c.UpdateRepeatingEvent(second, updatedSecond, core.Following)
 	if err != nil {
@@ -484,7 +425,8 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 	}
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1),
 		startTime.AddDate(0, 0, 2),
@@ -497,14 +439,10 @@ func TestRepeatingEvent_Update_Following_SplitsExceptionsAtOriginalTargetTime(t 
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	})
+	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, recurrenceUntilEndOfDay(t, startTime, "DAILY", startTime.AddDate(0, 0, 10)))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 6), nil)
-	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
+	second := cloneEvent(t, requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	third := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
 
 	if err := c.RemoveRepeatingEvent(third, core.Current); err != nil {
@@ -512,14 +450,10 @@ func TestRepeatingEvent_Update_Following_SplitsExceptionsAtOriginalTargetTime(t 
 	}
 
 	shift := 72 * time.Hour
-	updatedSecond := cloneEvent(second)
+	updatedSecond := cloneEvent(t, second)
 	updatedSecond.From = second.From.Add(shift)
 	updatedSecond.To = second.To.Add(shift)
-	updatedSecond.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Until:     startTime.AddDate(0, 0, 10),
-	}
+	updatedSecond.Repeat = recurrenceUntilEndOfDay(t, updatedSecond.From, "DAILY", startTime.AddDate(0, 0, 10))
 
 	_, err := c.UpdateRepeatingEvent(second, updatedSecond, core.Following)
 	if err != nil {
@@ -538,14 +472,10 @@ func TestRepeatingEvent_Update_Following_CountSeriesKeepsRemainingSlotsAfterFutu
 
 	const count = 5
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	createRepeatingEvent(t, c, "Daily Standup", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count+1), nil)
-	second := cloneEvent(requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
+	second := cloneEvent(t, requireEventAt(t, events, startTime.AddDate(0, 0, 1)))
 	fourth := requireEventAt(t, events, startTime.AddDate(0, 0, 3))
 
 	if err := c.RemoveRepeatingEvent(fourth, core.Current); err != nil {
@@ -553,14 +483,10 @@ func TestRepeatingEvent_Update_Following_CountSeriesKeepsRemainingSlotsAfterFutu
 	}
 
 	shift := time.Hour
-	updatedSecond := cloneEvent(second)
+	updatedSecond := cloneEvent(t, second)
 	updatedSecond.From = second.From.Add(shift)
 	updatedSecond.To = second.To.Add(shift)
-	updatedSecond.Repeat = &core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	}
+	updatedSecond.Repeat = recurrenceWithCount(t, updatedSecond.From, "DAILY", count)
 
 	_, err := c.UpdateRepeatingEvent(second, updatedSecond, core.Following)
 	if err != nil {
@@ -568,7 +494,8 @@ func TestRepeatingEvent_Update_Following_CountSeriesKeepsRemainingSlotsAfterFutu
 	}
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count+1), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 1).Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
@@ -581,17 +508,13 @@ func TestRepeatingEvent_Update_All_ShiftsWholeSeriesFromChild(t *testing.T) {
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	parent := createRepeatingEvent(t, c, "Monthly Review", startTime, time.Hour, core.Repetition{
-		Frequency: core.Month,
-		Interval:  1,
-		Count:     5,
-	})
+	parent := createRepeatingEvent(t, c, "Monthly Review", startTime, time.Hour, recurrenceWithCount(t, startTime, "MONTHLY", 5))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 6, 0), nil)
 	first := requireEventAt(t, events, startTime)
 
 	shift := 2 * time.Hour
-	updated := cloneEvent(first)
+	updated := cloneEvent(t, first)
 	updated.From = first.From.Add(shift)
 	updated.To = first.To.Add(shift)
 	updated.Title = "Monthly Review - Shifted"
@@ -610,7 +533,8 @@ func TestRepeatingEvent_Update_All_ShiftsWholeSeriesFromChild(t *testing.T) {
 	}
 
 	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 6, 0).Add(shift), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 1, 0).Add(shift),
 		startTime.AddDate(0, 2, 0).Add(shift),
@@ -623,11 +547,7 @@ func TestRepeatingEvent_Update_All_ShiftsExceptionsAndKeepsDeletedChildHidden(t 
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Repeating", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     3,
-	})
+	createRepeatingEvent(t, c, "Repeating", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	middle := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
@@ -640,7 +560,7 @@ func TestRepeatingEvent_Update_All_ShiftsExceptionsAndKeepsDeletedChildHidden(t 
 	first := requireEventAt(t, events, startTime)
 
 	shift := -time.Hour
-	updated := cloneEvent(first)
+	updated := cloneEvent(t, first)
 	updated.From = first.From.Add(shift)
 	updated.To = first.To.Add(shift)
 	updated.Title = "Repeating - Shifted"
@@ -651,7 +571,8 @@ func TestRepeatingEvent_Update_All_ShiftsExceptionsAndKeepsDeletedChildHidden(t 
 	}
 
 	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 3), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
 	)
@@ -662,11 +583,7 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 	c := newTestCore(t)
 
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Repeating", startTime, time.Hour, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     3,
-	})
+	createRepeatingEvent(t, c, "Repeating", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
 	middle := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
@@ -679,16 +596,12 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 	first := requireEventAt(t, events, startTime)
 
 	shift := -time.Hour
-	updated := cloneEvent(first)
+	updated := cloneEvent(t, first)
 	updated.From = first.From.Add(shift)
 	updated.To = first.To.Add(shift)
 	updated.Title = "Repeating - Shifted"
-	updated.Repeat = &core.Repetition{
-		Frequency:  core.Day,
-		Interval:   1,
-		Count:      4,
-		Exceptions: []uuid.UUID{},
-	}
+	updated.Repeat = recurrenceWithCount(t, updated.From, "DAILY", 4)
+	updated.Repeat.SetExDates(nil)
 
 	_, err := c.UpdateRepeatingEvent(first, updated, core.All)
 	if err != nil {
@@ -696,7 +609,8 @@ func TestRepeatingEvent_Update_All_RepeatRuleChangeKeepsStoredExceptions(t *test
 	}
 
 	events = c.GetEvents(startTime.Add(shift), startTime.AddDate(0, 0, 5), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime.Add(shift),
 		startTime.AddDate(0, 0, 2).Add(shift),
 		startTime.AddDate(0, 0, 3).Add(shift),
@@ -711,11 +625,7 @@ func TestRepeatingEvent_RemoveFollowingThenUpdateAllShiftTime_DoesNotLoseEvents(
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	duration := time.Hour
 
-	createRepeatingEvent(t, c, "Daily event", startTime, duration, core.Repetition{
-		Frequency: core.Day,
-		Interval:  1,
-		Count:     count,
-	})
+	createRepeatingEvent(t, c, "Daily event", startTime, duration, recurrenceWithCount(t, startTime, "DAILY", count))
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	third := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
@@ -774,11 +684,7 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 
 	updated := event
 	updated.Title = "Weekly meeting"
-	updated.Repeat = &core.Repetition{
-		Frequency: core.Week,
-		Interval:  1,
-		Count:     3,
-	}
+	updated.Repeat = recurrenceWithCount(t, updated.From, "WEEKLY", 3)
 
 	_, err := c.UpdateEvent(updated)
 	if err != nil {
@@ -786,7 +692,8 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 	}
 
 	events := c.GetEvents(startTime, startTime.AddDate(0, 1, 0), nil)
-	assertEventStarts(t, events,
+	assertEventStarts(
+		t, events,
 		startTime,
 		startTime.AddDate(0, 0, 7),
 		startTime.AddDate(0, 0, 14),
@@ -796,8 +703,10 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 	if stored.Repeat == nil {
 		t.Fatalf("updated parent should repeat")
 	}
-	if stored.Repeat.Count != 3 {
-		t.Fatalf("updated parent Count mismatch: expected 3, got %d", stored.Repeat.Count)
+	wantRRule := recurrenceWithCount(t, stored.From, "WEEKLY", 3).GetRRule().OrigOptions.RRuleString()
+	gotRRule := stored.Repeat.GetRRule().OrigOptions.RRuleString()
+	if gotRRule != wantRRule {
+		t.Fatalf("updated parent RRULE mismatch: expected %q, got %q", wantRRule, gotRRule)
 	}
 }
 
@@ -816,7 +725,7 @@ func newTestCore(t *testing.T) *core.Core {
 	return c
 }
 
-func createRepeatingEvent(t *testing.T, c *core.Core, title string, from time.Time, duration time.Duration, repeat core.Repetition) core.Event {
+func createRepeatingEvent(t *testing.T, c *core.Core, title string, from time.Time, duration time.Duration, repeat *rrule.Set) core.Event {
 	t.Helper()
 
 	event := core.Event{
@@ -825,7 +734,7 @@ func createRepeatingEvent(t *testing.T, c *core.Core, title string, from time.Ti
 		Title:    title,
 		From:     from,
 		To:       from.Add(duration),
-		Repeat:   &repeat,
+		Repeat:   repeat,
 	}
 	createEvent(t, c, event)
 
@@ -887,24 +796,28 @@ func assertNoEventAt(t *testing.T, events []core.Event, from time.Time) {
 	}
 }
 
-func assertParentHasException(t *testing.T, parent core.Event, exception uuid.UUID) {
+func assertParentHasException(t *testing.T, parent core.Event, exception time.Time) {
 	t.Helper()
 
 	if parent.Repeat == nil {
 		t.Fatalf("parent %s should be repeating", parent.Id)
 	}
-	if !containsUUID(parent.Repeat.Exceptions, exception) {
-		t.Fatalf("parent %s does not contain exception %s; exceptions: %v", parent.Id, exception, parent.Repeat.Exceptions)
+	exceptions := parent.Repeat.GetExDate()
+	if !containsTime(exceptions, exception) {
+		t.Fatalf("parent %s does not contain exception %s; exceptions: %v", parent.Id, exception, exceptions)
 	}
 }
 
-func cloneEvent(event core.Event) core.Event {
+func cloneEvent(t *testing.T, event core.Event) core.Event {
+	t.Helper()
 	cloned := event
 
 	if event.Repeat != nil {
-		repeat := *event.Repeat
-		repeat.Exceptions = append([]uuid.UUID(nil), event.Repeat.Exceptions...)
-		cloned.Repeat = &repeat
+		repeat, err := rrule.StrToRRuleSet(event.Repeat.String())
+		if err != nil {
+			t.Fatalf("failed to clone recurrence: %v", err)
+		}
+		cloned.Repeat = repeat
 	}
 
 	return cloned
@@ -920,9 +833,9 @@ func findEventByFrom(events []core.Event, from time.Time) (core.Event, bool) {
 	return core.Event{}, false
 }
 
-func containsUUID(ids []uuid.UUID, id uuid.UUID) bool {
-	for _, cur := range ids {
-		if cur == id {
+func containsTime(times []time.Time, want time.Time) bool {
+	for _, current := range times {
+		if current.Equal(want) {
 			return true
 		}
 	}
@@ -939,10 +852,39 @@ func eventStarts(events []core.Event) []time.Time {
 	return starts
 }
 
-func dateOnly(t time.Time) time.Time {
-	return time.Date(
-		t.Year(), t.Month(), t.Day(),
-		0, 0, 0, 0,
-		t.Location(),
+func recurrenceWithCount(t *testing.T, start time.Time, frequency string, count int) *rrule.Set {
+	t.Helper()
+	return recurrence(t, start, fmt.Sprintf("FREQ=%s;INTERVAL=1;COUNT=%d", frequency, count))
+}
+
+func recurrenceUntil(t *testing.T, start time.Time, frequency string, until time.Time) *rrule.Set {
+	t.Helper()
+	return recurrence(t, start, fmt.Sprintf("FREQ=%s;INTERVAL=1;UNTIL=%s", frequency, until.UTC().Format("20060102T150405Z")))
+}
+
+func recurrenceUntilEndOfDay(t *testing.T, start time.Time, frequency string, day time.Time) *rrule.Set {
+	t.Helper()
+	until := time.Date(
+		day.Year(), day.Month(), day.Day(),
+		23, 59, 59, 0,
+		day.Location(),
 	)
+	return recurrenceUntil(t, start, frequency, until)
+}
+
+func recurrence(t *testing.T, start time.Time, value string) *rrule.Set {
+	t.Helper()
+	option, err := rrule.StrToROptionInLocation(value, start.Location())
+	if err != nil {
+		t.Fatalf("failed to parse RRULE %q: %v", value, err)
+	}
+	option.Dtstart = start
+
+	rule, err := rrule.NewRRule(*option)
+	if err != nil {
+		t.Fatalf("failed to create RRULE %q: %v", value, err)
+	}
+	set := &rrule.Set{}
+	set.RRule(rule)
+	return set
 }

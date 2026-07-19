@@ -13,15 +13,7 @@ type Event struct {
 	Calendar    string
 	TagId       string
 	ParentId    string
-	Repeat      *Repetition
-}
-
-type Repetition struct {
-	Frequency  int
-	Interval   int
-	Until      string
-	Count      int
-	Exceptions []string
+	Repeat      string // DTSTART/RRULE/EXDATE in RFC 5545 format.
 }
 
 // A DTO for Kotlin/Swift to use as the calendar structure.

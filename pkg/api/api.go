@@ -15,6 +15,7 @@ import (
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/google/uuid"
+	"github.com/teambition/rrule-go"
 )
 
 const (
@@ -25,6 +26,11 @@ const (
 // The exposed/exported JSON-only API interface.
 type Api struct {
 	inner *core.Core
+}
+
+type eventJSON struct {
+	core.Event
+	Repeat *string `json:"repeat"`
 }
 
 // A "constructor" for the JSON API.
@@ -87,47 +93,34 @@ func (a *Api) UpdateEvent(eventJson string) (string, error) {
 }
 
 func (a *Api) UpdateRepeatingEvent(oldEventJson, newEventJson string, strategy int) (string, error) {
-	var oldEvent core.Event
-	var newEvent core.Event
-
-	if err := json.Unmarshal([]byte(oldEventJson), &oldEvent); err != nil {
-		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
-	}
-
-	if err := json.Unmarshal([]byte(newEventJson), &newEvent); err != nil {
-		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
-	}
-
-	updatedEvent, err := a.inner.UpdateRepeatingEvent(oldEvent, newEvent, core.UpdateStrategy(strategy))
+	oldEvent, err := unmarshalEvent(oldEventJson)
 	if err != nil {
-		fmt.Printf("CalendarCore got:\nNew: %s\nOld: %s\n", oldEventJson, newEventJson)
 		return emptyJson, err
 	}
-
-	jsonBytes, err := json.Marshal(updatedEvent)
+	newEvent, err := unmarshalEvent(newEventJson)
 	if err != nil {
 		return emptyJson, err
 	}
 
-	return string(jsonBytes), err
+	updated, err := a.inner.UpdateRepeatingEvent(oldEvent, newEvent, core.UpdateStrategy(strategy))
+	if err != nil {
+		return emptyJson, err
+	}
+	return marshalEvent(updated)
 }
 
 func (a *Api) RemoveEvent(eventJson string) error {
-	var event core.Event
-	err := json.Unmarshal([]byte(eventJson), &event)
+	event, err := unmarshalEvent(eventJson)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal event data: %w", err)
+		return err
 	}
 	return a.inner.RemoveEvent(event)
 }
 
 func (a *Api) RemoveRepeatingEvent(eventJson string, strategy int) error {
-	var event core.Event
-	err := json.Unmarshal([]byte(eventJson), &event)
+	event, err := unmarshalEvent(eventJson)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal event data: %w", err)
+		return err
 	}
 	return a.inner.RemoveRepeatingEvent(event, core.UpdateStrategy(strategy))
 }
@@ -143,13 +136,7 @@ func (a *Api) GetEvent(id string) (string, error) {
 		return emptyJson, err
 	}
 
-	// marshal to json
-	jsonBytes, err := json.Marshal(event)
-	if err != nil {
-		return emptyJson, fmt.Errorf("failed to marshal event to json: %w", err)
-	}
-
-	return string(jsonBytes), nil
+	return marshalEvent(event)
 }
 
 func (a *Api) GetEvents(from, to string, filterJson string) (string, error) {
@@ -170,13 +157,7 @@ func (a *Api) GetEvents(from, to string, filterJson string) (string, error) {
 	// pass the args to inner api
 	events := a.inner.GetEvents(f, t, filter)
 
-	// marshal to json
-	jsonBytes, err := json.Marshal(events)
-	if err != nil {
-		return emptyJsonArr, fmt.Errorf("failed to marshal events to json: %w", err)
-	}
-
-	return string(jsonBytes), nil
+	return marshalEvents(events)
 }
 
 func (a *Api) CreateTag(calendar, tagJson string) (string, error) {
@@ -234,29 +215,61 @@ func (a *Api) RemoveTag(calendar, id string) error {
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
-// A helper which:
-//  1. Parses and validates input event
-//  2. Calls the coreFunc
-//  3. Marshals event that came back to JSON
-//  4. Returns json
 func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.Event, error)) (string, error) {
-	var event core.Event
-	err := json.Unmarshal([]byte(eventJson), &event)
-	if err != nil {
-		fmt.Println("CalendarCore got: ", eventJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal event data: %w", err)
-	}
-
-	newEvent, err := coreFunc(event)
-	if err != nil {
-		fmt.Println("CalendarCore got: ", eventJson)
-		return emptyJson, err
-	}
-
-	jsonBytes, err := json.Marshal(newEvent)
+	event, err := unmarshalEvent(eventJson)
 	if err != nil {
 		return emptyJson, err
 	}
+	updated, err := coreFunc(event)
+	if err != nil {
+		return emptyJson, err
+	}
+	return marshalEvent(updated)
+}
 
-	return string(jsonBytes), err
+func unmarshalEvent(raw string) (core.Event, error) {
+	var data eventJSON
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		return core.Event{}, fmt.Errorf("failed to unmarshal event data: %w", err)
+	}
+
+	var repeat *rrule.Set
+	if data.Repeat != nil && *data.Repeat != "" {
+		var err error
+		repeat, err = rrule.StrToRRuleSet(*data.Repeat)
+		if err != nil {
+			return core.Event{}, fmt.Errorf("invalid recurrence: %w", err)
+		}
+	}
+	data.Event.Repeat = repeat
+	return data.Event, nil
+}
+
+func marshalEvent(event *core.Event) (string, error) {
+	data, err := json.Marshal(eventToJSON(*event))
+	if err != nil {
+		return emptyJson, fmt.Errorf("failed to marshal event data: %w", err)
+	}
+	return string(data), nil
+}
+
+func marshalEvents(events []core.Event) (string, error) {
+	result := make([]eventJSON, len(events))
+	for i := range events {
+		result[i] = eventToJSON(events[i])
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return emptyJsonArr, fmt.Errorf("failed to marshal event data: %w", err)
+	}
+	return string(data), nil
+}
+
+func eventToJSON(event core.Event) eventJSON {
+	var repeat *string
+	if event.Repeat != nil {
+		value := event.Repeat.String()
+		repeat = &value
+	}
+	return eventJSON{Event: event, Repeat: repeat}
 }
