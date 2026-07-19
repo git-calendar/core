@@ -258,9 +258,7 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 	return result
 }
 
-// ------------------------------------------------ Helpers -------------------------------------------------
-
-// Updates one generated child by excluding it and creating a detached event.
+// updateCurrentChild updates one generated child by excluding it and creating a detached event.
 func (c *Core) updateCurrentChild(original, updated *Event) (*Event, error) {
 	parent, ok := c.events[*updated.ParentId] // we check nil pointer in UpdateRepeatingEvent
 	if !ok || parent == nil || !parent.IsParent() {
@@ -432,7 +430,7 @@ func (c *Core) removeAllChildren(event *Event) error {
 	return c.RemoveEvent(*parent)
 }
 
-// Serializes event to JSON, saves to file, stages and commits with given message.
+// saveAndCommitEvent serializes event to JSON, saves to file, stages and commits with given message.
 func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	event.UpdatedAt = time.Now() // force new time
 
@@ -492,7 +490,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	return nil
 }
 
-// Removes event from filesystem and commits the change.
+// deleteAndCommitEvent removes event from filesystem and commits the change.
 func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 	event, ok := c.events[eventId]
 	if !ok {
