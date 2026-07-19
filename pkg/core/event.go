@@ -14,7 +14,7 @@ import (
 // Can be one of these:
 //  1. Basic:   A standalone event that does not repeat (ParentId is nil, Repeat is nil).
 //  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
-//  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat is nil).
+//  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
 	Id          uuid.UUID  `json:"id"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
 	Title       string     `json:"title"`    // Should not be empty.

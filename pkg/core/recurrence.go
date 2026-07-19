@@ -80,8 +80,8 @@ func splitRecurrence(set *rrule.Set, splitAt, newStart time.Time, replacement *r
 		return nil, nil, 0, nil
 	}
 	before, err := capRecurrenceBefore(set, splitAt)
-	if err != nil {
-		return nil, nil, -1, err
+	if err != nil || replacement == nil {
+		return before, nil, index, err
 	}
 
 	option := replacement.GetRRule().OrigOptions
@@ -101,7 +101,7 @@ func splitRecurrence(set *rrule.Set, splitAt, newStart time.Time, replacement *r
 
 func shiftRecurrence(set *rrule.Set, oldStart, newStart time.Time, replacement *rrule.Set) (*rrule.Set, error) {
 	if replacement == nil {
-		replacement = set
+		return nil, nil
 	}
 	next, err := rrule.StrToRRuleSet(replacement.String())
 	if err != nil {

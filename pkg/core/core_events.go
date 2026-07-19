@@ -10,6 +10,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/google/uuid"
+	rrule "github.com/teambition/rrule-go"
 )
 
 // Creates a new event and save it into git.
@@ -231,6 +232,10 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 				continue
 			}
 
+			repeat, err := rrule.StrToRRuleSet(curEvent.Repeat.String())
+			if err != nil {
+				continue
+			}
 			starts := recurrenceBetween(curEvent.Repeat, from, to)
 			eventDuration := curEvent.To.Sub(curEvent.From)
 			for _, start := range starts {
@@ -244,6 +249,7 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 					Calendar:    curEvent.Calendar,
 					TagId:       curEvent.TagId,
 					ParentId:    &curEvent.Id,
+					Repeat:      repeat,
 				})
 			}
 		}
@@ -286,11 +292,7 @@ func (c *Core) updateFollowingChildren(old, new *Event) (*Event, error) {
 	}
 
 	originalRepeat := parent.Repeat
-	replacement := new.Repeat
-	if replacement == nil {
-		replacement = originalRepeat
-	}
-	before, after, index, err := splitRecurrence(originalRepeat, old.From, new.From, replacement)
+	before, after, index, err := splitRecurrence(originalRepeat, old.From, new.From, new.Repeat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to split recurrence: %w", err)
 	}

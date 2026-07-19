@@ -36,12 +36,15 @@ func TestRepeatingEvent_GetEvents_CountWeekly_GeneratesExactCount(t *testing.T) 
 
 	const count = 6
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, recurrenceWithCount(t, startTime, "WEEKLY", count))
+	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, recurrenceWithCount(t, startTime, "WEEKLY", count))
 
 	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, count*7+1), nil)
 	for _, event := range events {
-		if event.Repeat != nil {
-			t.Fatalf("generated child %s should not own its parent's recurrence", event.Id)
+		if event.Repeat == nil {
+			t.Fatalf("generated child %s should expose its parent's recurrence", event.Id)
+		}
+		if event.Repeat == parent.Repeat {
+			t.Fatalf("generated child %s should not expose the stored recurrence pointer", event.Id)
 		}
 	}
 	assertEventStarts(
@@ -417,7 +420,6 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 
 	updatedSecond := cloneEvent(t, second)
 	updatedSecond.Title = "Daily Standup - New Phase"
-	updatedSecond.Repeat = nil // children do not own the recurrence
 
 	_, err := c.UpdateRepeatingEvent(second, updatedSecond, core.Following)
 	if err != nil {
@@ -642,13 +644,9 @@ func TestRepeatingEvent_RemoveFollowingThenUpdateAllShiftTime_DoesNotLoseEvents(
 	newFrom := second.From.Add(-time.Hour)
 	newTo := second.To.Add(-time.Hour)
 
-	// Model this the way a real caller would build a child update:
-	// only the mutable fields, no Repeat field carried over — children
-	// don't own the repeat rule, the parent does.
 	newEvent := second
 	newEvent.From = newFrom
 	newEvent.To = newTo
-	newEvent.Repeat = nil
 
 	updated, err := c.UpdateRepeatingEvent(second, newEvent, core.All)
 	if err != nil {
@@ -667,6 +665,57 @@ func TestRepeatingEvent_RemoveFollowingThenUpdateAllShiftTime_DoesNotLoseEvents(
 	expectedFirst := startTime.Add(-time.Hour)
 	expectedSecond := startTime.AddDate(0, 0, 1).Add(-time.Hour)
 	assertEventStarts(t, events, expectedFirst, expectedSecond)
+}
+
+func TestRepeatingEvent_Update_Following_ToNeverStopsAtSelectedChild(t *testing.T) {
+	c := newTestCore(t)
+
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	createRepeatingEvent(t, c, "Daily", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 5))
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
+	selected := requireEventAt(t, events, startTime.AddDate(0, 0, 2))
+	updated := cloneEvent(t, selected)
+	updated.Title = "No longer recurring"
+	updated.Repeat = nil
+
+	basic, err := c.UpdateRepeatingEvent(selected, updated, core.Following)
+	if err != nil {
+		t.Fatalf("failed to stop recurrence from selected child: %v", err)
+	}
+	if basic.ParentId != nil || basic.Repeat != nil {
+		t.Fatalf("selected child should become basic: %+v", basic)
+	}
+
+	events = c.GetEvents(startTime, startTime.AddDate(0, 0, 5), nil)
+	assertEventStarts(t, events, startTime, startTime.AddDate(0, 0, 1), startTime.AddDate(0, 0, 2))
+	if got := requireEventAt(t, events, startTime.AddDate(0, 0, 2)).Title; got != updated.Title {
+		t.Fatalf("title = %q; want %q", got, updated.Title)
+	}
+}
+
+func TestRepeatingEvent_Update_All_ToNeverConvertsParentToBasic(t *testing.T) {
+	c := newTestCore(t)
+
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	parent := createRepeatingEvent(t, c, "Daily", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
+	first := requireEventAt(t, c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil), startTime)
+	updated := cloneEvent(t, first)
+	updated.Repeat = nil
+
+	basic, err := c.UpdateRepeatingEvent(first, updated, core.All)
+	if err != nil {
+		t.Fatalf("failed to stop recurrence for all children: %v", err)
+	}
+	if basic.Repeat != nil {
+		t.Fatal("parent should no longer repeat")
+	}
+	if stored := requireEvent(t, c, parent.Id); stored.Repeat != nil {
+		t.Fatal("stored parent should be basic")
+	}
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
+	assertEventStarts(t, events, startTime)
 }
 
 func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
