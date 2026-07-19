@@ -25,8 +25,8 @@ type Event struct {
 	Calendar    string     `json:"calendar"`  // The name of the calendar the event belongs to.
 	TagId       *uuid.UUID `json:"tag_id"`    // A user-defined tag/category. Can be nil.
 	ParentId    *uuid.UUID `json:"parent_id"` // Specific for child events. It is nil (not uuid.Nil) if the event is basic or parent.
-	Repeat      *rrule.Set `json:"-"`
-	UpdatedAt   time.Time  `json:"-"` // Used for git conflict resolution; latest wins. Client doesn't need to see this -> json:"-".
+	Repeat      *rrule.Set `json:"-"`         // Internal recurrence set; API and file layers serialize it as RFC 5545 text.
+	UpdatedAt   time.Time  `json:"-"`         // Used for git conflict resolution; latest wins. Client doesn't need to see this -> json:"-".
 }
 
 func (e *Event) Validate() error {

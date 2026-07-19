@@ -28,6 +28,8 @@ type Api struct {
 	inner *core.Core
 }
 
+// eventJSON is the API representation of an event. Recurrence is transported
+// as an RFC 5545 string because rrule.Set is not JSON-serializable.
 type eventJSON struct {
 	core.Event
 	Repeat *string `json:"repeat"`
@@ -227,6 +229,7 @@ func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.
 	return marshalEvent(updated)
 }
 
+// unmarshalEvent decodes API JSON and rebuilds the internal recurrence set.
 func unmarshalEvent(raw string) (core.Event, error) {
 	var data eventJSON
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
@@ -245,6 +248,7 @@ func unmarshalEvent(raw string) (core.Event, error) {
 	return data.Event, nil
 }
 
+// marshalEvent converts the recurrence set to its string form and encodes the event.
 func marshalEvent(event *core.Event) (string, error) {
 	data, err := json.Marshal(eventToJSON(*event))
 	if err != nil {
