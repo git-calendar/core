@@ -11,75 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestAddUnit(t *testing.T) {
-	type args struct {
-		t     time.Time
-		value int
-		unit  Freq
-	}
-	tests := []struct {
-		name string
-		args args
-		want time.Time
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := addUnit(tt.args.t, tt.args.value, tt.args.unit); !cmp.Equal(tt.want, got) {
-				t.Errorf("addUnit() = %v, want %v\ndiff=%s", got, tt.want, cmp.Diff(tt.want, got))
-			}
-		})
-	}
-}
-
-func TestFirstOccurrenceAtOrAfter(t *testing.T) {
-	type args struct {
-		searchStart time.Time
-		event       *Event
-	}
-	tests := []struct {
-		name  string
-		args  args
-		want  time.Time
-		want1 int
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, got1 := firstOccurrenceAtOrAfter(tt.args.searchStart, tt.args.event)
-			if !cmp.Equal(tt.want, got) {
-				t.Errorf("getFirstCandidate() got = %v, want %v\ndiff=%s", got, tt.want, cmp.Diff(tt.want, got))
-			}
-			if got1 != tt.want1 {
-				t.Errorf("getFirstCandidate() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func TestContainsTime(t *testing.T) {
-	type args struct {
-		exceptions []uuid.UUID
-		t          time.Time
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := containsTime(tt.args.exceptions, tt.args.t); got != tt.want {
-				t.Errorf("containsTime() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPrepareRepoUrl(t *testing.T) {
 	someProxyUrl := mustParseUrl("https://cors-proxy.abc")
 	tests := []struct {
@@ -255,13 +186,11 @@ func TestCustomUUIDs(t *testing.T) {
 		name     string
 		parentId uuid.UUID
 		t        time.Time
-		shift    time.Duration
 	}{
 		{
 			name:     "basic",
 			parentId: uuid.New(), // UUIDv4
 			t:        time.Now().Round(time.Second),
-			shift:    time.Hour,
 		},
 	}
 	for _, tt := range tests {
@@ -270,12 +199,6 @@ func TestCustomUUIDs(t *testing.T) {
 			gotTime := getTimeFromUUID(gotId)
 			if !cmp.Equal(tt.t, gotTime) {
 				t.Errorf("getTimeFromUUID() = %v, want %v", gotTime, tt.t)
-			}
-
-			shiftedId := getShiftedUUID(gotId, tt.shift)
-			gotShiftedTime := getTimeFromUUID(shiftedId)
-			if !cmp.Equal(tt.t.Add(tt.shift), gotShiftedTime) {
-				t.Errorf("getTimeFromUUID() = %v, want %v", gotShiftedTime, tt.t.Add(tt.shift))
 			}
 		})
 	}

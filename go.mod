@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jedisct1/go-aes-siv v1.0.0
 	github.com/rdleal/intervalst v1.5.0
+	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/crypto v0.53.0
 )
 

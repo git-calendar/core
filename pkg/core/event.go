@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	rrule "github.com/teambition/rrule-go"
 )
 
 // Event represents a single calendar entry.
@@ -15,29 +16,17 @@ import (
 //  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
 //  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
 type Event struct {
-	Id          uuid.UUID   `json:"id"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
-	Title       string      `json:"title"`    // Should not be empty.
-	Location    string      `json:"location"` // Physical or virtual location (e.g., URL).
-	Description string      `json:"description"`
-	From        time.Time   `json:"from"`
-	To          time.Time   `json:"to"`
-	Calendar    string      `json:"calendar"`  // The name of the calendar the event belongs to.
-	TagId       *uuid.UUID  `json:"tag_id"`    // A user-defined tag/category. Can be nil.
-	ParentId    *uuid.UUID  `json:"parent_id"` // Specific for child events. It is nil (not uuid.Nil) if the event is basic or parent.
-	Repeat      *Repetition `json:"repeat"`
-	UpdatedAt   time.Time   `json:"-"` // Used for git conflict resolution; latest wins. Client doesn't need to see this -> json:"-".
-}
-
-// Repetition defines the recurrence rules for a Parent event.
-//
-// A Repetition object exists only on Parent events to generate Children.
-// A series must be capped by either Until (date) or Count (occurrences). Not both.
-type Repetition struct {
-	Frequency  Freq        `json:"frequency"`  // The unit of time for recurrence (Day, Week, Month, etc.).
-	Interval   int         `json:"interval"`   // The multiplier for Frequency (e.g., Interval:2 * Frequency:Week = every other week).
-	Until      time.Time   `json:"until"`      // Hard stop date for the series. It should just be a date, with time zeroed out (2026-01-01T00:00:00Z). If not, time should be ignored. It is inclusive.
-	Count      int         `json:"count"`      // Total number of occurrences to generate.
-	Exceptions []uuid.UUID `json:"exceptions"` // List of Child IDs that deviate from the base rule (edited or cancelled).
+	Id          uuid.UUID  `json:"id"`       // Should not change (different id = different event). Only UUIDv4 or UUIDv8 (for children) is being used.
+	Title       string     `json:"title"`    // Should not be empty.
+	Location    string     `json:"location"` // Physical or virtual location (e.g., URL).
+	Description string     `json:"description"`
+	From        time.Time  `json:"from"`
+	To          time.Time  `json:"to"`
+	Calendar    string     `json:"calendar"`  // The name of the calendar the event belongs to.
+	TagId       *uuid.UUID `json:"tag_id"`    // A user-defined tag/category. Can be nil.
+	ParentId    *uuid.UUID `json:"parent_id"` // Specific for child events. It is nil (not uuid.Nil) if the event is basic or parent.
+	Repeat      *rrule.Set `json:"-"`         // Internal recurrence set; API and file layers serialize it as RFC 5545 text.
+	UpdatedAt   time.Time  `json:"-"`         // Used for git conflict resolution; latest wins. Client doesn't need to see this -> json:"-".
 }
 
 func (e *Event) Validate() error {
@@ -61,32 +50,11 @@ func (e *Event) Validate() error {
 	if e.From.Compare(e.To) != -1 {
 		return errors.New("From timestamp cannot be greater or equal than To (cannot end before it starts)")
 	}
-	if err := e.Repeat.Validate(); err != nil {
-		return fmt.Errorf("repetition is invalid: %w", err)
+	if e.ParentId == nil {
+		if err := validateRecurrence(e.Repeat, e.From); err != nil {
+			return fmt.Errorf("recurrence is invalid: %w", err)
+		}
 	}
-	return nil
-}
-
-func (r *Repetition) Validate() error {
-	if r == nil {
-		return nil
-	}
-	if !r.Frequency.IsValid() {
-		return errors.New("frequency is invalid")
-	}
-	if r.Interval < 1 {
-		return errors.New("interval is invalid")
-	}
-	if r.Until.IsZero() && r.Count < 1 {
-		return errors.New("combination of Until & Count is invalid")
-	}
-	if !r.Until.IsZero() && r.Count > 0 {
-		return errors.New("Count must be 0 when Until date is set")
-	}
-	if !r.Until.IsZero() {
-		r.Until = dateOnly(r.Until) // normalize to zeroed time
-	}
-
 	return nil
 }
 
@@ -102,22 +70,15 @@ func (e Event) IsParent() bool {
 	return e.ParentId == nil && e.Repeat != nil
 }
 
-// Returns either the To time.Time for Basic non-repeating event, or calculates the last occurrence of a repeating Parent event and returns its To.
+// getTreeEndTime returns the end of the final generated child.
 func (e Event) getTreeEndTime() time.Time {
 	if e.Repeat == nil {
 		return e.To
 	}
 
-	eventEnd := e.To
-	if e.Repeat != nil {
-		eventEnd = e.Repeat.Until // if repeating, use interval [From, Repetition.Until T 23:59:59]
-		if !eventEnd.IsZero() {
-			// bump to end of that calendar day so the tree key covers the full last occurrence, not just midnight
-			eventEnd = endOfDay(eventEnd)
-		}
-		if e.Repeat.Count >= 1 { // if repeating on count basis
-			eventEnd = addUnit(e.To, e.Repeat.Interval*e.Repeat.Count, e.Repeat.Frequency)
-		}
+	last := recurrenceLast(e.Repeat)
+	if last.IsZero() {
+		return e.To
 	}
-	return eventEnd
+	return last.Add(e.To.Sub(e.From))
 }
