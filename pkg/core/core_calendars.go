@@ -90,11 +90,18 @@ func (c *Core) LoadCalendars() error {
 		return fmt.Errorf("failed to list all directories in root: %w", err)
 	}
 
+	icalURLs := make(map[string]*url.URL)
 	for _, entry := range entries {
+		name := entry.Name()
 		if !entry.IsDir() {
+			sourceURL, err := c.readICalURL(name)
+			if err != nil {
+				continue
+			}
+			c.calendars[name] = &Calendar{Name: name, Readonly: true}
+			icalURLs[name] = sourceURL
 			continue
 		}
-		name := entry.Name()
 
 		repo, err := c.initCalendarRepo(name)
 		if err != nil {
@@ -130,6 +137,13 @@ func (c *Core) LoadCalendars() error {
 	// load tree + events
 	// TODO do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
+		if sourceURL, ok := icalURLs[cal.Name]; ok {
+			if err := c.loadICalURL(cal.Name, sourceURL); err != nil {
+				fmt.Printf("WARN: failed to load iCalendar URL %q: %v\n", cal.Name, err)
+			}
+			continue
+		}
+
 		wt, _ := cal.repository.Worktree()
 		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
 		eventEntries, _ := eventsDir.ReadDir("/")
@@ -280,7 +294,10 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 
 	calendar := c.calendars[oldName]
 	if err := c.fs.Rename(oldName, newName); err != nil {
-		return fmt.Errorf("failed to rename the repository directory: %w", err)
+		return fmt.Errorf("failed to rename calendar: %w", err)
+	}
+	if calendar.repository == nil {
+		return c.LoadCalendars()
 	}
 	if len(calendar.EncryptionKey) != 0 { // TODO: maybe check c.fs.Stat() instead?
 		if err := c.fs.Rename(fmt.Sprintf("%s.key", oldName), fmt.Sprintf("%s.key", newName)); err != nil {

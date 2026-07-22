@@ -171,6 +171,9 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 		if !ok {
 			return nil, fmt.Errorf("calendar not found: %s", calendar)
 		}
+		if cal.repository == nil {
+			return nil, errors.New("URL calendars cannot be exported")
+		}
 
 		wt, err := cal.repository.Worktree()
 		if err != nil {

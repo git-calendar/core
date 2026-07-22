@@ -1,15 +1,12 @@
-package ical_test
+package core
 
 import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/git-calendar/core/pkg/core"
-	"github.com/git-calendar/core/pkg/ical"
 )
 
-func TestImport(t *testing.T) {
+func TestParseICal(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//git-calendar//test//EN
@@ -30,7 +27,7 @@ RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=4
 END:VEVENT
 END:VCALENDAR`
 
-	events, err := ical.Import(strings.NewReader(input), "Work")
+	events, err := parseICal(strings.NewReader(input), "Work", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,15 +51,15 @@ END:VCALENDAR`
 	if first.Calendar != "Work" {
 		t.Errorf("Calendar = %q, want %q", first.Calendar, "Work")
 	}
-	assertTime(t, first.From, time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC))
-	assertTime(t, first.To, time.Date(2026, 7, 14, 11, 30, 0, 0, time.UTC))
+	assertICalTime(t, first.From, time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC))
+	assertICalTime(t, first.To, time.Date(2026, 7, 14, 11, 30, 0, 0, time.UTC))
 
 	second := events[1]
 	if second.Repeat == nil {
 		t.Fatal("Repeat is nil")
 	}
-	if second.Repeat.Frequency != core.Week {
-		t.Errorf("Frequency = %v, want %v", second.Repeat.Frequency, core.Week)
+	if second.Repeat.Frequency != Week {
+		t.Errorf("Frequency = %v, want %v", second.Repeat.Frequency, Week)
 	}
 	if second.Repeat.Interval != 2 {
 		t.Errorf("Interval = %d, want 2", second.Repeat.Interval)
@@ -72,7 +69,7 @@ END:VCALENDAR`
 	}
 }
 
-func TestImportRejectsUnsupportedRecurrence(t *testing.T) {
+func TestParseICalRejectsUnsupportedRecurrence(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//git-calendar//test//EN
@@ -85,13 +82,13 @@ RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE
 END:VEVENT
 END:VCALENDAR`
 
-	_, err := ical.Import(strings.NewReader(input), "Work")
+	_, err := parseICal(strings.NewReader(input), "Work", false)
 	if err == nil || !strings.Contains(err.Error(), "recurrence modifiers are not supported") {
 		t.Fatalf("error = %v, want unsupported recurrence modifier error", err)
 	}
 }
 
-func assertTime(t *testing.T, got, want time.Time) {
+func assertICalTime(t *testing.T, got, want time.Time) {
 	t.Helper()
 	if !got.Equal(want) {
 		t.Errorf("time = %v, want %v", got, want)

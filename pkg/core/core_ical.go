@@ -1,0 +1,159 @@
+package core
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// ImportICalFile imports events once and saves them like normal events.
+func (c *Core) ImportICalFile(calendar string, r io.Reader) error {
+	cal, ok := c.calendars[calendar]
+	if !ok {
+		return fmt.Errorf("calendar not found: %s", calendar)
+	}
+	if cal.Readonly {
+		return errors.New("the specified calendar is read-only")
+	}
+
+	events, err := parseICal(r, calendar, false)
+	if err != nil {
+		return err
+	}
+
+	for i, event := range events {
+		if _, err := c.CreateEvent(event); err != nil {
+			return fmt.Errorf("save imported event %d: %w", i+1, err)
+		}
+	}
+
+	return nil
+}
+
+// ImportICalURL creates a read-only calendar that is fetched on every load.
+func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
+	if err := validateICalURL(sourceURL); err != nil {
+		return err
+	}
+	if err := validateICalName(name); err != nil {
+		return err
+	}
+	if _, exists := c.calendars[name]; exists {
+		return fmt.Errorf("calendar named %s already exists", name)
+	}
+	if _, err := c.fs.Stat(name); err == nil {
+		return fmt.Errorf("file named %s already exists", name)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	file, err := c.fs.Create(name)
+	if err != nil {
+		return fmt.Errorf("create iCalendar URL file: %w", err)
+	}
+	if _, err := file.Write([]byte(sourceURL.String())); err != nil {
+		file.Close()
+		_ = c.fs.Remove(name)
+		return fmt.Errorf("write iCalendar URL file: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = c.fs.Remove(name)
+		return fmt.Errorf("close iCalendar URL file: %w", err)
+	}
+
+	return c.LoadCalendars()
+}
+
+func (c *Core) readICalURL(name string) (*url.URL, error) {
+	file, err := c.fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceURL, err := url.ParseRequestURI(strings.TrimSpace(string(data)))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateICalURL(sourceURL); err != nil {
+		return nil, err
+	}
+	return sourceURL, nil
+}
+
+func (c *Core) loadICalURL(name string, sourceURL *url.URL) error {
+	requestURL := sourceURL
+	if c.proxyUrl != nil {
+		requestURL = useCorsProxy(sourceURL, c.proxyUrl)
+	}
+	if requestURL == nil {
+		return errors.New("invalid proxied iCalendar URL")
+	}
+
+	client := http.Client{Timeout: 30 * time.Second}
+	response, err := client.Get(requestURL.String())
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("fetch iCalendar: %s", response.Status)
+	}
+
+	events, err := parseICal(response.Body, name, true)
+	if err != nil {
+		return err
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(events))
+	for _, event := range events {
+		_, alreadyLoaded := c.events[event.Id]
+		_, duplicate := seen[event.Id]
+		if alreadyLoaded || duplicate {
+			return fmt.Errorf("duplicate imported event ID %q", event.Id)
+		}
+		seen[event.Id] = struct{}{}
+	}
+
+	for i := range events {
+		event := &events[i]
+		if err := c.intervalTree.InsertEvent(*event); err != nil {
+			return err
+		}
+		c.events[event.Id] = event
+	}
+
+	return nil
+}
+
+func validateICalURL(sourceURL *url.URL) error {
+	if sourceURL == nil || sourceURL.Host == "" ||
+		(sourceURL.Scheme != "http" && sourceURL.Scheme != "https") {
+		return errors.New("iCalendar URL must be an absolute HTTP or HTTPS URL")
+	}
+	return nil
+}
+
+func validateICalName(name string) error {
+	if name == "" || name == "." || path.Base(name) != name {
+		return errors.New("iCalendar name must be a single file name")
+	}
+	if strings.HasSuffix(name, ".key") || strings.HasSuffix(name, ".readonly") {
+		return errors.New("iCalendar name uses a reserved suffix")
+	}
+	return nil
+}

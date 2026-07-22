@@ -50,6 +50,16 @@ func RegisterCallbacks(api *api.Api) {
 					return nil, api.LoadCalendars()
 				})
 			}),
+			"importICalFile": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.ImportICalFile(args[0].String(), args[1].String())
+				})
+			}),
+			"importICalURL": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.ImportICalURL(args[0].String(), args[1].String())
+				})
+			}),
 			"updateRemote": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.UpdateRemote(args[0].String(), args[1].String(), args[2].Bool())

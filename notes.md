@@ -22,7 +22,9 @@
   - [x] load repositories
 - [ ] Undo function (git reset HEAD~1)
 - [ ] iCalendar compatibility
-  - [ ] import (periodical & one-time)
+  - [x] import
+    - [x] one-time import into a Git-backed calendar
+    - [x] URL calendar fetched on every load
   - [ ] export
     - to a file
     - idk about url
@@ -60,6 +62,7 @@
 │   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
+├── imported
 ├── default.key
 ├── shared.readonly
 └── shared.key
