@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	rrule "github.com/teambition/rrule-go"
 )
 
 func TestParseICal(t *testing.T) {
@@ -58,18 +60,23 @@ END:VCALENDAR`
 	if second.Repeat == nil {
 		t.Fatal("Repeat is nil")
 	}
-	if second.Repeat.Frequency != Week {
-		t.Errorf("Frequency = %v, want %v", second.Repeat.Frequency, Week)
+	rule := second.Repeat.GetRRule()
+	if rule == nil {
+		t.Fatal("RRULE is nil")
 	}
-	if second.Repeat.Interval != 2 {
-		t.Errorf("Interval = %d, want 2", second.Repeat.Interval)
+	option := rule.OrigOptions
+	if option.Freq != rrule.WEEKLY {
+		t.Errorf("Frequency = %v, want %v", option.Freq, rrule.WEEKLY)
 	}
-	if second.Repeat.Count != 4 {
-		t.Errorf("Count = %d, want 4", second.Repeat.Count)
+	if option.Interval != 2 {
+		t.Errorf("Interval = %d, want 2", option.Interval)
+	}
+	if option.Count != 4 {
+		t.Errorf("Count = %d, want 4", option.Count)
 	}
 }
 
-func TestParseICalRejectsUnsupportedRecurrence(t *testing.T) {
+func TestParseICalSupportsRecurrenceModifiers(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//git-calendar//test//EN
@@ -82,9 +89,14 @@ RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE
 END:VEVENT
 END:VCALENDAR`
 
-	_, err := parseICal(strings.NewReader(input), "Work", false)
-	if err == nil || !strings.Contains(err.Error(), "recurrence modifiers are not supported") {
-		t.Fatalf("error = %v, want unsupported recurrence modifier error", err)
+	events, err := parseICal(strings.NewReader(input), "Work", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	weekdays := events[0].Repeat.GetRRule().OrigOptions.Byweekday
+	if len(weekdays) != 2 || weekdays[0].String() != "MO" || weekdays[1].String() != "WE" {
+		t.Fatalf("Byweekday = %v, want [MO WE]", weekdays)
 	}
 }
 
