@@ -45,9 +45,9 @@ func parseICalEvent(source *ics.VEvent, calendar string) (Event, error) {
 		return Event{}, fmt.Errorf("read DTSTART: %w", err)
 	}
 
-	to, err := source.GetEndAt()
+	to, err := icalEventEnd(source, from)
 	if err != nil {
-		return Event{}, fmt.Errorf("read DTEND: %w", err)
+		return Event{}, err
 	}
 
 	repeat, err := parseICalRRule(source, from)
@@ -64,6 +64,24 @@ func parseICalEvent(source *ics.VEvent, calendar string) (Event, error) {
 		Calendar:    calendar,
 		Repeat:      repeat,
 	}, nil
+}
+
+func icalEventEnd(event *ics.VEvent, start time.Time) (time.Time, error) {
+	if event.HasProperty(ics.ComponentPropertyDtEnd) {
+		end, err := event.GetEndAt()
+		if err != nil {
+			return time.Time{}, fmt.Errorf("read DTEND: %w", err)
+		}
+		return end, nil
+	}
+
+	startProperty := event.GetProperty(ics.ComponentPropertyDtStart)
+	if startProperty != nil && startProperty.GetValueType() == ics.ValueDataTypeDate {
+		// RFC 5545 defines a date-only VEVENT without DTEND as lasting one day.
+		return start.AddDate(0, 0, 1), nil
+	}
+
+	return time.Time{}, fmt.Errorf("read DTEND: %w: %s", ics.ErrorPropertyNotFound, ics.ComponentPropertyDtEnd)
 }
 
 func parseICalRRule(event *ics.VEvent, start time.Time) (*rrule.Set, error) {
