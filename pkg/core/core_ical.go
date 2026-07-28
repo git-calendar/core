@@ -55,21 +55,32 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 		return err
 	}
 
-	file, err := c.fs.Create(name)
+	fileName := name + ICalURLFileSuffix
+	if _, err := c.fs.Stat(fileName); err == nil {
+		return fmt.Errorf("file named %s already exists", fileName)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	file, err := c.fs.Create(fileName)
 	if err != nil {
 		return fmt.Errorf("create iCalendar URL file: %w", err)
 	}
 	if _, err := file.Write([]byte(sourceURL.String())); err != nil {
 		file.Close()
-		_ = c.fs.Remove(name)
+		_ = c.fs.Remove(fileName)
 		return fmt.Errorf("write iCalendar URL file: %w", err)
 	}
 	if err := file.Close(); err != nil {
-		_ = c.fs.Remove(name)
+		_ = c.fs.Remove(fileName)
 		return fmt.Errorf("close iCalendar URL file: %w", err)
 	}
 
-	return c.LoadCalendars()
+	c.calendars[name] = &Calendar{Name: name, Readonly: true, ICalURL: sourceURL}
+	if err := c.loadICalURL(name, sourceURL); err != nil {
+		fmt.Printf("WARN: failed to load iCalendar %q: %v\n", name, err)
+	}
+	return nil
 }
 
 func (c *Core) readICalURL(name string) (*url.URL, error) {
@@ -103,6 +114,8 @@ func (c *Core) loadICalURL(name string, sourceURL *url.URL) error {
 		return errors.New("invalid proxied iCalendar URL")
 	}
 
+	fmt.Println("fetching ical", name)
+
 	client := http.Client{Timeout: 30 * time.Second}
 	response, err := client.Get(requestURL.String())
 	if err != nil {
@@ -124,7 +137,8 @@ func (c *Core) loadICalURL(name string, sourceURL *url.URL) error {
 		_, alreadyLoaded := c.events[event.Id]
 		_, duplicate := seen[event.Id]
 		if alreadyLoaded || duplicate {
-			return fmt.Errorf("duplicate imported event ID %q", event.Id)
+			fmt.Printf("WARN: duplicate imported event ID %q\n", event.Id)
+			continue
 		}
 		seen[event.Id] = struct{}{}
 	}
@@ -145,15 +159,15 @@ func validateICalURL(sourceURL *url.URL) error {
 		(sourceURL.Scheme != "http" && sourceURL.Scheme != "https") {
 		return errors.New("iCalendar URL must be an absolute HTTP or HTTPS URL")
 	}
+	if !strings.HasSuffix(sourceURL.Path, ".ics") {
+		return errors.New(`iCalendar URL must end with ".ics"`)
+	}
 	return nil
 }
 
 func validateICalName(name string) error {
 	if name == "" || name == "." || path.Base(name) != name {
 		return errors.New("iCalendar name must be a single file name")
-	}
-	if strings.HasSuffix(name, ".key") || strings.HasSuffix(name, ".readonly") {
-		return errors.New("iCalendar name uses a reserved suffix")
 	}
 	return nil
 }

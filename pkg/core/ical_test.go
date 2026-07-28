@@ -76,6 +76,33 @@ END:VCALENDAR`
 	}
 }
 
+func TestParseICalDefaultsAllDayEventWithoutEndToOneDay(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:icalendar-ruby
+BEGIN:VEVENT
+UID:holiday@example.com
+DTSTART;VALUE=DATE:20240101
+SUMMARY:Nový rok
+RRULE:FREQ=YEARLY;COUNT=6
+END:VEVENT
+END:VCALENDAR`
+
+	events, err := parseICal(strings.NewReader(input), "Holidays", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+
+	assertICalTime(t, events[0].From, time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local))
+	assertICalTime(t, events[0].To, time.Date(2024, 1, 2, 0, 0, 0, 0, time.Local))
+	if events[0].Repeat == nil {
+		t.Fatal("Repeat is nil")
+	}
+}
+
 func TestParseICalSupportsRecurrenceModifiers(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 VERSION:2.0

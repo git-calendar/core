@@ -8,6 +8,10 @@ const (
 	GitRemoteName string = "origin"
 	GitBranchName string = "main"
 
+	KeyFileSuffix      = ".key"
+	ReadonlyFileSuffix = ".readonly"
+	ICalURLFileSuffix  = ".url"
+
 	// IndexFileName     string = "index.json"
 	// RichIndexFileName string = "index-rich.json"
 )

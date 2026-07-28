@@ -56,7 +56,10 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 }
 
 func TestImportICalURLRefetchesOnLoad(t *testing.T) {
-	const name = "test-ical-url"
+	const (
+		name        = "test-ical-url"
+		renamedName = "test-ical-url-renamed"
+	)
 
 	var feed atomic.Value
 	feed.Store(icalFeed("First title"))
@@ -76,7 +79,10 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	if err := c.ImportICalURL(name, sourceURL); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = c.RemoveCalendar(name) })
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(name)
+		_ = c.RemoveCalendar(renamedName)
+	})
 
 	events := importedEvents(c, name)
 	if len(events) != 1 || events[0].Title != "First title" {
@@ -91,17 +97,30 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	found := false
 	for _, calendar := range calendars {
-		if calendar.Name == name && !calendar.Readonly {
+		if calendar.Name != name {
+			continue
+		}
+		found = true
+		if !calendar.Readonly {
 			t.Fatal("URL calendar is not read-only")
 		}
+	}
+	if !found {
+		t.Fatal("URL calendar was not registered")
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(home, filesystem.DirName, name))
+	calendarRoot := filepath.Join(home, filesystem.DirName)
+	if _, err := os.Stat(filepath.Join(calendarRoot, name)); !os.IsNotExist(err) {
+		t.Fatalf("unsuffixed URL file exists or could not be checked: %v", err)
+	}
+	urlFilePath := filepath.Join(calendarRoot, name+".url")
+	data, err := os.ReadFile(urlFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,6 +142,29 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	}
 	if requests.Load() != 2 {
 		t.Errorf("URL was fetched %d times, want 2", requests.Load())
+	}
+
+	if err := c.RenameCalendar(name, renamedName); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(urlFilePath); !os.IsNotExist(err) {
+		t.Fatalf("old URL file still exists or could not be checked after rename: %v", err)
+	}
+	renamedURLFilePath := filepath.Join(calendarRoot, renamedName+".url")
+	if data, err := os.ReadFile(renamedURLFilePath); err != nil {
+		t.Fatal(err)
+	} else if string(data) != server.URL {
+		t.Errorf("renamed URL file = %q, want %q", data, server.URL)
+	}
+	if requests.Load() != 3 {
+		t.Errorf("URL was fetched %d times after rename, want 3", requests.Load())
+	}
+
+	if err := c.RemoveCalendar(renamedName); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(renamedURLFilePath); !os.IsNotExist(err) {
+		t.Fatalf("URL file still exists or could not be checked after removal: %v", err)
 	}
 }
 
