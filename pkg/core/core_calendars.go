@@ -149,9 +149,9 @@ func (c *Core) LoadCalendars() error {
 	// load tree + events
 	// TODO do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
-		if sourceURL, ok := icalURLs[cal.Name]; ok {
-			if err := c.loadICalURL(cal.Name, sourceURL); err != nil {
-				fmt.Printf("WARN: failed to load iCalendar URL %q: %v\n", cal.Name, err)
+		if _, ok := icalURLs[cal.Name]; ok {
+			if err := c.loadICalFile(cal.Name); err != nil {
+				fmt.Printf("WARN: failed to load cached iCalendar %q: %v\n", cal.Name, err)
 			}
 			continue
 		}
@@ -283,6 +283,9 @@ func (c *Core) RemoveCalendar(name string) error {
 		if err := c.fs.Remove(name + ICalURLFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("failed to remove iCalendar URL file: %w", err)
 		}
+		if err := c.fs.Remove(name + ICalFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove cached iCalendar file: %w", err)
+		}
 	} else {
 		// remove dir from filesystem
 		if err := gogitutil.RemoveAll(c.fs, name); err != nil {
@@ -321,6 +324,10 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 		}
 		if err := c.fs.Rename(oldName+ICalURLFileSuffix, newName+ICalURLFileSuffix); err != nil {
 			return fmt.Errorf("failed to rename iCalendar URL file: %w", err)
+		}
+		if err := c.fs.Rename(oldName+ICalFileSuffix, newName+ICalFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = c.fs.Rename(newName+ICalURLFileSuffix, oldName+ICalURLFileSuffix)
+			return fmt.Errorf("failed to rename cached iCalendar file: %w", err)
 		}
 		return c.LoadCalendars()
 	}

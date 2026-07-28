@@ -11,6 +11,7 @@ const (
 	KeyFileSuffix      = ".key"
 	ReadonlyFileSuffix = ".readonly"
 	ICalURLFileSuffix  = ".url"
+	ICalFileSuffix     = ".ics"
 
 	// IndexFileName     string = "index.json"
 	// RichIndexFileName string = "index-rich.json"

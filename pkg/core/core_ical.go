@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-billy/v5/util"
 	"github.com/google/uuid"
 )
 
@@ -38,7 +40,7 @@ func (c *Core) ImportICalFile(calendar string, r io.Reader) error {
 	return nil
 }
 
-// ImportICalURL creates a read-only calendar that is fetched on every load.
+// ImportICalURL creates a read-only calendar and caches its feed.
 func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 	if err := validateICalURL(sourceURL); err != nil {
 		return err
@@ -61,6 +63,12 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	cacheName := name + ICalFileSuffix
+	if _, err := c.fs.Stat(cacheName); err == nil {
+		return fmt.Errorf("file named %s already exists", cacheName)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 
 	file, err := c.fs.Create(fileName)
 	if err != nil {
@@ -77,8 +85,12 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 	}
 
 	c.calendars[name] = &Calendar{Name: name, Readonly: true, ICalURL: sourceURL}
-	if err := c.loadICalURL(name, sourceURL); err != nil {
-		fmt.Printf("WARN: failed to load iCalendar %q: %v\n", name, err)
+	if err := c.fetchICalURL(name, sourceURL); err != nil {
+		fmt.Printf("WARN: failed to fetch iCalendar %q: %v\n", name, err)
+		return nil
+	}
+	if err := c.loadICalFile(name); err != nil {
+		fmt.Printf("WARN: failed to load cached iCalendar %q: %v\n", name, err)
 	}
 	return nil
 }
@@ -105,7 +117,7 @@ func (c *Core) readICalURL(name string) (*url.URL, error) {
 	return sourceURL, nil
 }
 
-func (c *Core) loadICalURL(name string, sourceURL *url.URL) error {
+func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 	requestURL := sourceURL
 	if c.proxyUrl != nil {
 		requestURL = useCorsProxy(sourceURL, c.proxyUrl)
@@ -127,7 +139,27 @@ func (c *Core) loadICalURL(name string, sourceURL *url.URL) error {
 		return fmt.Errorf("fetch iCalendar: %s", response.Status)
 	}
 
-	events, err := parseICal(response.Body, name, true)
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return err
+	}
+	if _, err := parseICal(bytes.NewReader(data), name, true); err != nil {
+		return err
+	}
+	if err := util.WriteFile(c.fs, name+ICalFileSuffix, data, 0o644); err != nil {
+		return fmt.Errorf("cache iCalendar: %w", err)
+	}
+	return nil
+}
+
+func (c *Core) loadICalFile(name string) error {
+	file, err := c.fs.Open(name + ICalFileSuffix)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	events, err := parseICal(file, name, true)
 	if err != nil {
 		return err
 	}

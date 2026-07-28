@@ -67,14 +67,21 @@ func (c *Core) SyncAll() error {
 	errs := make(chan error, len(c.calendars))
 
 	for _, cal := range c.calendars {
-		if cal == nil || cal.repository == nil {
+		if cal == nil {
 			continue // important to check here; syncCalendar and other do assume this
 		}
 
 		wg.Add(1)
 		go func(cal *Calendar) {
 			defer wg.Done()
-			if err := c.syncCalendar(cal); err != nil {
+
+			var err error
+			if cal.ICalURL != nil {
+				err = c.fetchICalURL(cal.Name, cal.ICalURL)
+			} else if cal.repository != nil {
+				err = c.syncCalendar(cal)
+			}
+			if err != nil {
 				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
 			}
 		}(cal)

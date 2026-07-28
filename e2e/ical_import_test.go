@@ -17,6 +17,8 @@ import (
 )
 
 func TestImportICalFilePersistsEvents(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	const calendar = "test-ical-file"
 	c := core.NewCore()
 	if err := c.CreateCalendar(calendar, ""); err != nil {
@@ -55,7 +57,9 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 	}
 }
 
-func TestImportICalURLRefetchesOnLoad(t *testing.T) {
+func TestImportICalURLCachesUntilSync(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	const (
 		name        = "test-ical-url"
 		renamedName = "test-ical-url-renamed"
@@ -64,8 +68,13 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	var feed atomic.Value
 	feed.Store(icalFeed("First title"))
 	var requests atomic.Int32
+	var offline atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
+		if offline.Load() {
+			http.Error(w, "offline", http.StatusServiceUnavailable)
+			return
+		}
 		_, _ = w.Write([]byte(feed.Load().(string)))
 	}))
 	defer server.Close()
@@ -127,18 +136,37 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	if string(data) != sourceURL.String() {
 		t.Errorf("URL file = %q, want %q", data, sourceURL)
 	}
+	icalFilePath := filepath.Join(calendarRoot, name+core.ICalFileSuffix)
+	if data, err := os.ReadFile(icalFilePath); err != nil {
+		t.Fatal(err)
+	} else if string(data) != icalFeed("First title") {
+		t.Errorf("cached iCalendar = %q", data)
+	}
 
 	feed.Store(icalFeed("Second title"))
+	offline.Store(true)
 	if err := c.LoadCalendars(); err != nil {
 		t.Fatal(err)
 	}
 
 	events = importedEvents(c, name)
+	if len(events) != 1 || events[0].Title != "First title" {
+		t.Fatalf("cached URL import = %+v", events)
+	}
+	if requests.Load() != 1 {
+		t.Errorf("URL was fetched %d times during load, want 1", requests.Load())
+	}
+
+	offline.Store(false)
+	if err := c.SyncAll(); err != nil {
+		t.Fatal(err)
+	}
+	events = importedEvents(c, name)
 	if len(events) != 1 || events[0].Title != "Second title" {
-		t.Fatalf("refetched URL import = %+v", events)
+		t.Fatalf("synced URL import = %+v", events)
 	}
 	if events[0].Id != id {
-		t.Errorf("event ID changed after refetch: got %s, want %s", events[0].Id, id)
+		t.Errorf("event ID changed after sync: got %s, want %s", events[0].Id, id)
 	}
 	if requests.Load() != 2 {
 		t.Errorf("URL was fetched %d times, want 2", requests.Load())
@@ -150,14 +178,23 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	if _, err := os.Stat(urlFilePath); !os.IsNotExist(err) {
 		t.Fatalf("old URL file still exists or could not be checked after rename: %v", err)
 	}
+	if _, err := os.Stat(icalFilePath); !os.IsNotExist(err) {
+		t.Fatalf("old cached iCalendar still exists or could not be checked after rename: %v", err)
+	}
 	renamedURLFilePath := filepath.Join(calendarRoot, renamedName+".url")
 	if data, err := os.ReadFile(renamedURLFilePath); err != nil {
 		t.Fatal(err)
 	} else if string(data) != sourceURL.String() {
 		t.Errorf("renamed URL file = %q, want %q", data, sourceURL)
 	}
-	if requests.Load() != 3 {
-		t.Errorf("URL was fetched %d times after rename, want 3", requests.Load())
+	renamedICalFilePath := filepath.Join(calendarRoot, renamedName+core.ICalFileSuffix)
+	if data, err := os.ReadFile(renamedICalFilePath); err != nil {
+		t.Fatal(err)
+	} else if string(data) != icalFeed("Second title") {
+		t.Errorf("renamed cached iCalendar = %q", data)
+	}
+	if requests.Load() != 2 {
+		t.Errorf("URL was fetched %d times after rename, want 2", requests.Load())
 	}
 
 	if err := c.RemoveCalendar(renamedName); err != nil {
@@ -165,6 +202,9 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	}
 	if _, err := os.Stat(renamedURLFilePath); !os.IsNotExist(err) {
 		t.Fatalf("URL file still exists or could not be checked after removal: %v", err)
+	}
+	if _, err := os.Stat(renamedICalFilePath); !os.IsNotExist(err) {
+		t.Fatalf("cached iCalendar still exists or could not be checked after removal: %v", err)
 	}
 }
 
