@@ -19,7 +19,8 @@ func main() {
 }
 
 func RegisterCallbacks(api *api.Api) {
-	js.Global().Set("CalendarCore",
+	js.Global().Set(
+		"CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
 			"createCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
