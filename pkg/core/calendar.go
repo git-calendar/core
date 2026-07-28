@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -16,6 +17,7 @@ type Calendar struct {
 	Tags          []Tag
 	EncryptionKey []byte
 	Readonly      bool
+	ICalURL       *url.URL
 
 	repository *gogit.Repository
 }
@@ -66,6 +68,7 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 		Name      string `json:"name"`
 		Tags      []Tag  `json:"tags"`
 		RemoteURL string `json:"remote_url"`
+		ICalUrl   string `json:"ical_url"`
 		Encrypted bool   `json:"encrypted"`
 		Readonly  bool   `json:"readonly"`
 	}
@@ -75,10 +78,16 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
+	var icalURL string
+	if cal.ICalURL != nil {
+		icalURL = cal.ICalURL.String()
+	}
+
 	return json.Marshal(calendarJSON{
 		Name:      cal.Name,
 		Tags:      cal.Tags,
 		RemoteURL: remoteURL,
+		ICalUrl:   icalURL,
 		Encrypted: cal.IsEncrypted(),
 		Readonly:  cal.Readonly,
 	})

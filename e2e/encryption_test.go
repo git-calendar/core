@@ -31,7 +31,7 @@ func TestCreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, fmt.Sprintf("%s.key", TestCalendarName)))
+	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName+core.KeyFileSuffix))
 	if err != nil {
 		t.Errorf("failed to read key file: %v", err)
 	}

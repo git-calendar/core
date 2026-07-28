@@ -369,7 +369,7 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 			Title:    "matching event",
 			From:     from,
 			To:       to,
-			TagId:    uuidPtr(tagA),
+			TagId:    new(tagA),
 		},
 		{
 			Id:       wrongTagID,
@@ -377,7 +377,7 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 			Title:    "wrong tag",
 			From:     from,
 			To:       to,
-			TagId:    uuidPtr(tagB),
+			TagId:    new(tagB),
 		},
 		{
 			Id:       wrongCalendarID,
@@ -385,7 +385,7 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 			Title:    "wrong calendar",
 			From:     from,
 			To:       to,
-			TagId:    uuidPtr(tagA),
+			TagId:    new(tagA),
 		},
 	}
 
@@ -396,7 +396,8 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 	}
 
 	got := c.GetEvents(from.Add(-time.Hour), to.Add(time.Hour), core.GetEventsFilter{
-		calendarA: {tagA},
+		calendarA: {HiddenTagIds: []uuid.UUID{tagB}},
+		calendarB: {HiddenTagIds: []uuid.UUID{tagA}},
 	})
 
 	if len(got) != 1 {
@@ -432,7 +433,7 @@ func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 		Title:    "event A",
 		From:     from,
 		To:       to,
-		TagId:    uuidPtr(tagA),
+		TagId:    new(tagA),
 	}
 	eventB := core.Event{
 		Id:       uuid.New(),
@@ -440,7 +441,7 @@ func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 		Title:    "event B",
 		From:     from.Add(30 * time.Minute),
 		To:       to.Add(30 * time.Minute),
-		TagId:    uuidPtr(tagB),
+		TagId:    new(tagB),
 	}
 
 	if _, err := c.CreateEvent(eventA); err != nil {
@@ -462,10 +463,6 @@ func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 	if !hasEvent(got, eventB.Id) {
 		t.Errorf("missing event B")
 	}
-}
-
-func uuidPtr(id uuid.UUID) *uuid.UUID {
-	return &id
 }
 
 func hasEvent(events []core.Event, id uuid.UUID) bool {

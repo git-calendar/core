@@ -4,6 +4,7 @@ package main
 
 import (
 	"syscall/js"
+	_ "time/tzdata" // microslop dates need this
 
 	"github.com/git-calendar/core/pkg/api"
 )
@@ -18,7 +19,8 @@ func main() {
 }
 
 func RegisterCallbacks(api *api.Api) {
-	js.Global().Set("CalendarCore",
+	js.Global().Set(
+		"CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
 			"createCalendar": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
@@ -48,6 +50,16 @@ func RegisterCallbacks(api *api.Api) {
 			"loadCalendars": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return nil, api.LoadCalendars()
+				})
+			}),
+			"importICalFile": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.ImportICalFile(args[0].String(), args[1].String())
+				})
+			}),
+			"importICalURL": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return nil, api.ImportICalURL(args[0].String(), args[1].String())
 				})
 			}),
 			"updateRemote": js.FuncOf(func(this js.Value, args []js.Value) any {

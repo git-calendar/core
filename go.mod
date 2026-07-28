@@ -3,6 +3,7 @@ module github.com/git-calendar/core
 go 1.26.4
 
 require (
+	github.com/arran4/golang-ical v0.3.5
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/go-cmp v0.7.0
@@ -10,6 +11,7 @@ require (
 	github.com/jedisct1/go-aes-siv v1.0.0
 	github.com/rdleal/intervalst v1.5.0
 	github.com/teambition/rrule-go v1.8.2
+	github.com/thommeo/winianatz v0.0.2
 	golang.org/x/crypto v0.53.0
 )
 

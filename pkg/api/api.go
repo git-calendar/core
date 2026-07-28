@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/git-calendar/core/pkg/core"
@@ -55,8 +56,19 @@ func (a *Api) LoadCalendars() error                      { return a.inner.LoadCa
 func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
 func (a *Api) SyncAll() error                            { return a.inner.SyncAll() }
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
+func (a *Api) ImportICalFile(calendar, data string) error {
+	return a.inner.ImportICalFile(calendar, strings.NewReader(data))
+}
 
 // ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
+
+func (a *Api) ImportICalURL(name, rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("iCalendar URL is invalid: %w", err)
+	}
+	return a.inner.ImportICalURL(name, parsed)
+}
 
 func (a *Api) UpdateRemote(calendar string, remoteUrl string, readonly bool) error {
 	parsed, err := url.Parse(remoteUrl)

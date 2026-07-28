@@ -74,6 +74,7 @@ func (c *Core) ListCalendars() ([]Calendar, error) {
 			EncryptionKey: slices.Clone(cal.EncryptionKey),
 			repository:    cal.repository,
 			Readonly:      cal.Readonly,
+			ICalURL:       cal.ICalURL,
 		})
 	}
 
@@ -90,11 +91,25 @@ func (c *Core) LoadCalendars() error {
 		return fmt.Errorf("failed to list all directories in root: %w", err)
 	}
 
+	icalURLs := make(map[string]*url.URL)
 	for _, entry := range entries {
+		name := entry.Name()
 		if !entry.IsDir() {
+			if !strings.HasSuffix(name, ICalURLFileSuffix) {
+				continue
+			}
+
+			calendarName := strings.TrimSuffix(name, ICalURLFileSuffix)
+			if err := validateICalName(calendarName); err != nil {
+				continue
+			}
+			sourceURL, err := c.readICalURL(name)
+			if err != nil {
+				continue
+			}
+			icalURLs[calendarName] = sourceURL
 			continue
 		}
-		name := entry.Name()
 
 		repo, err := c.initCalendarRepo(name)
 		if err != nil {
@@ -104,7 +119,7 @@ func (c *Core) LoadCalendars() error {
 
 		// load key file
 		var key []byte = nil
-		keyFile, err := c.fs.Open(fmt.Sprintf("%s.key", name))
+		keyFile, err := c.fs.Open(name + KeyFileSuffix)
 		if err == nil {
 			if key, err = io.ReadAll(keyFile); err != nil {
 				fmt.Printf("failed to read encryption key for %q calendar: %v\n", name, err)
@@ -127,9 +142,20 @@ func (c *Core) LoadCalendars() error {
 		c.calendars[name] = cal
 	}
 
+	for name, icalURL := range icalURLs {
+		c.calendars[name] = &Calendar{Name: name, Readonly: true, ICalURL: icalURL}
+	}
+
 	// load tree + events
 	// TODO do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
+		if _, ok := icalURLs[cal.Name]; ok {
+			if err := c.loadICalFile(cal.Name); err != nil {
+				fmt.Printf("WARN: failed to load cached iCalendar %q: %v\n", cal.Name, err)
+			}
+			continue
+		}
+
 		wt, _ := cal.repository.Worktree()
 		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
 		eventEntries, _ := eventsDir.ReadDir("/")
@@ -173,6 +199,9 @@ func (c *Core) LoadCalendars() error {
 
 // Clones a repository/calendar from url, using CORS proxy, if specified.
 func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) error {
+	if !strings.HasSuffix(repoUrl.Path, ".git") {
+		return errors.New(`remote URL must end with ".git"`)
+	}
 	calendarName := calendarNameFromUrl(repoUrl)
 	if cal, ok := c.calendars[calendarName]; ok || cal != nil {
 		return errors.New("calendar with this name already exists")
@@ -249,13 +278,23 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 
 // Removes and deletes the whole calendar.
 func (c *Core) RemoveCalendar(name string) error {
-	// remove dir from filesystem
-	if err := gogitutil.RemoveAll(c.fs, name); err != nil {
-		return fmt.Errorf("failed to remove repo directory: %w", err)
-	}
+	calendar := c.calendars[name]
+	if calendar != nil && calendar.repository == nil {
+		if err := c.fs.Remove(name + ICalURLFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove iCalendar URL file: %w", err)
+		}
+		if err := c.fs.Remove(name + ICalFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove cached iCalendar file: %w", err)
+		}
+	} else {
+		// remove dir from filesystem
+		if err := gogitutil.RemoveAll(c.fs, name); err != nil {
+			return fmt.Errorf("failed to remove repo directory: %w", err)
+		}
 
-	// try to remove encryption key
-	_ = c.fs.Remove(fmt.Sprintf("%s.key", name))
+		// try to remove encryption key
+		_ = c.fs.Remove(name + KeyFileSuffix)
+	}
 
 	// remove from map
 	delete(c.calendars, name)
@@ -279,28 +318,41 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 	}
 
 	calendar := c.calendars[oldName]
+	if calendar.repository == nil {
+		if err := validateICalName(newName); err != nil {
+			return err
+		}
+		if err := c.fs.Rename(oldName+ICalURLFileSuffix, newName+ICalURLFileSuffix); err != nil {
+			return fmt.Errorf("failed to rename iCalendar URL file: %w", err)
+		}
+		if err := c.fs.Rename(oldName+ICalFileSuffix, newName+ICalFileSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			_ = c.fs.Rename(newName+ICalURLFileSuffix, oldName+ICalURLFileSuffix)
+			return fmt.Errorf("failed to rename cached iCalendar file: %w", err)
+		}
+		return c.LoadCalendars()
+	}
 	if err := c.fs.Rename(oldName, newName); err != nil {
-		return fmt.Errorf("failed to rename the repository directory: %w", err)
+		return fmt.Errorf("failed to rename calendar: %w", err)
 	}
 	if len(calendar.EncryptionKey) != 0 { // TODO: maybe check c.fs.Stat() instead?
-		if err := c.fs.Rename(fmt.Sprintf("%s.key", oldName), fmt.Sprintf("%s.key", newName)); err != nil {
+		if err := c.fs.Rename(oldName+KeyFileSuffix, newName+KeyFileSuffix); err != nil {
 			_ = c.fs.Rename(newName, oldName) // try to rename repo back
 			return fmt.Errorf("failed to rename the encryption key file: %w", err)
 		}
 	}
 	if c.isCalendarReadonly(oldName) {
-		if err := c.fs.Rename(fmt.Sprintf("%s.readonly", oldName), fmt.Sprintf("%s.readonly", newName)); err != nil {
-			_ = c.fs.Rename(newName, oldName)                                               // try to rename repo back
-			_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName)) // try to rename key back (maybe it didn't exist in the first place, mehh)
+		if err := c.fs.Rename(oldName+ReadonlyFileSuffix, newName+ReadonlyFileSuffix); err != nil {
+			_ = c.fs.Rename(newName, oldName)                             // try to rename repo back
+			_ = c.fs.Rename(newName+KeyFileSuffix, oldName+KeyFileSuffix) // try to rename key back (maybe it didn't exist in the first place, mehh)
 			return fmt.Errorf("failed to rename the encryption key file: %w", err)
 		}
 	}
 
 	newRepo, err := c.initCalendarRepo(newName)
 	if err != nil {
-		_ = c.fs.Rename(newName, oldName)                                                         // try to rename repo back
-		_ = c.fs.Rename(fmt.Sprintf("%s.key", newName), fmt.Sprintf("%s.key", oldName))           // try to rename key back (maybe it didn't exist in the first place, mehh)
-		_ = c.fs.Rename(fmt.Sprintf("%s.readonly", newName), fmt.Sprintf("%s.readonly", oldName)) // try to rename readonly sign back (maybe it didn't exist in the first place, mehh)
+		_ = c.fs.Rename(newName, oldName)                                       // try to rename repo back
+		_ = c.fs.Rename(newName+KeyFileSuffix, oldName+KeyFileSuffix)           // try to rename key back (maybe it didn't exist in the first place, mehh)
+		_ = c.fs.Rename(newName+ReadonlyFileSuffix, oldName+ReadonlyFileSuffix) // try to rename readonly sign back (maybe it didn't exist in the first place, mehh)
 		return fmt.Errorf("failed to load new repo dir: %w", err)
 	}
 	calendar.Name = newName
@@ -333,7 +385,7 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) 
 	}
 
 	if !strings.HasSuffix(remoteURL.Path, ".git") {
-		return errors.New(`remote URL has to end with ".git"`)
+		return errors.New(`remote URL must end with ".git"`)
 	}
 
 	cfg, _ := cal.repository.Config()
@@ -357,7 +409,7 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) 
 func (c *Core) createKeyFile(calendarName, password string) ([]byte, error) {
 	key := encryption.DeriveKey(password, []byte(calendarName))
 
-	keyFile, err := c.fs.Create(fmt.Sprintf("%s.key", calendarName))
+	keyFile, err := c.fs.Create(calendarName + KeyFileSuffix)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key file: %w", err)
 	}
@@ -371,7 +423,7 @@ func (c *Core) createKeyFile(calendarName, password string) ([]byte, error) {
 }
 
 func (c *Core) updateReadonlyFile(calendarName string, readonly bool) error {
-	path := fmt.Sprintf("%s.readonly", calendarName)
+	path := calendarName + ReadonlyFileSuffix
 
 	if readonly {
 		file, err := c.fs.Create(path)
@@ -394,7 +446,6 @@ func (c *Core) updateReadonlyFile(calendarName string, readonly bool) error {
 }
 
 func (c *Core) isCalendarReadonly(calendarName string) bool {
-	path := fmt.Sprintf("%s.readonly", calendarName)
-	_, err := c.fs.Stat(path)
+	_, err := c.fs.Stat(calendarName + ReadonlyFileSuffix)
 	return err == nil
 }

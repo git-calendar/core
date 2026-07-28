@@ -142,17 +142,22 @@ func getTimeFromUUID(id uuid.UUID) time.Time {
 	return time.Unix(int64(unix32), 0)
 }
 
-type GetEventsFilter map[string][]uuid.UUID // map[Calendar.Name]Tag.Id
+type CalendarEventsFilter struct {
+	HiddenTagIds []uuid.UUID `json:"hidden_tag_ids"`
+	HideUntagged bool        `json:"hide_untagged"`
+}
 
-func checkFilter(e *Event, f GetEventsFilter) bool {
-	tags, ok := f[e.Calendar]
+type GetEventsFilter map[string]CalendarEventsFilter
+
+func checkFilter(e *Event, filters GetEventsFilter) bool {
+	filter, ok := filters[e.Calendar]
 	if !ok {
-		return false // doesn't satisfy filtered calendars
-	}
-	if e.TagId == nil {
 		return true
 	}
-	return slices.ContainsFunc(tags, func(u uuid.UUID) bool {
-		return u == *e.TagId
-	})
+
+	if e.TagId == nil {
+		return !filter.HideUntagged
+	}
+
+	return !slices.Contains(filter.HiddenTagIds, *e.TagId)
 }
