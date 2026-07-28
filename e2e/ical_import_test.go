@@ -70,7 +70,7 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sourceURL, err := url.Parse(server.URL)
+	sourceURL, err := url.Parse(server.URL + "/calendar.ics")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +124,8 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != server.URL {
-		t.Errorf("URL file = %q, want %q", data, server.URL)
+	if string(data) != sourceURL.String() {
+		t.Errorf("URL file = %q, want %q", data, sourceURL)
 	}
 
 	feed.Store(icalFeed("Second title"))
@@ -153,8 +153,8 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 	renamedURLFilePath := filepath.Join(calendarRoot, renamedName+".url")
 	if data, err := os.ReadFile(renamedURLFilePath); err != nil {
 		t.Fatal(err)
-	} else if string(data) != server.URL {
-		t.Errorf("renamed URL file = %q, want %q", data, server.URL)
+	} else if string(data) != sourceURL.String() {
+		t.Errorf("renamed URL file = %q, want %q", data, sourceURL)
 	}
 	if requests.Load() != 3 {
 		t.Errorf("URL was fetched %d times after rename, want 3", requests.Load())

@@ -9,6 +9,7 @@ import (
 	ics "github.com/arran4/golang-ical"
 	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
+	"github.com/thommeo/winianatz"
 )
 
 // parseICal parses ical events from r to []Event.
@@ -23,6 +24,7 @@ func parseICal(r io.Reader, calendar string, stableIDs bool) ([]Event, error) {
 	sourceEvents := cal.Events()
 	events := make([]Event, 0, len(sourceEvents))
 	for i, source := range sourceEvents {
+		normalizeTimeZones(source)
 		event, err := parseICalEvent(source, calendar)
 		if err != nil {
 			return nil, fmt.Errorf("import event %d: %w", i+1, err)
@@ -104,6 +106,18 @@ func icalText(event *ics.VEvent, property ics.ComponentProperty) string {
 		return ""
 	}
 	return value.Value
+}
+
+func normalizeTimeZones(event *ics.VEvent) {
+	for i := range event.Properties {
+		tzid := event.Properties[i].ICalParameters[string(ics.ParameterTzid)]
+		if len(tzid) != 1 {
+			continue
+		}
+		if zone, err := winianatz.FromMicrosoftAlias(tzid[0]); err == nil {
+			tzid[0] = zone.IANA
+		}
+	}
 }
 
 func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {

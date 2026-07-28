@@ -4,6 +4,7 @@ package main
 
 import (
 	"syscall/js"
+	_ "time/tzdata" // microslop dates need this
 
 	"github.com/git-calendar/core/pkg/api"
 )

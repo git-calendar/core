@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -124,6 +125,68 @@ END:VCALENDAR`
 	weekdays := events[0].Repeat.GetRRule().OrigOptions.Byweekday
 	if len(weekdays) != 2 || weekdays[0].String() != "MO" || weekdays[1].String() != "WE" {
 		t.Fatalf("Byweekday = %v, want [MO WE]", weekdays)
+	}
+}
+
+// fuck you microslop
+func TestParseICalSupportsWindowsTimeZones(t *testing.T) {
+	tests := []struct {
+		name      string
+		tzid      string
+		start     string
+		end       string
+		wantStart time.Time
+		wantEnd   time.Time
+	}{
+		{
+			name:      "Central Europe daylight time",
+			tzid:      "Central Europe Standard Time",
+			start:     "20260729T160000",
+			end:       "20260729T183000",
+			wantStart: time.Date(2026, 7, 29, 14, 0, 0, 0, time.UTC),
+			wantEnd:   time.Date(2026, 7, 29, 16, 30, 0, 0, time.UTC),
+		},
+		{
+			name:      "Pacific standard time",
+			tzid:      "Pacific Standard Time",
+			start:     "20260115T100000",
+			end:       "20260115T110000",
+			wantStart: time.Date(2026, 1, 15, 18, 0, 0, 0, time.UTC),
+			wantEnd:   time.Date(2026, 1, 15, 19, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "India half-hour offset",
+			tzid:      "India Standard Time",
+			start:     "20260115T100000",
+			end:       "20260115T110000",
+			wantStart: time.Date(2026, 1, 15, 4, 30, 0, 0, time.UTC),
+			wantEnd:   time.Date(2026, 1, 15, 5, 30, 0, 0, time.UTC),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := fmt.Sprintf(`BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:microsoft@example.com
+SUMMARY:MS event
+DTSTART;TZID=%s:%s
+DTEND;TZID=%s:%s
+END:VEVENT
+END:VCALENDAR`, test.tzid, test.start, test.tzid, test.end)
+
+			events, err := parseICal(strings.NewReader(input), "Microsoft", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+
+			assertICalTime(t, events[0].From, test.wantStart)
+			assertICalTime(t, events[0].To, test.wantEnd)
+		})
 	}
 }
 
