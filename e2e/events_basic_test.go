@@ -396,7 +396,8 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 	}
 
 	got := c.GetEvents(from.Add(-time.Hour), to.Add(time.Hour), core.GetEventsFilter{
-		calendarA: {tagA},
+		calendarA: {HiddenTagIds: []uuid.UUID{tagB}},
+		calendarB: {HiddenTagIds: []uuid.UUID{tagA}},
 	})
 
 	if len(got) != 1 {

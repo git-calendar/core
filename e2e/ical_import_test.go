@@ -171,7 +171,7 @@ func TestImportICalURLRefetchesOnLoad(t *testing.T) {
 func importedEvents(c *core.Core, calendar string) []core.Event {
 	from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	return c.GetEvents(from, to, core.GetEventsFilter{calendar: nil})
+	return c.GetEvents(from, to, core.GetEventsFilter{calendar: {}})
 }
 
 func icalFeed(title string) string {
