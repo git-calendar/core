@@ -17,7 +17,7 @@ import (
 )
 
 // ImportICalFile imports events once and saves them like normal events.
-func (c *Core) ImportICalFile(calendar string, r io.Reader) error {
+func (c *Core) ImportICalFile(calendar string, tagId *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
 		return fmt.Errorf("calendar not found: %s", calendar)
@@ -29,6 +29,12 @@ func (c *Core) ImportICalFile(calendar string, r io.Reader) error {
 	events, err := parseICal(r, calendar, false)
 	if err != nil {
 		return err
+	}
+
+	if tagId != nil && *tagId != uuid.Nil {
+		for i := range events {
+			events[i].TagId = tagId
+		}
 	}
 
 	for i, event := range events {

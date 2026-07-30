@@ -54,7 +54,7 @@ func RegisterCallbacks(api *api.Api) {
 			}),
 			"importICalFile": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
-					return nil, api.ImportICalFile(args[0].String(), args[1].String())
+					return nil, api.ImportICalFile(args[0].String(), args[1].String(), args[2].String())
 				})
 			}),
 			"importICalURL": js.FuncOf(func(this js.Value, args []js.Value) any {

@@ -26,7 +26,7 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = c.RemoveCalendar(calendar) })
 
-	if err := c.ImportICalFile(calendar, strings.NewReader(icalFeed("Imported event"))); err != nil {
+	if err := c.ImportICalFile(calendar, nil, strings.NewReader(icalFeed("Imported event"))); err != nil {
 		t.Fatal(err)
 	}
 
