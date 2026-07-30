@@ -57,6 +57,60 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 	}
 }
 
+func TestUpdateICalURL(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const name = "test-update-ical-url"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/first.ics":
+			_, _ = w.Write([]byte(icalFeed("First title")))
+		case "/second.ics":
+			_, _ = w.Write([]byte(icalFeed("Second title")))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	firstURL, err := url.Parse(server.URL + "/first.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondURL, err := url.Parse(server.URL + "/second.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := core.NewCore()
+	if err := c.ImportICalURL(name, firstURL); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.RemoveCalendar(name) })
+
+	if err := c.UpdateICalURL(name, secondURL); err != nil {
+		t.Fatal(err)
+	}
+
+	events := importedEvents(c, name)
+	if len(events) != 1 || events[0].Title != "Second title" {
+		t.Fatalf("updated URL import = %+v", events)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	urlPath := filepath.Join(home, filesystem.DirName, name+core.ICalURLFileSuffix)
+	data, err := os.ReadFile(urlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != secondURL.String() {
+		t.Errorf("URL file = %q, want %q", data, secondURL)
+	}
+}
+
 func TestImportICalURLCachesUntilSync(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

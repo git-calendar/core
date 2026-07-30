@@ -101,6 +101,26 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 	return nil
 }
 
+// UpdateICalURL replaces an iCalendar calendar's source URL and refreshes its cache.
+func (c *Core) UpdateICalURL(name string, sourceURL *url.URL) error {
+	if err := validateICalURL(sourceURL); err != nil {
+		return err
+	}
+
+	calendar, exists := c.calendars[name]
+	if !exists || calendar.ICalURL == nil {
+		return fmt.Errorf("iCalendar calendar not found: %s", name)
+	}
+
+	if err := c.fetchICalURL(name, sourceURL); err != nil {
+		return fmt.Errorf("fetch iCalendar URL: %w", err)
+	}
+	if err := util.WriteFile(c.fs, name+ICalURLFileSuffix, []byte(sourceURL.String()), 0o644); err != nil {
+		return fmt.Errorf("write iCalendar URL file: %w", err)
+	}
+	return c.LoadCalendars()
+}
+
 func (c *Core) readICalURL(name string) (*url.URL, error) {
 	file, err := c.fs.Open(name)
 	if err != nil {

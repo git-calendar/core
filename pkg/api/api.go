@@ -67,6 +67,14 @@ func (a *Api) ImportICalURL(name, rawURL string) error {
 	return a.inner.ImportICalURL(name, parsed)
 }
 
+func (a *Api) UpdateICalURL(name, rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("iCalendar URL is invalid: %w", err)
+	}
+	return a.inner.UpdateICalURL(name, parsed)
+}
+
 func (a *Api) ImportICalFile(calendar, tagId, data string) error {
 	parsedId, err := uuid.Parse(tagId)
 	if err != nil {
