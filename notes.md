@@ -6,18 +6,16 @@
     - [x] interval-btree?
     - [ ] smart indexing (index file)
   - [ ] repeating events
-    - infinite shadow (ghost events)
+    - [ ] infinite repeat (ghost events)
     - [x] basic repetition
     - [x] update repeating
-    - [ ] remove repeating
+    - [x] remove repeating
       - pkg/core/core_events.go:139-143
       - pkg/core/core_events.go:359
-    - [ ] tests
+    - [x] tests
   - [x] connect repeating event exceptions
     - exception needs to have uuid
     - time encoded inside uuidv8
-  - [ ] config file per repo?
-    - tags
   - [ ] better tests
   - [x] load repositories
 - [ ] Undo function (git reset HEAD~1)
