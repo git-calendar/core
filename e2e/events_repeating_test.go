@@ -1,4 +1,5 @@
-// It is kinda e2e, but not entirely. TODO rethink this.
+// These tests use real storage but are not full client-to-core end-to-end tests.
+// TODO: Rethink whether they are really "e2e".
 package e2e
 
 import (
@@ -17,7 +18,7 @@ func TestRepeatingEvent_GetEvents_UntilWeekly_GeneratesOccurrencesInRange(t *tes
 	startTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	parent := createRepeatingEvent(t, c, "Repeating Event", startTime, time.Hour*4, recurrenceUntilEndOfDay(t, startTime, "WEEKLY", startTime.AddDate(1, 0, 0)))
 
-	stored := requireEvent(t, c, parent.Id)
+	stored := requireEvent(t, c, parent.ID)
 	if !stored.From.Equal(parent.From) {
 		t.Fatalf("stored parent From mismatch: expected %s, got %s", parent.From, stored.From)
 	}
@@ -41,10 +42,10 @@ func TestRepeatingEvent_GetEvents_CountWeekly_GeneratesExactCount(t *testing.T) 
 	events := c.GetEvents(startTime.Add(-time.Hour), startTime.AddDate(0, 0, count*7+1), nil)
 	for _, event := range events {
 		if event.Repeat == nil {
-			t.Fatalf("generated child %s should expose its parent's recurrence", event.Id)
+			t.Fatalf("generated child %s should expose its parent's recurrence", event.ID)
 		}
 		if event.Repeat == parent.Repeat {
-			t.Fatalf("generated child %s should not expose the stored recurrence pointer", event.Id)
+			t.Fatalf("generated child %s should not expose the stored recurrence pointer", event.ID)
 		}
 	}
 	assertEventStarts(
@@ -81,7 +82,7 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 		t.Fatalf("failed to remove child event: %v", err)
 	}
 
-	storedParent := requireEvent(t, c, parent.Id)
+	storedParent := requireEvent(t, c, parent.ID)
 	assertParentHasException(t, storedParent, removed.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
@@ -118,7 +119,7 @@ func TestRepeatingEvent_Remove_Current_RemovesOnlyTargetChild(t *testing.T) {
 		t.Fatalf("failed to remove current child: %v", err)
 	}
 
-	storedParent := requireEvent(t, c, parent.Id)
+	storedParent := requireEvent(t, c, parent.ID)
 	assertParentHasException(t, storedParent, target.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
@@ -200,7 +201,7 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 		t.Fatalf("failed to update child event with Current strategy: %v", err)
 	}
 
-	storedParent := requireEvent(t, c, parent.Id)
+	storedParent := requireEvent(t, c, parent.ID)
 	assertParentHasException(t, storedParent, target.From)
 
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
@@ -218,8 +219,8 @@ func TestRepeatingEvent_Update_Current_DetachesOnlyTargetChild(t *testing.T) {
 	if detached.Repeat != nil {
 		t.Fatalf("detached event should not repeat")
 	}
-	if detached.ParentId != nil {
-		t.Fatalf("detached event should not have parent id, got %s", detached.ParentId)
+	if detached.ParentID != nil {
+		t.Fatalf("detached event should not have parent id, got %s", detached.ParentID)
 	}
 	if detached.Title != updated.Title {
 		t.Fatalf("detached title mismatch: expected %q, got %q", updated.Title, detached.Title)
@@ -260,8 +261,8 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	parent := core.Event{
-		Id:       parentId,
-		Calendar: TestCalendarName,
+		ID:       parentId,
+		Calendar: testCalendarName,
 		Title:    "Daily Meeting",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
@@ -282,8 +283,8 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 		t.Fatalf("failed to update child event with Following strategy: %v", err)
 	}
 
-	if newParent.ParentId != nil {
-		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentId)
+	if newParent.ParentID != nil {
+		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentID)
 	}
 	if newParent.Title != updated.Title {
 		t.Fatalf("new parent title mismatch: expected %q, got %q", updated.Title, newParent.Title)
@@ -309,8 +310,8 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 	parentId := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	parent := core.Event{
-		Id:       parentId,
-		Calendar: TestCalendarName,
+		ID:       parentId,
+		Calendar: testCalendarName,
 		Title:    "Daily Meeting",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
@@ -329,8 +330,8 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 	if err != nil {
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
-	if newParent.ParentId != nil {
-		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentId)
+	if newParent.ParentID != nil {
+		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentID)
 	}
 
 	oldParent := requireEvent(t, c, parentId)
@@ -526,7 +527,7 @@ func TestRepeatingEvent_Update_All_ShiftsWholeSeriesFromChild(t *testing.T) {
 		t.Fatalf("failed to update child event with All strategy: %v", err)
 	}
 
-	storedParent := requireEvent(t, c, parent.Id)
+	storedParent := requireEvent(t, c, parent.ID)
 	if !storedParent.From.Equal(startTime.Add(shift)) {
 		t.Fatalf("parent From mismatch: expected %s, got %s", startTime.Add(shift), storedParent.From)
 	}
@@ -683,7 +684,7 @@ func TestRepeatingEvent_Update_Following_ToNeverStopsAtSelectedChild(t *testing.
 	if err != nil {
 		t.Fatalf("failed to stop recurrence from selected child: %v", err)
 	}
-	if basic.ParentId != nil || basic.Repeat != nil {
+	if basic.ParentID != nil || basic.Repeat != nil {
 		t.Fatalf("selected child should become basic: %+v", basic)
 	}
 
@@ -710,7 +711,7 @@ func TestRepeatingEvent_Update_All_ToNeverConvertsParentToBasic(t *testing.T) {
 	if basic.Repeat != nil {
 		t.Fatal("parent should no longer repeat")
 	}
-	if stored := requireEvent(t, c, parent.Id); stored.Repeat != nil {
+	if stored := requireEvent(t, c, parent.ID); stored.Repeat != nil {
 		t.Fatal("stored parent should be basic")
 	}
 
@@ -723,8 +724,8 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 
 	startTime := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
 	event := core.Event{
-		Id:       uuid.New(),
-		Calendar: TestCalendarName,
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
 		Title:    "One-time meeting",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
@@ -748,7 +749,7 @@ func TestEvent_Update_StandardToRepeating_GeneratesChildren(t *testing.T) {
 		startTime.AddDate(0, 0, 14),
 	)
 
-	stored := requireEvent(t, c, event.Id)
+	stored := requireEvent(t, c, event.ID)
 	if stored.Repeat == nil {
 		t.Fatalf("updated parent should repeat")
 	}
@@ -763,12 +764,12 @@ func newTestCore(t *testing.T) *core.Core {
 	t.Helper()
 
 	c := core.NewCore()
-	if err := c.CreateCalendar(TestCalendarName, ""); err != nil {
+	if err := c.CreateCalendar(testCalendarName, ""); err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	return c
@@ -778,16 +779,14 @@ func createRepeatingEvent(t *testing.T, c *core.Core, title string, from time.Ti
 	t.Helper()
 
 	event := core.Event{
-		Id:       uuid.New(),
-		Calendar: TestCalendarName,
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
 		Title:    title,
 		From:     from,
 		To:       from.Add(duration),
 		Repeat:   repeat,
 	}
-	createEvent(t, c, event)
-
-	return event
+	return createEvent(t, c, event)
 }
 
 func createEvent(t *testing.T, c *core.Core, event core.Event) core.Event {
@@ -849,11 +848,11 @@ func assertParentHasException(t *testing.T, parent core.Event, exception time.Ti
 	t.Helper()
 
 	if parent.Repeat == nil {
-		t.Fatalf("parent %s should be repeating", parent.Id)
+		t.Fatalf("parent %s should be repeating", parent.ID)
 	}
 	exceptions := parent.Repeat.GetExDate()
 	if !containsTime(exceptions, exception) {
-		t.Fatalf("parent %s does not contain exception %s; exceptions: %v", parent.Id, exception, exceptions)
+		t.Fatalf("parent %s does not contain exception %s; exceptions: %v", parent.ID, exception, exceptions)
 	}
 }
 

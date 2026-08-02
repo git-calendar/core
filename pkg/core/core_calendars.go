@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -19,10 +18,10 @@ import (
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
 )
 
-// Creates a new calendar.
+// CreateCalendar creates a calendar backed by a local Git repository.
 func (c *Core) CreateCalendar(name, password string) error {
 	if _, exists := c.calendars[name]; exists {
-		return fmt.Errorf("calendar named %s already exist", name)
+		return fmt.Errorf("calendar named %s already exists", name)
 	}
 
 	repo, err := c.initCalendarRepo(name)
@@ -30,7 +29,7 @@ func (c *Core) CreateCalendar(name, password string) error {
 		return fmt.Errorf("failed to init calendar repo: %w", err)
 	}
 
-	var key []byte = nil
+	var key []byte
 	if len(password) != 0 {
 		if key, err = c.createKeyFile(name, password); err != nil {
 			return err
@@ -53,39 +52,30 @@ func (c *Core) CreateCalendar(name, password string) error {
 	return nil
 }
 
-// ListCalendars returns calendar metadata.
+// ListCalendars returns calendar metadata sorted by calendar and tag name.
 func (c *Core) ListCalendars() ([]Calendar, error) {
-	calendars := slices.Collect(maps.Values(c.calendars))
-
-	slices.SortFunc(calendars, func(a, b *Calendar) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-
-	result := make([]Calendar, 0, len(calendars))
-
-	for _, cal := range calendars {
+	result := make([]Calendar, 0, len(c.calendars))
+	for _, calendar := range c.calendars {
+		cal := *calendar
+		cal.Tags = slices.Clone(calendar.Tags)
 		slices.SortFunc(cal.Tags, func(a, b Tag) int {
 			return strings.Compare(a.Name, b.Name)
 		})
-
-		result = append(result, Calendar{
-			Name:          cal.Name,
-			Tags:          slices.Clone(cal.Tags),
-			EncryptionKey: slices.Clone(cal.EncryptionKey),
-			repository:    cal.repository,
-			Readonly:      cal.Readonly,
-			ICalURL:       cal.ICalURL,
-		})
+		cal.EncryptionKey = slices.Clone(calendar.EncryptionKey)
+		result = append(result, cal)
 	}
 
+	slices.SortFunc(result, func(a, b Calendar) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return result, nil
 }
 
-// Tries to load every directory/repo/calendar in the fs root.
+// LoadCalendars rebuilds in-memory calendar and event state from storage.
 func (c *Core) LoadCalendars() error {
 	c.resetCore()
 
-	// load repositories
+	// discover URL calendars and load repository-backed calendars
 	entries, err := c.fs.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("failed to list all directories in root: %w", err)
@@ -118,7 +108,7 @@ func (c *Core) LoadCalendars() error {
 		}
 
 		// load key file
-		var key []byte = nil
+		var key []byte
 		keyFile, err := c.fs.Open(name + KeyFileSuffix)
 		if err == nil {
 			if key, err = io.ReadAll(keyFile); err != nil {
@@ -146,8 +136,8 @@ func (c *Core) LoadCalendars() error {
 		c.calendars[name] = &Calendar{Name: name, Readonly: true, ICalURL: icalURL}
 	}
 
-	// load tree + events
-	// TODO do not load files, but build tree from index.json
+	// load events into the map and interval tree
+	// TODO: do not load files, but build tree from index.json
 	for _, cal := range c.calendars {
 		if _, ok := icalURLs[cal.Name]; ok {
 			if err := c.loadICalFile(cal.Name); err != nil {
@@ -178,17 +168,15 @@ func (c *Core) LoadCalendars() error {
 				continue
 			}
 
-			err = event.Validate()
-			if err != nil {
+			if err := event.Validate(); err != nil {
 				fmt.Printf("invalid event: %v\n", err)
 				continue
 			}
 
-			c.events[event.Id] = &event
+			c.events[event.ID] = &event
 
-			err = c.intervalTree.InsertEvent(event)
-			if err != nil {
-				fmt.Printf("failed to insert event %q into index tree: %v\n", event.Id, err)
+			if err := c.intervalTree.InsertEvent(event); err != nil {
+				fmt.Printf("failed to insert event %q into index tree: %v\n", event.ID, err)
 				continue
 			}
 		}
@@ -197,17 +185,17 @@ func (c *Core) LoadCalendars() error {
 	return nil
 }
 
-// Clones a repository/calendar from url, using CORS proxy, if specified.
+// CloneCalendar clones a remote Git calendar, using CORS proxy, if set.
 func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) error {
 	if !strings.HasSuffix(repoUrl.Path, ".git") {
 		return errors.New(`remote URL must end with ".git"`)
 	}
 	calendarName := calendarNameFromUrl(repoUrl)
-	if cal, ok := c.calendars[calendarName]; ok || cal != nil {
+	if _, ok := c.calendars[calendarName]; ok {
 		return errors.New("calendar with this name already exists")
 	}
 
-	// make sure that the repo dir is created
+	// ensure the repo dir exists before cloning
 	if err := c.fs.MkdirAll(calendarName, 0o755); err != nil {
 		return fmt.Errorf("create repo dir: %w", err)
 	}
@@ -216,7 +204,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 		return fmt.Errorf("chroot repo dir: %w", err)
 	}
 
-	// make sure that .git dir exists
+	// ensure the Git metadata dir exists
 	if err := repoFS.MkdirAll(".git", 0o755); err != nil {
 		return fmt.Errorf("create .git: %w", err)
 	}
@@ -241,7 +229,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	var key []byte = nil
+	var key []byte
 	if len(password) != 0 {
 		if key, err = c.createKeyFile(calendarName, password); err != nil {
 			return err
@@ -276,7 +264,7 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 	return nil
 }
 
-// Removes and deletes the whole calendar.
+// RemoveCalendar deletes a calendar and reloads the remaining state.
 func (c *Core) RemoveCalendar(name string) error {
 	calendar := c.calendars[name]
 	if calendar != nil && calendar.repository == nil {
@@ -292,8 +280,9 @@ func (c *Core) RemoveCalendar(name string) error {
 			return fmt.Errorf("failed to remove repo directory: %w", err)
 		}
 
-		// try to remove encryption key
+		// try to remove other related files
 		_ = c.fs.Remove(name + KeyFileSuffix)
+		_ = c.fs.Remove(name + ReadonlyFileSuffix)
 	}
 
 	// remove from map
@@ -306,6 +295,7 @@ func (c *Core) RemoveCalendar(name string) error {
 	return c.LoadCalendars()
 }
 
+// RenameCalendar changes a calendar's name and associated storage paths.
 func (c *Core) RenameCalendar(oldName, newName string) error {
 	if _, exists := c.calendars[oldName]; !exists {
 		return fmt.Errorf("calendar %s doesn't exist", oldName)
@@ -360,10 +350,16 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 
 	delete(c.calendars, oldName)
 	c.calendars[newName] = calendar
+	for _, event := range c.events {
+		if event != nil && event.Calendar == oldName {
+			event.Calendar = newName
+		}
+	}
 
 	return nil
 }
 
+// UpdateRemote sets or removes a calendar's Git remote and read-only marker.
 func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) error {
 	cal, ok := c.calendars[calendar]
 	if !ok || cal == nil {
@@ -375,31 +371,28 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) 
 	}
 
 	if remoteURL == nil {
-		if err := cal.repository.DeleteRemote(GitRemoteName); err != nil {
-			if errors.Is(err, gogit.ErrRemoteNotFound) {
-				return nil
-			}
+		if err := cal.repository.DeleteRemote(GitRemoteName); err != nil && !errors.Is(err, gogit.ErrRemoteNotFound) {
 			return fmt.Errorf("failed to delete remote: %w", err)
 		}
-		return nil
-	}
+	} else {
+		if !strings.HasSuffix(remoteURL.Path, ".git") {
+			return errors.New(`remote URL must end with ".git"`)
+		}
 
-	if !strings.HasSuffix(remoteURL.Path, ".git") {
-		return errors.New(`remote URL must end with ".git"`)
-	}
-
-	cfg, _ := cal.repository.Config()
-	cfg.Remotes[GitRemoteName] = &config.RemoteConfig{
-		Name: GitRemoteName,
-		URLs: []string{remoteURL.String()},
-	}
-	if err := cal.repository.SetConfig(cfg); err != nil {
-		return fmt.Errorf("failed to set remote: %w", err)
+		cfg, _ := cal.repository.Config()
+		cfg.Remotes[GitRemoteName] = &config.RemoteConfig{
+			Name: GitRemoteName,
+			URLs: []string{remoteURL.String()},
+		}
+		if err := cal.repository.SetConfig(cfg); err != nil {
+			return fmt.Errorf("failed to set remote: %w", err)
+		}
 	}
 
 	if err := c.updateReadonlyFile(calendar, readonly); err != nil {
-		fmt.Printf("WARN: failed to update calendar read-only file: %v", err)
+		return fmt.Errorf("failed to update calendar read-only state: %w", err)
 	}
+	cal.Readonly = readonly
 
 	return nil
 }

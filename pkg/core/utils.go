@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// prepareRepoUrl extracts the auth (http://USER:PASS@example.com/...) from repoUrl and returns a new url using proxyUrl if present.
+// prepareRepoUrl separates HTTP credentials and optionally routes through a browser CORS proxy as <proxy>/<repository-url>.
 func prepareRepoUrl(repoUrl *url.URL, proxyUrl *url.URL) (*url.URL, *http.BasicAuth) {
 	if repoUrl == nil {
 		return nil, nil
@@ -84,7 +84,7 @@ func useCorsProxy(original, proxy *url.URL) *url.URL {
 	return result
 }
 
-// authFromUrl extracts BasicAuth credentials from an URL.
+// authFromUrl extracts BasicAuth credentials from a URL.
 func authFromUrl(u *url.URL) *http.BasicAuth {
 	if u == nil {
 		return nil
@@ -102,7 +102,8 @@ func authFromUrl(u *url.URL) *http.BasicAuth {
 	}
 }
 
-// calendarNameFromUrl turns "http://abc.com/foo/bar/my-calendar.git" into "my-calendar".
+// calendarNameFromUrl derives a name from a repository URL;
+// for example, "https://example.com/foo/my-calendar.git" returns "my-calendar".
 func calendarNameFromUrl(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -133,7 +134,7 @@ func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
 	return id
 }
 
-// getTimeFromUUID extracts time from custom UUIDv8.
+// getTimeFromUUID extracts the encoded time from a custom UUIDv8.
 func getTimeFromUUID(id uuid.UUID) time.Time {
 	if id.Version() != 8 {
 		return time.Time{}
@@ -142,11 +143,15 @@ func getTimeFromUUID(id uuid.UUID) time.Time {
 	return time.Unix(int64(unix32), 0)
 }
 
+// CalendarEventsFilter controls event visibility for one calendar.
 type CalendarEventsFilter struct {
+	// HiddenTagIds lists tags whose events are excluded.
 	HiddenTagIds []uuid.UUID `json:"hidden_tag_ids"`
-	HideUntagged bool        `json:"hide_untagged"`
+	// HideUntagged excludes events that have no tag.
+	HideUntagged bool `json:"hide_untagged"`
 }
 
+// GetEventsFilter maps calendar names to event visibility filters.
 type GetEventsFilter map[string]CalendarEventsFilter
 
 func checkFilter(e *Event, filters GetEventsFilter) bool {
@@ -155,9 +160,9 @@ func checkFilter(e *Event, filters GetEventsFilter) bool {
 		return true
 	}
 
-	if e.TagId == nil {
+	if e.TagID == nil {
 		return !filter.HideUntagged
 	}
 
-	return !slices.Contains(filter.HiddenTagIds, *e.TagId)
+	return !slices.Contains(filter.HiddenTagIds, *e.TagID)
 }

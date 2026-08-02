@@ -112,7 +112,7 @@ func MergeRemoteIntoBranch(repo *gogit.Repository, opts Options) error {
 		Author: &object.Signature{
 			Name:  opts.AuthorName,
 			Email: opts.AuthorEmail,
-			When:  time.Now(),
+			When:  opts.now(),
 		},
 	})
 	if err != nil {
@@ -194,7 +194,7 @@ func ensureBranch(repo *gogit.Repository, branch string) (*gogit.Worktree, error
 	return wt, nil
 }
 
-// GetCommits returns the local and remote HEAD commits for the main branch.
+// GetCommits returns the local and remote HEAD commits for branchName.
 func GetCommits(
 	repo *gogit.Repository,
 	branchName string,
@@ -218,6 +218,7 @@ func GetCommits(
 	return local, remote, nil
 }
 
+// GetLocalCommit returns the local branch commit, or nil when the branch does not exist.
 func GetLocalCommit(repo *gogit.Repository, branchName string) (*object.Commit, error) {
 	ref, err := localBranchRef(repo, branchName)
 	if err != nil {
@@ -227,12 +228,7 @@ func GetLocalCommit(repo *gogit.Repository, branchName string) (*object.Commit, 
 		return nil, err
 	}
 
-	commit, err := repo.CommitObject(ref.Hash())
-	if err != nil {
-		return nil, err
-	}
-
-	return commit, nil
+	return repo.CommitObject(ref.Hash())
 }
 
 func localBranchRef(repo *gogit.Repository, branchName string) (*plumbing.Reference, error) {
@@ -353,7 +349,7 @@ func collectPaths(include IncludePathFunc, trees ...*object.Tree) ([]string, err
 	return paths, nil
 }
 
-// billyPath converts a slash-delimited git path to a native filesystem path just to make sure everything is ok.
+// billyPath joins a slash-delimited Git path using filesystem-specific rules.
 func billyPath(fs billy.Filesystem, gitPath string) string {
 	return fs.Join(strings.Split(path.Clean(gitPath), "/")...)
 }

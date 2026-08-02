@@ -1,5 +1,8 @@
 //go:build js && wasm
 
+// Package opfs implements the billy.Filesystem interface backed by OPFS store.
+// It is only usable in a js/wasm build targeting a browser environment.
+// https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system
 package opfs
 
 import (
@@ -8,7 +11,7 @@ import (
 	"io/fs"
 	"math/rand"
 	"os"
-	"path"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"syscall/js"
@@ -18,32 +21,34 @@ import (
 	"github.com/go-git/go-billy/v5/helper/chroot"
 )
 
-// Origin private file system
-//
-// https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system
+// OPFS implements billy.Filesystem over an origin-private directory handle.
 type OPFS struct {
-	RootHandle js.Value // FileSystemDirectoryHandle
+	// RootHandle is the FileSystemDirectoryHandle used as the filesystem root
+	RootHandle js.Value
 }
 
-var _ billy.Filesystem = (*OPFS)(nil) // makes sure that it implements all the interface methods, it won't compile without it
+// Verify at compile time that OPFS implements billy.Filesystem.
+var _ billy.Filesystem = (*OPFS)(nil)
 
+// New returns an OPFS filesystem rooted at baseDirHandle.
 func New(baseDirHandle js.Value) *OPFS {
 	return &OPFS{
 		RootHandle: baseDirHandle,
 	}
 }
 
+// MkdirAll creates path and its parents; OPFS ignores perm.
 func (fs *OPFS) MkdirAll(path string, perm fs.FileMode) error {
-	// OPFS ignores permissions (perm)
-
 	_, err := fs.getDirectoryHandle(path, true)
 	return err
 }
 
+// Join joins path elements using slash-separated filesystem semantics.
 func (fs *OPFS) Join(elem ...string) string {
-	return path.Join(elem...)
+	return pathpkg.Join(elem...)
 }
 
+// OpenFile opens fullPath with the supplied flags; OPFS ignores perm.
 func (fs *OPFS) OpenFile(fullPath string, flag int, perm os.FileMode) (billy.File, error) {
 	create := flag&os.O_CREATE != 0
 	fullPath = normalizePath(fullPath)
@@ -129,7 +134,7 @@ func (fs *OPFS) Remove(path string) error {
 	inodeCacheMu.Unlock()
 
 	// get direct parent dir handle
-	dirPath, name := fs.split(path)
+	dirPath, name := pathpkg.Split(path)
 	dirHandle, err := fs.getDirectoryHandle(dirPath, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -157,15 +162,12 @@ func (fs *OPFS) Remove(path string) error {
 	}
 }
 
+// Rename copies oldpath to newpath and removes the original because a native
+// move operation is not consistently available across browsers.
+// TODO: Prefer FileSystemHandle.move when available, retaining copy/remove as the fallback.
+// Browser API: https://developer.mozilla.org/en-US/docs/Web/API/File_System_API#api.FileSystemHandle
 func (fs *OPFS) Rename(oldpath, newpath string) error {
-	// "rename" isnt a thing in OPFS
-	// https://developer.mozilla.org/en-US/docs/Web/API/File_System_API#api.FileSystemHandle
 
-	// try "move" if the browser supports it (Firefox and Safari as of 2025)
-	// TODO
-
-	// ------- copying workaround -------
-	// open file
 	src, err := fs.Open(oldpath)
 	if err != nil {
 		return err
@@ -188,14 +190,17 @@ func (fs *OPFS) Rename(oldpath, newpath string) error {
 	return fs.Remove(oldpath)
 }
 
+// Root returns the filesystem root path.
 func (fs *OPFS) Root() string {
 	return "/"
 }
 
+// Chroot returns a filesystem scoped to path.
 func (fs *OPFS) Chroot(path string) (billy.Filesystem, error) {
 	return chroot.New(fs, path), nil
 }
 
+// ReadDir returns the direct children of path.
 func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 	defer func() { // recover any panic that could happen along the way: Get(), Index()
 		if r := recover(); r != nil {
@@ -211,11 +216,6 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 
 	// get the AsyncIterator from entries() https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncIterator
 	itValue := dirHandle.Call("entries")
-	if err != nil {
-		return nil, err
-	}
-
-	// the JS AsyncIterator has a .next() -> {done, value}
 	for {
 		// get one entry
 		result, err := Await(itValue.Call("next")) // {done, value}
@@ -224,8 +224,7 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 		}
 
 		// if done (last), end loop
-		done := result.Get("done").Bool()
-		if done {
+		if result.Get("done").Bool() {
 			break
 		}
 
@@ -250,11 +249,13 @@ func (fs *OPFS) ReadDir(path string) (infos []os.FileInfo, err error) {
 	return
 }
 
+// Lstat returns the same information as Stat because symlinks are unsupported.
 func (fs *OPFS) Lstat(filename string) (fs.FileInfo, error) {
 	// Lstat() is just Stat(), which doesnt follow links, but we do not have links in OPFS
 	return fs.Stat(filename)
 }
 
+// TempFile creates a temporary file in dir with the supplied prefix.
 func (fs *OPFS) TempFile(dir string, prefix string) (billy.File, error) {
 	// generate a unique filename: prefix + timestamp + random
 	tempName := fmt.Sprintf("%s%d%d", prefix, time.Now().UnixNano(), rand.Intn(1000))
@@ -269,6 +270,7 @@ func (fs *OPFS) TempFile(dir string, prefix string) (billy.File, error) {
 	return fs.Create(fullPath)
 }
 
+// Create creates or truncates name and opens it for reading and writing.
 func (fs *OPFS) Create(name string) (billy.File, error) {
 	// wrapper around OpenFile()
 	return fs.OpenFile(
@@ -278,14 +280,16 @@ func (fs *OPFS) Create(name string) (billy.File, error) {
 	)
 }
 
+// Open opens name for reading.
 func (fs *OPFS) Open(name string) (billy.File, error) {
-	// wrapper around OpenFile() but read only
+	// wrapper around OpenFile() but read-only
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
+// Stat returns file information for path. OPFS has no generic stat operation, so it probes for a file first and then a directory.
 func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 	// get direct parent dir handle
-	path, name := fs.split(path)
+	path, name := pathpkg.Split(path)
 	parentDirHandle, err := fs.getDirectoryHandle(path, false)
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFoundError") {
@@ -335,17 +339,19 @@ func (fs *OPFS) Stat(path string) (os.FileInfo, error) {
 	return nil, err
 }
 
+// Symlink reports billy.ErrNotSupported so callers can apply their own fallback; OPFS has no symbolic-link operation.
 func (fs *OPFS) Symlink(target, link string) error {
-	return billy.ErrNotSupported // go-git will probably handle this
+	return billy.ErrNotSupported
 }
 
+// Readlink reports billy.ErrNotSupported so callers can apply their own fallback; OPFS has no symbolic-link operation.
 func (fs *OPFS) Readlink(link string) (string, error) {
-	return "", billy.ErrNotSupported // go-git will probably handle this
+	return "", billy.ErrNotSupported
 }
 
 // ---------------------------------------------------------
 
-// applyFlags handles O_TRUNC and O_APPEND flags for OpenFile
+// applyFlags applies O_TRUNC and O_APPEND to f.
 func (fs *OPFS) applyFlags(f *OPFSFile, flag int) error {
 	if flag&os.O_TRUNC != 0 {
 		// truncate the file and then return it empty
@@ -363,7 +369,7 @@ func (fs *OPFS) applyFlags(f *OPFSFile, flag int) error {
 	return nil
 }
 
-// A helper method which traverses to the last dir in path.
+// getDirectoryHandle traverses path and optionally creates missing directories.
 func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 	parts := strings.Split(path, "/")
 
@@ -382,12 +388,8 @@ func (fs *OPFS) getDirectoryHandle(path string, create bool) (js.Value, error) {
 	return dir, nil
 }
 
-// helper method to unify the spliting of paths
-func (fs *OPFS) split(fullPath string) (string, string) {
-	return path.Split(fullPath)
-}
-
-// A helper function which makes async calls to JS API synchronous.
+// Await bridges a JavaScript Promise into a blocking Go result.
+// Rejections use the JavaScript error name and message so callers can identify DOM exceptions.
 //
 // An example of what this does:
 //

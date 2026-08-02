@@ -10,14 +10,16 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
-// This struct represents a file in our OPFS FileSystem, but there can by multiple instances of the single file, with different offsets, pointing at the same inode (aka. the REAL file)
+// OPFSFile represents an open OPFS file with an independent read/write offset and a shared underlying inode.
 type OPFSFile struct {
 	inode  *opfsInode // the real file underneath
 	offset int64      // current read/write offset
 }
 
-var _ billy.File = (*OPFSFile)(nil) // makes sure that it implements all the interface methods, it wont compile without it
+// Verify at compile time that OPFSFile implements billy.File.
+var _ billy.File = (*OPFSFile)(nil)
 
+// Write writes at the current file offset.
 func (f *OPFSFile) Write(p []byte) (int, error) {
 	// use already implemented WriteAt
 	n, err := f.WriteAt(p, f.offset)
@@ -28,12 +30,13 @@ func (f *OPFSFile) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// WriteAt writes at off without changing the current file offset.
 func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
 		return 0, fmt.Errorf("writeat: failed to open access: %w", err)
 	}
 
-	defer func() { // // recover a panic from Get("Uint8Array") or Call("write")
+	defer func() { // recover a panic from Get("Uint8Array") or Call("write")
 		if r := recover(); r != nil {
 			n = 0
 			err = fmt.Errorf("OPFS File WriteAt failed: %+v", r)
@@ -50,9 +53,10 @@ func (f *OPFSFile) WriteAt(p []byte, off int64) (n int, err error) {
 	n = f.inode.access.Call("write", buf, map[string]any{"at": off}).Int()
 
 	// std os.File.WriteAt does NOT move the file offset
-	return // returns n, err actually (named return values)
+	return
 }
 
+// Read reads from the current file offset.
 func (f *OPFSFile) Read(p []byte) (int, error) {
 	// use already implemented ReadAt
 	n, err := f.ReadAt(p, f.offset)
@@ -63,6 +67,7 @@ func (f *OPFSFile) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// ReadAt reads from off without changing the current file offset.
 func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 	if err := f.openAccess(); err != nil {
 		return 0, fmt.Errorf("readat: failed to open access: %w", err)
@@ -88,9 +93,10 @@ func (f *OPFSFile) ReadAt(p []byte, off int64) (n int, err error) {
 	// copy all the data from JS to Go
 	js.CopyBytesToGo(p[:n], buf) // p[:n] so that it copies less bytes when less were returned
 
-	return // returns n, err actually (named return values)
+	return
 }
 
+// Seek sets the current file offset.
 func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 	if err := f.openAccess(); err != nil {
 		return 0, fmt.Errorf("seek: failed to open access: %w", err)
@@ -126,9 +132,10 @@ func (f *OPFSFile) Seek(offset int64, whence int) (newOffset int64, err error) {
 	// set the new offset
 	f.offset = newOffset
 
-	return // returns newOffset, err actually (named return values)
+	return
 }
 
+// Name returns the file handle name.
 func (f *OPFSFile) Name() (name string) {
 	defer func() { // recover a panic from Get("name")
 		if r := recover(); r != nil {
@@ -143,6 +150,7 @@ func (f *OPFSFile) Name() (name string) {
 	return ""
 }
 
+// Truncate changes the file size to size bytes.
 func (f *OPFSFile) Truncate(size int64) error {
 	if err := f.openAccess(); err != nil {
 		return fmt.Errorf("truncate: failed to open access: %w", err)
@@ -164,6 +172,7 @@ func (f *OPFSFile) Truncate(size int64) error {
 	return err
 }
 
+// Close releases this file reference and closes the shared access handle when unused.
 func (f *OPFSFile) Close() error {
 	inodeCacheMu.Lock()
 	defer inodeCacheMu.Unlock()
@@ -190,19 +199,19 @@ func (f *OPFSFile) Close() error {
 	return nil
 }
 
+// Lock is a no-op because the inode mutex protects handle state, not advisory file locking.
 func (f *OPFSFile) Lock() error {
-	// implementing like so: "f.inode.mu.Lock()" breaks it for some reason
-	return nil // will do nothing i guess
+	return nil
 }
 
+// Unlock is a no-op because OPFSFile does not acquire an advisory file lock.
 func (f *OPFSFile) Unlock() error {
-	// implementing like so: "f.inode.mu.Lock()" breaks it for some reason
-	return nil // will do nothing i guess
+	return nil
 }
 
 // -----------------------------------------------------------
 
-// Helper function to open sync access for file
+// openAccess lazily opens the shared synchronous access handle.
 func (f *OPFSFile) openAccess() error {
 	f.inode.mu.Lock()
 	defer f.inode.mu.Unlock()
@@ -218,7 +227,7 @@ func (f *OPFSFile) openAccess() error {
 	return err
 }
 
-// Helper to close just the access handle
+// closeAccess flushes and closes the shared synchronous access handle.
 func (f *OPFSFile) closeAccess() error {
 	f.inode.mu.Lock()
 	defer f.inode.mu.Unlock()

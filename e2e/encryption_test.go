@@ -17,13 +17,13 @@ import (
 func TestCreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "somepassword")
+	err := c.CreateCalendar(testCalendarName, "somepassword")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	home, err := os.UserHomeDir()
@@ -31,7 +31,7 @@ func TestCreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName+core.KeyFileSuffix))
+	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, testCalendarName+core.KeyFileSuffix))
 	if err != nil {
 		t.Errorf("failed to read key file: %v", err)
 	}
@@ -44,20 +44,20 @@ func TestCreateCalendarWithPassword_CreatesKeyFile(t *testing.T) {
 func TestCreateCalendarWithPasswordAndCreateEvent_CreatesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "somepassword")
+	err := c.CreateCalendar(testCalendarName, "somepassword")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	id := uuid.New()
 	title := "Foo Event"
 	eventIn := core.Event{
-		Id:       id,
-		Calendar: TestCalendarName,
+		ID:       id,
+		Calendar: testCalendarName,
 		Title:    title,
 		From:     time.Now(),
 		To:       time.Now().Add(2 * time.Hour),
@@ -73,7 +73,7 @@ func TestCreateCalendarWithPasswordAndCreateEvent_CreatesJsonFile(t *testing.T) 
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
+	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, testCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
 	}

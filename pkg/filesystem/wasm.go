@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package filesystem provides the platform-specific application data filesystem.
 package filesystem
 
 import (
@@ -7,9 +8,10 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
-const DirName = "git-calendar-data" // the storeName for IndexedDB
+// DirName is the IndexedDB database name used by the browser filesystem.
+const DirName = "git-calendar-data"
 
-// Returns a FS inside IndexedDB.
+// GetFS returns a filesystem backed by browser IndexedDB.
 func GetFS() (billy.Filesystem, error) {
 	return idb.New(DirName, 1)
 }

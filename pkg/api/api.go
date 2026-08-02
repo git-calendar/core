@@ -1,9 +1,10 @@
-// A JSON API wrapper around the core.Core for multiplatform support.
-// It's not possible to expose any "complex" data types (structs*, arrays, channels, maps, etc.),
-// because they do not have bindings to other languages.
-// Let's use JSON everywhere as a REST API would...
+// Package api exposes a binding-friendly wrapper around core.Core.
 //
-// (*) You can return a *Event (pointer to struct), but you cannot receive it as argument.
+// Domain values use JSON because generated mobile bindings cannot consistently
+// represent arbitrary Go structs, maps, channels, or complex parameters. Some
+// pointer results can bind even when equivalent parameters cannot, so domain
+// input and output stay symmetric through JSON. Simple values and byte slices
+// use native mobile and WebAssembly binding types.
 package api
 
 import (
@@ -20,11 +21,13 @@ import (
 )
 
 const (
-	emptyJson    = "{}"
-	emptyJsonArr = "[]"
+	emptyJSON      = "{}"
+	emptyJSONArray = "[]"
 )
 
-// The exposed/exported JSON-only API interface.
+// Api wraps core.Core in a binding-friendly API.
+//
+// Api values must be created with NewApi.
 type Api struct {
 	inner *core.Core
 }
@@ -36,29 +39,40 @@ type eventJSON struct {
 	Repeat *string `json:"repeat"`
 }
 
-// A "constructor" for the JSON API.
-func NewApi() *Api {
-	return &Api{
-		inner: core.NewCore(),
-	}
-}
+// NewApi creates a binding-friendly API backed by a new core.Core.
+func NewApi() *Api { return &Api{inner: core.NewCore()} }
 
-// -------------------------- Boring methods that do not need any json parsing etc. -------------------------
+// ----------------------------------------- Direct wrapper methods -----------------------------------------
 
+// CreateCalendar creates a calendar with the given name and password.
 func (a *Api) CreateCalendar(name, password string) error {
 	return a.inner.CreateCalendar(name, password)
 }
+
+// RemoveCalendar removes the named calendar.
 func (a *Api) RemoveCalendar(name string) error { return a.inner.RemoveCalendar(name) }
+
+// RenameCalendar renames a calendar.
 func (a *Api) RenameCalendar(oldName, newName string) error {
 	return a.inner.RenameCalendar(oldName, newName)
 }
-func (a *Api) LoadCalendars() error                      { return a.inner.LoadCalendars() }
-func (a *Api) SetCorsProxy(proxyUrl string) error        { return a.inner.SetCorsProxy(proxyUrl) }
-func (a *Api) SyncAll() error                            { return a.inner.SyncAll() }
+
+// LoadCalendars reloads calendars from storage.
+func (a *Api) LoadCalendars() error { return a.inner.LoadCalendars() }
+
+// SetCorsProxy configures the CORS proxy used for remote requests.
+func (a *Api) SetCorsProxy(proxyURL string) error { return a.inner.SetCorsProxy(proxyURL) }
+
+// SyncAll synchronizes all configured calendars.
+func (a *Api) SyncAll() error { return a.inner.SyncAll() }
+
+// ExportZip exports one Git-backed calendar, or all persisted data when calendar is empty, as a ZIP archive.
+// URL-backed calendars cannot be exported individually.
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
 
-// ------------------------------  Wrapper methods encoding and decoding JSONs ------------------------------
+// ------------------------------------------ JSON wrapper methods ------------------------------------------
 
+// ImportICalURL imports an iCalendar feed URL under the given name.
 func (a *Api) ImportICalURL(name, rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -67,6 +81,7 @@ func (a *Api) ImportICalURL(name, rawURL string) error {
 	return a.inner.ImportICalURL(name, parsed)
 }
 
+// UpdateICalURL changes the source URL of an imported iCalendar.
 func (a *Api) UpdateICalURL(name, rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -75,181 +90,189 @@ func (a *Api) UpdateICalURL(name, rawURL string) error {
 	return a.inner.UpdateICalURL(name, parsed)
 }
 
-func (a *Api) ImportICalFile(calendar, tagId, data string) error {
-	parsedId, err := uuid.Parse(tagId)
+// ImportICalFile imports iCalendar data into a calendar using the given tag ID.
+func (a *Api) ImportICalFile(calendar, tagID, data string) error {
+	parsedID, err := uuid.Parse(tagID)
 	if err != nil {
-		return fmt.Errorf("invalid tag id: %w", err)
+		return fmt.Errorf("invalid tag ID: %w", err)
 	}
-	return a.inner.ImportICalFile(calendar, &parsedId, strings.NewReader(data))
+	return a.inner.ImportICalFile(calendar, &parsedID, strings.NewReader(data))
 }
 
-func (a *Api) UpdateRemote(calendar string, remoteUrl string, readonly bool) error {
-	parsed, err := url.Parse(remoteUrl)
+// UpdateRemote configures the Git remote for a calendar.
+func (a *Api) UpdateRemote(calendar, remoteURL string, readonly bool) error {
+	parsed, err := url.Parse(remoteURL)
 	if err != nil {
-		return fmt.Errorf("remoteUrl is invalid: %w", err)
+		return fmt.Errorf("remote URL is invalid: %w", err)
 	}
 	return a.inner.UpdateRemote(calendar, parsed, readonly)
 }
 
-func (a *Api) CloneCalendar(repoUrl, password string, readonly bool) error {
-	parsedUrl, err := url.Parse(repoUrl)
+// CloneCalendar clones a remote calendar repository.
+func (a *Api) CloneCalendar(repoURL, password string, readonly bool) error {
+	parsedURL, err := url.Parse(repoURL)
 	if err != nil {
-		return fmt.Errorf("repoUrl is invalid: %w", err)
+		return fmt.Errorf("repository URL is invalid: %w", err)
 	}
-	return a.inner.CloneCalendar(parsedUrl, password, readonly)
+	return a.inner.CloneCalendar(parsedURL, password, readonly)
 }
 
+// ListCalendars returns the calendars as a JSON array.
 func (a *Api) ListCalendars() (string, error) {
-	arr, err := a.inner.ListCalendars()
+	calendars, err := a.inner.ListCalendars()
 	if err != nil {
-		return emptyJsonArr, err
+		return emptyJSONArray, err
 	}
-	data, err := json.Marshal(arr)
+	data, err := json.Marshal(calendars)
 	if err != nil {
-		return emptyJsonArr, fmt.Errorf("failed to marshal names to json: %w", err)
+		return emptyJSONArray, fmt.Errorf("failed to marshal calendars to JSON: %w", err)
 	}
 	return string(data), nil
 }
 
-func (a *Api) CreateEvent(eventJson string) (string, error) {
-	return returnJsonEventAndError(eventJson, a.inner.CreateEvent)
+// CreateEvent creates an event from its JSON representation and returns the created event as JSON.
+func (a *Api) CreateEvent(eventJSON string) (string, error) {
+	return returnJSONEventAndError(eventJSON, a.inner.CreateEvent)
 }
 
-func (a *Api) UpdateEvent(eventJson string) (string, error) {
-	return returnJsonEventAndError(eventJson, a.inner.UpdateEvent)
+// UpdateEvent updates an event from its JSON representation and returns the updated event as JSON.
+func (a *Api) UpdateEvent(eventJSON string) (string, error) {
+	return returnJSONEventAndError(eventJSON, a.inner.UpdateEvent)
 }
 
-func (a *Api) UpdateRepeatingEvent(oldEventJson, newEventJson string, strategy int) (string, error) {
-	oldEvent, err := unmarshalEvent(oldEventJson)
+// UpdateRepeatingEvent updates a repeating event using the requested strategy.
+func (a *Api) UpdateRepeatingEvent(oldEventJSON, newEventJSON string, strategy int) (string, error) {
+	oldEvent, err := unmarshalEvent(oldEventJSON)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
-	newEvent, err := unmarshalEvent(newEventJson)
+	newEvent, err := unmarshalEvent(newEventJSON)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
 	updated, err := a.inner.UpdateRepeatingEvent(oldEvent, newEvent, core.UpdateStrategy(strategy))
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 	return marshalEvent(updated)
 }
 
-func (a *Api) RemoveEvent(eventJson string) error {
-	event, err := unmarshalEvent(eventJson)
+// RemoveEvent removes the event represented by the given JSON.
+func (a *Api) RemoveEvent(eventJSON string) error {
+	event, err := unmarshalEvent(eventJSON)
 	if err != nil {
 		return err
 	}
 	return a.inner.RemoveEvent(event)
 }
 
-func (a *Api) RemoveRepeatingEvent(eventJson string, strategy int) error {
-	event, err := unmarshalEvent(eventJson)
+// RemoveRepeatingEvent removes a repeating event using the requested strategy.
+func (a *Api) RemoveRepeatingEvent(eventJSON string, strategy int) error {
+	event, err := unmarshalEvent(eventJSON)
 	if err != nil {
 		return err
 	}
 	return a.inner.RemoveRepeatingEvent(event, core.UpdateStrategy(strategy))
 }
 
+// GetEvent returns an event as JSON by its ID.
 func (a *Api) GetEvent(id string) (string, error) {
-	parsedId, err := uuid.Parse(id)
+	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return emptyJson, fmt.Errorf("invalid event id: %w", err)
+		return emptyJSON, fmt.Errorf("invalid event ID: %w", err)
 	}
-	// pass the id to inner api
-	event, err := a.inner.GetEvent(parsedId)
+
+	// Pass the parsed ID to the Go-native core API.
+	event, err := a.inner.GetEvent(parsedID)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
 	return marshalEvent(event)
 }
 
-func (a *Api) GetEvents(from, to string, filterJson string) (string, error) {
-	// parse both time strings
+// GetEvents returns events in an RFC 3339 interval as a JSON array.
+// filterJSON may be empty or contain a core.GetEventsFilter JSON object.
+func (a *Api) GetEvents(from, to, filterJSON string) (string, error) {
+	// Parse both interval boundaries before calling the core API.
 	f, err1 := time.Parse(time.RFC3339, from)
 	t, err2 := time.Parse(time.RFC3339, to)
 	if err := errors.Join(err1, err2); err != nil {
-		return emptyJsonArr, fmt.Errorf("invalid from/to parameter: %w", err)
+		return emptyJSONArray, fmt.Errorf("invalid from/to parameter: %w", err)
 	}
 
 	var filter core.GetEventsFilter
-	if filterJson != "" {
-		if err := json.Unmarshal([]byte(filterJson), &filter); err != nil {
-			return emptyJsonArr, err
+	if filterJSON != "" {
+		if err := json.Unmarshal([]byte(filterJSON), &filter); err != nil {
+			return emptyJSONArray, err
 		}
 	}
 
-	// pass the args to inner api
-	events := a.inner.GetEvents(f, t, filter)
-
-	return marshalEvents(events)
+	// Pass decoded arguments to the Go-native core API.
+	return marshalEvents(a.inner.GetEvents(f, t, filter))
 }
 
-func (a *Api) CreateTag(calendar, tagJson string) (string, error) {
+// CreateTag creates a tag from its JSON representation and returns it as JSON.
+func (a *Api) CreateTag(calendar, tagJSON string) (string, error) {
 	var tag core.Tag
-	err := json.Unmarshal([]byte(tagJson), &tag)
-	if err != nil {
-		fmt.Println("CalendarCore got: ", tagJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal tag data: %w", err)
+	if err := json.Unmarshal([]byte(tagJSON), &tag); err != nil {
+		return emptyJSON, fmt.Errorf("failed to unmarshal tag data: %w", err)
 	}
 
 	newTag, err := a.inner.CreateTag(calendar, tag)
 	if err != nil {
-		fmt.Println("CalendarCore got: ", tagJson)
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
-	jsonBytes, err := json.Marshal(newTag)
+	data, err := json.Marshal(newTag)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
-	return string(jsonBytes), nil
+	return string(data), nil
 }
 
-func (a *Api) UpdateTag(calendar, tagJson string) (string, error) {
+// UpdateTag updates a tag from its JSON representation and returns it as JSON.
+func (a *Api) UpdateTag(calendar, tagJSON string) (string, error) {
 	var tag core.Tag
-	err := json.Unmarshal([]byte(tagJson), &tag)
-	if err != nil {
-		fmt.Println("CalendarCore got: ", tagJson)
-		return emptyJson, fmt.Errorf("failed to unmarshal tag data: %w", err)
+	if err := json.Unmarshal([]byte(tagJSON), &tag); err != nil {
+		return emptyJSON, fmt.Errorf("failed to unmarshal tag data: %w", err)
 	}
 
-	newTag, err := a.inner.UpdateTag(calendar, tag)
+	updatedTag, err := a.inner.UpdateTag(calendar, tag)
 	if err != nil {
-		fmt.Println("CalendarCore got: ", tagJson)
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
-	jsonBytes, err := json.Marshal(newTag)
+	data, err := json.Marshal(updatedTag)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 
-	return string(jsonBytes), nil
+	return string(data), nil
 }
 
+// RemoveTag removes a tag by its ID.
 func (a *Api) RemoveTag(calendar, id string) error {
-	parsedId, err := uuid.Parse(id)
+	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return fmt.Errorf("invalid tag id: %w", err)
+		return fmt.Errorf("invalid tag ID: %w", err)
 	}
 
-	return a.inner.RemoveTag(calendar, parsedId)
+	return a.inner.RemoveTag(calendar, parsedID)
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
-func returnJsonEventAndError(eventJson string, coreFunc func(core.Event) (*core.Event, error)) (string, error) {
-	event, err := unmarshalEvent(eventJson)
+func returnJSONEventAndError(eventJSON string, coreFunc func(core.Event) (*core.Event, error)) (string, error) {
+	event, err := unmarshalEvent(eventJSON)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 	updated, err := coreFunc(event)
 	if err != nil {
-		return emptyJson, err
+		return emptyJSON, err
 	}
 	return marshalEvent(updated)
 }
@@ -277,7 +300,7 @@ func unmarshalEvent(raw string) (core.Event, error) {
 func marshalEvent(event *core.Event) (string, error) {
 	data, err := json.Marshal(eventToJSON(*event))
 	if err != nil {
-		return emptyJson, fmt.Errorf("failed to marshal event data: %w", err)
+		return emptyJSON, fmt.Errorf("failed to marshal event data: %w", err)
 	}
 	return string(data), nil
 }
@@ -289,7 +312,7 @@ func marshalEvents(events []core.Event) (string, error) {
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		return emptyJsonArr, fmt.Errorf("failed to marshal event data: %w", err)
+		return emptyJSONArray, fmt.Errorf("failed to marshal event data: %w", err)
 	}
 	return string(data), nil
 }

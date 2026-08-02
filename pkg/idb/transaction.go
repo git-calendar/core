@@ -10,6 +10,7 @@ import (
 
 const reqTimeout = 2 * time.Second // should be more than enough
 
+// Transaction queues operations in Go; Commit creates the JavaScript IDBTransaction and dispatches the queued requests.
 type Transaction struct {
 	pending []*Operation
 }
@@ -23,6 +24,7 @@ const (
 	opGetAllKeys
 )
 
+// Operation records one queued IndexedDB request and its result.
 type Operation struct {
 	typee opType
 	store string
@@ -35,14 +37,12 @@ type Operation struct {
 	done chan int
 }
 
-// Creates a transaction-like interface. The real JS IDB tx is created and commited inside Tx.Commit().
+// NewTx returns an empty transaction queue.
 func NewTx() *Transaction {
-	return &Transaction{
-		pending: make([]*Operation, 0),
-	}
+	return &Transaction{}
 }
 
-// JS: store.get(key)
+// Get queues an IndexedDB objectStore.get(key) request.
 func (tx *Transaction) Get(store, key string) *Operation {
 	op := &Operation{
 		typee: opGet,
@@ -54,7 +54,7 @@ func (tx *Transaction) Get(store, key string) *Operation {
 	return op
 }
 
-// JS: store.delete(key)
+// Delete queues an IndexedDB objectStore.delete(key) request.
 func (tx *Transaction) Delete(store, key string) *Operation {
 	op := &Operation{
 		typee: opDelete,
@@ -66,7 +66,7 @@ func (tx *Transaction) Delete(store, key string) *Operation {
 	return op
 }
 
-// JS: store.put(value, key)
+// Put queues an IndexedDB objectStore.put(value, key) request.
 func (tx *Transaction) Put(store, key string, value js.Value) *Operation {
 	op := &Operation{
 		typee: opPut,
@@ -79,7 +79,7 @@ func (tx *Transaction) Put(store, key string, value js.Value) *Operation {
 	return op
 }
 
-// JS: store.getAllKeys(query)
+// GetAllKeys queues an IndexedDB objectStore.getAllKeys(query) request.
 func (tx *Transaction) GetAllKeys(store string, query js.Value) *Operation {
 	op := &Operation{
 		typee: opGetAllKeys,
@@ -91,7 +91,7 @@ func (tx *Transaction) GetAllKeys(store string, query js.Value) *Operation {
 	return op
 }
 
-// It creates the real JS IDB tx, runs all the queued request/queries and waits for them to finish.
+// Commit creates an IDBTransaction, dispatches all queued requests, and waits for their results.
 func (tx *Transaction) Commit(db js.Value) error {
 	if len(tx.pending) == 0 {
 		return nil
@@ -107,8 +107,9 @@ func (tx *Transaction) Commit(db js.Value) error {
 		}
 	}
 
-	// create the transaction
-	idbTx := db.Call("transaction", stores, "readwrite") // TODO: not only readwrite
+	// create the real JS transaction
+	// TODO: use a readonly transaction when every queued operation is a read
+	idbTx := db.Call("transaction", stores, "readwrite")
 
 	// run requests/queries
 	for _, op := range tx.pending {
@@ -120,7 +121,7 @@ func (tx *Transaction) Commit(db js.Value) error {
 	return tx.waitAll()
 }
 
-// A helper to call the JS methods.
+// dispatch starts op against store.
 func (tx *Transaction) dispatch(store js.Value, op *Operation) js.Value {
 	switch op.typee {
 	case opGet:
@@ -139,12 +140,11 @@ func (tx *Transaction) dispatch(store js.Value, op *Operation) js.Value {
 	}
 }
 
-// Binds the callbacks for specified op.
+// bind records the result of req on op.
 func (tx *Transaction) bind(req js.Value, op *Operation) {
 	var success, fail js.Func
 
 	success = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// release memory
 		defer success.Release()
 		defer fail.Release()
 
@@ -154,7 +154,6 @@ func (tx *Transaction) bind(req js.Value, op *Operation) {
 	})
 
 	fail = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// release memory
 		defer success.Release()
 		defer fail.Release()
 
@@ -168,7 +167,7 @@ func (tx *Transaction) bind(req js.Value, op *Operation) {
 	req.Set("onerror", fail)
 }
 
-// Waits for all op
+// waitAll waits for each queued operation or the transaction timeout.
 func (tx *Transaction) waitAll() error {
 	timeout := time.After(reqTimeout)
 
@@ -185,7 +184,7 @@ func (tx *Transaction) waitAll() error {
 	return nil
 }
 
-// Result simply returns the stored value, safe to call multiple times.
+// Result returns the stored operation result and is safe to call repeatedly.
 func (op *Operation) Result() js.Value {
 	return op.result
 }

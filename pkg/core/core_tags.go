@@ -42,7 +42,7 @@ func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 	return &tag, commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
 }
 
-// UpdateTag updates tag based on its Id.
+// UpdateTag replaces a tag with the same ID.
 func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 	if err := tag.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid tag: %w", err)
@@ -105,6 +105,9 @@ func (c *Core) tagWorktree(calendar string) (*Calendar, *gogit.Worktree, error) 
 	}
 	if cal.repository == nil {
 		return nil, nil, fmt.Errorf("invalid calendar %q: no repository", calendar)
+	}
+	if cal.Readonly {
+		return nil, nil, fmt.Errorf("calendar %q is read-only", calendar)
 	}
 
 	wt, err := cal.repository.Worktree()

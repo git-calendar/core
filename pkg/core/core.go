@@ -22,23 +22,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// The real API.
-//
+// Core manages calendars, events, tags, synchronization, and persistence using Go values.
 // Works with raw Go structs, use api.Api to work with JSON.
 type Core struct {
 	intervalTree *IntervalTree
 	events       map[uuid.UUID]*Event
 	calendars    map[string]*Calendar
 	fs           billy.Filesystem // root "/" for OPFS/IDB, "$HOME" for classic FS
-	proxyUrl     *url.URL         // cors proxy, that works with "url" query param (like https://cors-proxy.abc/https://github.com/...) (only needed for the browser!)
+	proxyUrl     *url.URL         // cors proxy, that works like https://cors-proxy.abc/https://github.com/... (only needed for the browser!)
 }
 
-// A "constructor" for Core.
+// NewCore creates an initialized Core using the platform filesystem.
 func NewCore() *Core {
 	var c Core
 	c.resetCore()
 
-	// get the fs; go tags handle which one (classic/wasm)
+	// Build tags select the classic or WebAssembly filesystem implementation.
 	var err error
 	c.fs, err = filesystem.GetFS()
 	if err != nil {
@@ -48,7 +47,7 @@ func NewCore() *Core {
 	return &c
 }
 
-// Sets a url for CORS proxy. This is only needed inside a browser.
+// SetCorsProxy configures the CORS proxy used by browser transports.
 func (c *Core) SetCorsProxy(proxyUrl string) error {
 	if proxyUrl == "" {
 		c.proxyUrl = nil
@@ -71,10 +70,7 @@ func (c *Core) SyncAll() error {
 			continue // important to check here; syncCalendar and other do assume this
 		}
 
-		wg.Add(1)
-		go func(cal *Calendar) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			var err error
 			if cal.ICalURL != nil {
 				err = c.fetchICalURL(cal.Name, cal.ICalURL)
@@ -84,7 +80,7 @@ func (c *Core) SyncAll() error {
 			if err != nil {
 				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
 			}
-		}(cal)
+		})
 	}
 
 	wg.Wait() // wait for all calendar syncs to finish
@@ -155,18 +151,19 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 		return pushCalendar(cal, c.proxyUrl)
 
 	default:
-		// cant simply push or pull (history diverged) -> try merge
+		// Diverged histories require the custom merge policy before pushing.
 
 		fmt.Printf("Diverged history detected on %q, trying to merge...\n", cal.Name)
 		if err := mergeOriginMain(cal.repository, cal.Name, cal.EncryptionKey); err != nil {
 			return fmt.Errorf("failed to merge: %w", err)
 		}
-		fmt.Printf("Custom merge successfull for %q\n", cal.Name)
+		fmt.Printf("Custom merge successful for %q\n", cal.Name)
 
 		return pushCalendar(cal, c.proxyUrl)
 	}
 }
 
+// ExportZip exports all persisted data or one calendar repository as a ZIP archive.
 func (c *Core) ExportZip(calendar string) ([]byte, error) {
 	var buf bytes.Buffer
 	var fs billy.Filesystem
@@ -194,19 +191,19 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 		return nil, err
 	}
 
-	return append([]byte(nil), buf.Bytes()...), nil
+	return buf.Bytes(), nil
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
 
-// Resets the Core internal variables and reallocates them.
+// resetCore clears and reinitializes the in-memory indexes.
 func (c *Core) resetCore() {
 	c.intervalTree = NewIntervalTree()
 	c.events = make(map[uuid.UUID]*Event)
 	c.calendars = make(map[string]*Calendar)
 }
 
-// Loads, if exists, or creates new repository with the given name.
+// initCalendarRepo opens or initializes the named calendar repository.
 func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 	if err := c.fs.MkdirAll(name, 0o755); err != nil {
 		return nil, fmt.Errorf("create repo dir: %w", err)
@@ -253,7 +250,7 @@ func (c *Core) initCalendarRepo(name string) (*gogit.Repository, error) {
 func ensureInitialCommit(repo *gogit.Repository) error {
 	_, err := repo.Head()
 	if err == nil {
-		// HEAD exists -> repo already has commits
+		// HEAD exists, so the repository already has commits
 		return nil
 	}
 	if !errors.Is(err, plumbing.ErrReferenceNotFound) {

@@ -39,8 +39,8 @@ END:VCALENDAR`
 	}
 
 	first := events[0]
-	if first.Id.Version() != 4 {
-		t.Errorf("event ID version = %d, want 4", first.Id.Version())
+	if first.ID.Version() != 4 {
+		t.Errorf("event ID version = %d, want 4", first.ID.Version())
 	}
 	if first.Title != "Planning, review" {
 		t.Errorf("Title = %q, want %q", first.Title, "Planning, review")

@@ -10,8 +10,9 @@ import (
 	"github.com/rdleal/intervalst/interval"
 )
 
+// IntervalTree indexes one or more event IDs under each event time range.
 type IntervalTree struct {
-	tree interval.SearchTree[[]uuid.UUID, time.Time] // for each interval we can have multiple events; <time.Time, time.Time> -> []uuid.UUID
+	tree interval.SearchTree[[]uuid.UUID, time.Time] // <time.Time, time.Time> -> []uuid.UUID
 }
 
 func NewIntervalTree() *IntervalTree {
@@ -24,17 +25,14 @@ func NewIntervalTree() *IntervalTree {
 	}
 }
 
-// Inserts an Event to its interval in the tree.
+// InsertEvent adds an event to its interval in the tree.
 func (et *IntervalTree) InsertEvent(event Event) error {
 	eventEnd := event.getTreeEndTime()
 	ids, _ := et.tree.Find(event.From, eventEnd) // find existing interval
-	updated := append(ids, event.Id)             // if not found, ids is nil -> append makes [event.Id]
-
-	err := et.tree.Insert(event.From, eventEnd, updated)
-	return err
+	return et.tree.Insert(event.From, eventEnd, append(ids, event.ID))
 }
 
-// Deletes an Event from the interval tree.
+// RemoveEvent deletes an event from the interval tree.
 func (et *IntervalTree) RemoveEvent(event Event) error {
 	// find last child and its To
 	eventEnd := event.getTreeEndTime()
@@ -46,7 +44,7 @@ func (et *IntervalTree) RemoveEvent(event Event) error {
 	}
 
 	// find index of our event
-	index := slices.Index(ids, event.Id)
+	index := slices.Index(ids, event.ID)
 	if index == -1 {
 		return errors.New("event not in searched interval")
 	}

@@ -30,7 +30,7 @@ func parseICal(r io.Reader, calendar string, stableIDs bool) ([]Event, error) {
 			return nil, fmt.Errorf("import event %d: %w", i+1, err)
 		}
 		if stableIDs {
-			event.Id = icalEventID(calendar, source.Id(), i, event)
+			event.ID = icalEventID(calendar, source.Id(), i, event)
 		}
 		if err := event.Validate(); err != nil {
 			return nil, fmt.Errorf("import event %d: %w", i+1, err)
@@ -122,7 +122,7 @@ func normalizeTimeZones(event *ics.VEvent) {
 
 func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {
 	if uid == "" {
-		// fallback it uid is missing
+		// fallback if uid is missing
 		uid = fmt.Sprintf("%d\x00%s\x00%s", index, event.Title, event.From.Format(time.RFC3339Nano))
 	}
 	return uuid.NewHash(sha256.New(), uuid.Nil, []byte(calendar+"\x00"+uid), 8)

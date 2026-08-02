@@ -34,10 +34,10 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("got %d imported events, want 1", len(events))
 	}
-	if events[0].Id.Version() != 4 {
-		t.Errorf("event ID version = %d, want 4", events[0].Id.Version())
+	if events[0].ID.Version() != 4 {
+		t.Errorf("event ID version = %d, want 4", events[0].ID.Version())
 	}
-	id := events[0].Id
+	id := events[0].ID
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -52,7 +52,7 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	events = importedEvents(c, calendar)
-	if len(events) != 1 || events[0].Id != id {
+	if len(events) != 1 || events[0].ID != id {
 		t.Fatalf("imported event did not survive reload: %+v", events)
 	}
 }
@@ -151,10 +151,10 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	if len(events) != 1 || events[0].Title != "First title" {
 		t.Fatalf("first URL import = %+v", events)
 	}
-	if events[0].Id.Version() != 8 {
-		t.Errorf("event ID version = %d, want 8", events[0].Id.Version())
+	if events[0].ID.Version() != 8 {
+		t.Errorf("event ID version = %d, want 8", events[0].ID.Version())
 	}
-	id := events[0].Id
+	id := events[0].ID
 
 	calendars, err := c.ListCalendars()
 	if err != nil {
@@ -219,8 +219,8 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	if len(events) != 1 || events[0].Title != "Second title" {
 		t.Fatalf("synced URL import = %+v", events)
 	}
-	if events[0].Id != id {
-		t.Errorf("event ID changed after sync: got %s, want %s", events[0].Id, id)
+	if events[0].ID != id {
+		t.Errorf("event ID changed after sync: got %s, want %s", events[0].ID, id)
 	}
 	if requests.Load() != 2 {
 		t.Errorf("URL was fetched %d times, want 2", requests.Load())

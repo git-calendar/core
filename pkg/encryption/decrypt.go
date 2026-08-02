@@ -16,11 +16,7 @@ func DecryptFields(v any, key, aad []byte) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
 	}
-	dec, err := decryptAll(v, aad, siv)
-	if err != nil {
-		return nil, err
-	}
-	return dec, nil
+	return decryptAll(v, aad, siv)
 }
 
 func decryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {

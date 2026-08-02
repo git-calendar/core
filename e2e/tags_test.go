@@ -7,14 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const TestTagName = "test"
-
 func TestTag_CreateTag_CreatesTag(t *testing.T) {
 	c := newTestCore(t)
 
 	tag := newTestTag("work", "blue")
 
-	created, err := c.CreateTag(TestTagName, tag)
+	created, err := c.CreateTag(testCalendarName, tag)
 	if err != nil {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
@@ -30,11 +28,11 @@ func TestTag_CreateTag_DuplicateReturnsError(t *testing.T) {
 
 	tag := newTestTag("work", "blue")
 
-	if _, err := c.CreateTag(TestTagName, tag); err != nil {
+	if _, err := c.CreateTag(testCalendarName, tag); err != nil {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
 
-	created, err := c.CreateTag(TestTagName, tag)
+	created, err := c.CreateTag(testCalendarName, tag)
 	if err == nil {
 		t.Fatalf("expected duplicate tag error")
 	}
@@ -47,16 +45,31 @@ func TestTag_CreateTag_InvalidTagReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
 	tag := core.Tag{
-		Name:  "",
+		Id:    uuid.New(),
 		Color: "blue",
 	}
 
-	created, err := c.CreateTag(TestTagName, tag)
+	created, err := c.CreateTag(testCalendarName, tag)
 	if err == nil {
 		t.Fatalf("expected invalid tag error")
 	}
 	if created != nil {
-		t.Fatalf("expected nil created tag, got %+v", created)
+		t.Fatalf("expected nil tag on error, got %#v", created)
+	}
+}
+
+func TestTag_CreateTag_ReadonlyCalendarReturnsError(t *testing.T) {
+	c := newTestCore(t)
+	if err := c.UpdateRemote(testCalendarName, mustParseUrl("https://example.com/calendar.git"), true); err != nil {
+		t.Fatalf("failed to make calendar read-only: %v", err)
+	}
+
+	created, err := c.CreateTag(testCalendarName, newTestTag("work", "blue"))
+	if err == nil {
+		t.Fatal("expected read-only calendar error")
+	}
+	if created != nil {
+		t.Fatalf("expected nil tag on error, got %#v", created)
 	}
 }
 
@@ -65,7 +78,7 @@ func TestTag_UpdateTag_UpdatesExistingTag(t *testing.T) {
 
 	tag := newTestTag("work", "blue")
 
-	if _, err := c.CreateTag(TestTagName, tag); err != nil {
+	if _, err := c.CreateTag(testCalendarName, tag); err != nil {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
 
@@ -75,7 +88,7 @@ func TestTag_UpdateTag_UpdatesExistingTag(t *testing.T) {
 		Color: "blue",
 	}
 
-	got, err := c.UpdateTag(TestTagName, updated)
+	got, err := c.UpdateTag(testCalendarName, updated)
 	if err != nil {
 		t.Fatalf("UpdateTag failed: %v", err)
 	}
@@ -94,7 +107,7 @@ func TestTag_UpdateTag_InvalidTagReturnsError(t *testing.T) {
 		Color: "red",
 	}
 
-	updated, err := c.UpdateTag(TestTagName, tag)
+	updated, err := c.UpdateTag(testCalendarName, tag)
 	if err == nil {
 		t.Fatalf("expected invalid tag error")
 	}
@@ -108,13 +121,7 @@ func TestTag_UpdateTag_MissingTagReturnsErrorInsteadOfPanicking(t *testing.T) {
 
 	tag := newTestTag("missing", "blue")
 
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("expected error for missing tag, got panic: %v", r)
-		}
-	}()
-
-	updated, err := c.UpdateTag(TestTagName, tag)
+	updated, err := c.UpdateTag(testCalendarName, tag)
 	if err == nil {
 		t.Fatalf("expected missing tag error")
 	}
@@ -128,11 +135,11 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 
 	tag := newTestTag("work", "blue")
 
-	if _, err := c.CreateTag(TestTagName, tag); err != nil {
+	if _, err := c.CreateTag(testCalendarName, tag); err != nil {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
 
-	if err := c.RemoveTag(TestTagName, tag.Id); err != nil {
+	if err := c.RemoveTag(testCalendarName, tag.Id); err != nil {
 		t.Fatalf("RemoveTag failed: %v", err)
 	}
 
@@ -143,7 +150,7 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 		Color: "blue",
 	}
 
-	got, err := c.CreateTag(TestTagName, recreated)
+	got, err := c.CreateTag(testCalendarName, recreated)
 	if err != nil {
 		t.Fatalf("CreateTag after RemoveTag failed: %v", err)
 	}
@@ -157,7 +164,7 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 func TestTag_RemoveTag_InvalidIdReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
-	err := c.RemoveTag(TestTagName, uuid.Nil)
+	err := c.RemoveTag(testCalendarName, uuid.Nil)
 	if err == nil {
 		t.Fatalf("expected invalid tag id error")
 	}

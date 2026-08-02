@@ -9,29 +9,34 @@ import (
 	"time"
 )
 
+// IDBFile is an open file backed by an IndexedDB entry.
 type IDBFile struct {
-	fs      *IndexedDB // A reference to it's fs.
-	key     string     // The key used in IndexedDB (absolute filepath).
-	relPath string     // Path relative to fs.
-	offset  int64      // Current offset in bytes.
+	fs      *IndexedDB // A reference to it's fs
+	key     string     // Absolute IndexedDB key/filepath
+	relPath string     // Path relative to fs.root
+	offset  int64      // Current offset in bytes
 }
 
+// Name returns the file path relative to the current filesystem root.
 func (f *IDBFile) Name() string {
-	return f.relPath // returns the filepath RELATIVE to current fs root
+	return f.relPath
 }
 
+// Read reads from the current file offset.
 func (f *IDBFile) Read(p []byte) (int, error) {
 	n, err := f.ReadAt(p, f.offset)
 	f.offset += int64(n)
 	return n, err
 }
 
+// Write writes at the current file offset.
 func (f *IDBFile) Write(p []byte) (int, error) {
 	n, err := f.WriteAt(p, f.offset)
 	f.offset += int64(n)
 	return n, err
 }
 
+// ReadAt reads from the file starting at off.
 func (f *IDBFile) ReadAt(p []byte, off int64) (x int, err error) {
 	tx := NewTx()
 	req := tx.Get(contentStoreName, f.key)
@@ -59,6 +64,7 @@ func (f *IDBFile) ReadAt(p []byte, off int64) (x int, err error) {
 	return n, nil
 }
 
+// WriteAt writes to the file starting at off.
 func (f *IDBFile) WriteAt(p []byte, off int64) (s int, err error) {
 	// read existing data and info
 	txRead := NewTx()
@@ -104,6 +110,7 @@ func (f *IDBFile) WriteAt(p []byte, off int64) (s int, err error) {
 	return len(p), nil
 }
 
+// Seek sets the current file offset.
 func (f *IDBFile) Seek(offset int64, whence int) (int64, error) {
 	var base int64
 
@@ -134,18 +141,22 @@ func (f *IDBFile) Seek(offset int64, whence int) (int64, error) {
 	return f.offset, nil
 }
 
+// Close is a no-op for IndexedDB files.
 func (f *IDBFile) Close() error {
 	return nil
 }
 
+// Lock is a no-op for IndexedDB files.
 func (f *IDBFile) Lock() error {
 	return nil
 }
 
+// Unlock is a no-op for IndexedDB files.
 func (f *IDBFile) Unlock() error {
 	return nil
 }
 
+// Truncate changes the file size to size bytes.
 func (f *IDBFile) Truncate(size int64) error {
 	txRead := NewTx()
 	contentReq := txRead.Get(contentStoreName, f.key)

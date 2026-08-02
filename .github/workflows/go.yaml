@@ -35,7 +35,7 @@ jobs:
 
   build-and-release:
     name: Build and Release
-    needs: tests # only release if security AND all tests pass
+    needs: tests # only release if all tests pass
     if: startsWith(github.ref, 'refs/tags/') # only with tag push (vX.X.X)
     runs-on: ubuntu-latest
     permissions:
@@ -55,7 +55,9 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
-          files: build/web/core.wasm
+          files: |
+            build/web/core.wasm
+            build/web/wasm_exec.js
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

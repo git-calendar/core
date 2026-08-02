@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ImportICalFile imports events once and saves them like normal events.
+// ImportICalFile imports events once and saves them as regular events.
 func (c *Core) ImportICalFile(calendar string, tagId *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
@@ -33,7 +33,7 @@ func (c *Core) ImportICalFile(calendar string, tagId *uuid.UUID, r io.Reader) er
 
 	if tagId != nil && *tagId != uuid.Nil {
 		for i := range events {
-			events[i].TagId = tagId
+			events[i].TagID = tagId
 		}
 	}
 
@@ -192,13 +192,13 @@ func (c *Core) loadICalFile(name string) error {
 
 	seen := make(map[uuid.UUID]struct{}, len(events))
 	for _, event := range events {
-		_, alreadyLoaded := c.events[event.Id]
-		_, duplicate := seen[event.Id]
+		_, alreadyLoaded := c.events[event.ID]
+		_, duplicate := seen[event.ID]
 		if alreadyLoaded || duplicate {
-			fmt.Printf("WARN: duplicate imported event ID %q\n", event.Id)
+			fmt.Printf("WARN: duplicate imported event ID %q\n", event.ID)
 			continue
 		}
-		seen[event.Id] = struct{}{}
+		seen[event.ID] = struct{}{}
 	}
 
 	for i := range events {
@@ -206,7 +206,7 @@ func (c *Core) loadICalFile(name string) error {
 		if err := c.intervalTree.InsertEvent(*event); err != nil {
 			return err
 		}
-		c.events[event.Id] = event
+		c.events[event.ID] = event
 	}
 
 	return nil

@@ -8,7 +8,7 @@ import (
 	"syscall/js"
 )
 
-// onUpgrade is called if db version is higher or DB does not exist. It's like custom migration method.
+// awaitOpen waits for an IndexedDB open request and invokes onUpgrade when the database is created or opened with a higher version.
 func awaitOpen(req js.Value, onUpgrade func(db js.Value)) (js.Value, error) {
 	resultCh := make(chan js.Value, 1)
 	errCh := make(chan error, 1)

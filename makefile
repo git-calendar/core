@@ -39,7 +39,7 @@ prod_build_web: create_build_dir wasm_glue
 # -------------------------------------------------------------------------------------------
 
 # copy wasm_exec.js "glue"
-wasm_glue:
+wasm_glue: create_build_dir
 	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js
 
 proxy:

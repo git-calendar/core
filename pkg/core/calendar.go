@@ -12,6 +12,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 )
 
+// Calendar describes a calendar and its tags, storage, and source metadata.
 type Calendar struct {
 	Name          string
 	Tags          []Tag
@@ -22,6 +23,7 @@ type Calendar struct {
 	repository *gogit.Repository
 }
 
+// Validate checks the calendar name and tags.
 func (cal *Calendar) Validate() error {
 	if cal == nil {
 		return nil
@@ -37,10 +39,12 @@ func (cal *Calendar) Validate() error {
 	return nil
 }
 
+// IsEncrypted reports whether the calendar has an encryption key.
 func (cal *Calendar) IsEncrypted() bool {
 	return len(cal.EncryptionKey) != 0
 }
 
+// RemoteURL returns the calendar repository's configured remote URL.
 func (cal *Calendar) RemoteURL() (string, error) {
 	if cal.repository == nil {
 		return "", nil
@@ -63,6 +67,7 @@ func (cal *Calendar) RemoteURL() (string, error) {
 	return cfg.URLs[0], nil
 }
 
+// MarshalJSON implements json.Marshaler for public calendar metadata.
 func (cal *Calendar) MarshalJSON() ([]byte, error) {
 	type calendarJSON struct {
 		Name      string `json:"name"`
@@ -93,6 +98,7 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// LoadTags reloads the calendar's tags from its repository.
 func (cal *Calendar) LoadTags() error {
 	wt, err := cal.repository.Worktree()
 	if err != nil {

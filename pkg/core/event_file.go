@@ -15,7 +15,8 @@ import (
 	rrule "github.com/teambition/rrule-go"
 )
 
-// eventInFile represents event inside file. It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
+// eventInFile represents event inside file.
+// It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
 type eventInFile struct {
 	Title       string     `json:"title,omitzero"`
 	Location    string     `json:"location,omitzero"`
@@ -38,15 +39,15 @@ func (ef eventInFile) toEvent(id uuid.UUID, calendar string) (Event, error) {
 		}
 	}
 	return Event{
-		Id:          id,
+		ID:          id,
 		Title:       ef.Title,
 		Location:    ef.Location,
 		Description: ef.Description,
 		From:        ef.From,
 		To:          ef.To,
 		Calendar:    calendar,
-		TagId:       ef.TagId,
-		ParentId:    ef.ParentId,
+		TagID:       ef.TagId,
+		ParentID:    ef.ParentId,
 		Repeat:      repeat,
 		UpdatedAt:   ef.UpdatedAt,
 	}, nil
@@ -63,15 +64,16 @@ func (e Event) fileData() eventInFile {
 		Description: e.Description,
 		From:        e.From,
 		To:          e.To,
-		TagId:       e.TagId,
-		ParentId:    e.ParentId,
+		TagId:       e.TagID,
+		ParentId:    e.ParentID,
 		Repeat:      repeat,
 		UpdatedAt:   e.UpdatedAt,
 	}
 }
 
+// WriteToFile serializes the event to a repository file, encrypting it when key is set.
 func (e Event) WriteToFile(file billy.File, key []byte) error {
-	if e.Id == uuid.Nil {
+	if e.ID == uuid.Nil {
 		return errors.New("event id has to be set")
 	}
 
@@ -93,7 +95,7 @@ func (e Event) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// encrypt everything recursively
-	encrypted, err := encryption.EncryptFields(plain, key, e.Id[:])
+	encrypted, err := encryption.EncryptFields(plain, key, e.ID[:])
 	if err != nil {
 		return err
 	}
@@ -108,6 +110,7 @@ func (e Event) WriteToFile(file billy.File, key []byte) error {
 	return err
 }
 
+// LoadFromFile decodes an event from a repository file.
 func (e *Event) LoadFromFile(file billy.File, calendar string, decryptionKey []byte) error {
 	raw, err := io.ReadAll(file)
 	if err != nil {
@@ -117,8 +120,9 @@ func (e *Event) LoadFromFile(file billy.File, calendar string, decryptionKey []b
 	return e.LoadFromBytes(raw, file.Name(), calendar, decryptionKey)
 }
 
+// LoadFromBytes decodes an event, deriving its ID from the supplied file name.
 func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decryptionKey []byte) error {
-	id, err := uuid.Parse(strings.TrimSuffix(path.Base(name), ".json")) // get event id from the name
+	id, err := uuid.Parse(strings.TrimSuffix(path.Base(name), ".json"))
 	if err != nil {
 		return err
 	}

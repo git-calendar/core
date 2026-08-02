@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// OPFSFileInfo describes an OPFS file or directory.
 type OPFSFileInfo struct {
 	name    string
 	size    int64
@@ -15,17 +16,29 @@ type OPFSFileInfo struct {
 	isDir   bool
 }
 
-var _ os.FileInfo = (*OPFSFileInfo)(nil) // makes sure that it implements all the interface methods, it wont compile without it
+// Verify at compile time that OPFSFileInfo implements os.FileInfo.
+var _ os.FileInfo = (*OPFSFileInfo)(nil)
 
-func (fi *OPFSFileInfo) Name() string       { return fi.name }
-func (fi *OPFSFileInfo) Size() int64        { return fi.size }
+// Name returns the base name.
+func (fi *OPFSFileInfo) Name() string { return fi.name }
+
+// Size returns the file size in bytes.
+func (fi *OPFSFileInfo) Size() int64 { return fi.size }
+
+// ModTime returns the last modification time.
 func (fi *OPFSFileInfo) ModTime() time.Time { return fi.modTime }
-func (fi *OPFSFileInfo) IsDir() bool        { return fi.isDir }
-func (fi *OPFSFileInfo) Sys() any           { return nil }              // Sys can return the underlying data source, usually nil for virtual FS
-func (fi *OPFSFileInfo) Type() fs.FileMode  { return fi.Mode().Type() } // use Mode() which we already implemented and extract just the type bits
 
-// Mode returns the file permissions.
-// Git checks this to see if a file is executable or a directory.
+// IsDir reports whether the entry is a directory.
+func (fi *OPFSFileInfo) IsDir() bool { return fi.isDir }
+
+// Sys returns no underlying system data.
+func (fi *OPFSFileInfo) Sys() any { return nil }
+
+// Type returns the type bits from Mode.
+func (fi *OPFSFileInfo) Type() fs.FileMode { return fi.Mode().Type() }
+
+// Mode returns synthetic permissions; Git uses the type and executable bits
+// when interpreting filesystem entries.
 func (fi *OPFSFileInfo) Mode() os.FileMode {
 	if fi.isDir {
 		return os.ModeDir | 0o755
@@ -33,7 +46,7 @@ func (fi *OPFSFileInfo) Mode() os.FileMode {
 	return 0o644
 }
 
+// Info implements fs.DirEntry by returning fi as fs.FileInfo.
 func (fi *OPFSFileInfo) Info() (fs.FileInfo, error) {
-	// This is required if you are implementing the fs.DirEntry interface
 	return fi, nil
 }

@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package filesystem provides the platform-specific application data filesystem.
 package filesystem
 
 import (
@@ -11,9 +12,10 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 )
 
+// DirName is the native data directory under the user's home directory.
 const DirName string = ".git-calendar-data"
 
-// Returns a FS starting from users home directory.
+// GetFS returns a filesystem rooted at the native application data directory.
 func GetFS() (billy.Filesystem, error) {
 	// get user home dir
 	home, err := os.UserHomeDir()
@@ -29,8 +31,6 @@ func GetFS() (billy.Filesystem, error) {
 
 	// base filesystem rooted at home
 	base := osfs.New(home)
-
-	// chroot into DirName
 	scoped := chroot.New(base, DirName)
 	return scoped, nil
 }

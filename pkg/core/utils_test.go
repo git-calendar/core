@@ -204,7 +204,7 @@ func TestCustomUUIDs(t *testing.T) {
 	}
 }
 
-// Helper
+// Test helper
 func mustParseUrl(raw string) *url.URL {
 	u, err := url.Parse(raw)
 	if err != nil {

@@ -138,6 +138,24 @@ func TestMergeRemoteIntoBranch_AlreadyUpToDateDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestMergeRemoteIntoBranch_UsesConfiguredTime(t *testing.T) {
+	repo := makeMergeRepo(t, ts(10), ts(11), ts(12))
+	opts := testOptions()
+	want := opts.Now()
+
+	if err := MergeRemoteIntoBranch(repo, opts); err != nil {
+		t.Fatalf("MergeRemoteIntoBranch() error = %v", err)
+	}
+
+	commit, err := repo.CommitObject(headHash(t, repo))
+	if err != nil {
+		t.Fatalf("CommitObject: %v", err)
+	}
+	if !commit.Author.When.Equal(want) {
+		t.Fatalf("merge time = %s, want %s", commit.Author.When, want)
+	}
+}
+
 func testOptions() Options {
 	return Options{
 		BranchName:  testBranch,
@@ -380,10 +398,8 @@ func ts(hour int) *time.Time {
 }
 
 func sameTime(a, b *time.Time) bool {
-	switch {
-	case a == nil || b == nil:
+	if a == nil || b == nil {
 		return a == b
-	default:
-		return a.Equal(*b)
 	}
+	return a.Equal(*b)
 }

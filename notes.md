@@ -10,8 +10,6 @@
     - [x] basic repetition
     - [x] update repeating
     - [x] remove repeating
-      - pkg/core/core_events.go:139-143
-      - pkg/core/core_events.go:359
     - [x] tests
   - [x] connect repeating event exceptions
     - exception needs to have uuid
@@ -22,7 +20,7 @@
 - [ ] iCalendar compatibility
   - [x] import
     - [x] one-time import into a Git-backed calendar
-    - [x] URL calendar fetched on every load
+    - [x] URL calendar cached locally and refreshed by `SyncAll`
   - [ ] export
     - to a file
     - idk about url
@@ -60,7 +58,8 @@
 │   │   └── <UUID>.json
 │   ├── index.jsonl
 │   └── index-rich.jsonl
-├── imported
+├── subscribed.url
+├── subscribed.ics
 ├── default.key
 ├── shared.readonly
 └── shared.key

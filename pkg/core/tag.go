@@ -22,6 +22,7 @@ type Tag struct {
 	UpdatedAt time.Time `json:"-"`
 }
 
+// Validate checks the tag and assigns an ID when one is missing.
 func (t *Tag) Validate() error {
 	if t == nil {
 		return nil
@@ -31,8 +32,8 @@ func (t *Tag) Validate() error {
 		if t.Id.Version() != 4 { // enforce version
 			return errors.New("unsupported UUID version")
 		}
-	} else { // if id is unset
-		t.Id = uuid.New() // create one if not specified
+	} else {
+		t.Id = uuid.New()
 	}
 	if t.Name == "" {
 		return errors.New("tag name cannot be empty")
@@ -49,7 +50,7 @@ func (tag Tag) getPath() string {
 
 // ----------------------------------------------------------------
 
-// tagInFile represents a tag inside file.
+// tagInFile represents a tag inside a file.
 type tagInFile struct {
 	Name      string    `json:"name,omitzero"`
 	Color     string    `json:"color,omitzero"`
@@ -73,6 +74,7 @@ func (e Tag) fileData() tagInFile {
 	}
 }
 
+// WriteToFile serializes the tag to a repository file, encrypting it when key is set.
 func (e Tag) WriteToFile(file billy.File, key []byte) error {
 	if e.Id == uuid.Nil {
 		return errors.New("tag id has to be set")
@@ -111,6 +113,7 @@ func (e Tag) WriteToFile(file billy.File, key []byte) error {
 	return err
 }
 
+// LoadFromFile decodes a tag from a repository file.
 func (e *Tag) LoadFromFile(file billy.File, decryptionKey []byte) error {
 	raw, err := io.ReadAll(file)
 	if err != nil {
@@ -120,6 +123,7 @@ func (e *Tag) LoadFromFile(file billy.File, decryptionKey []byte) error {
 	return e.LoadFromBytes(raw, file.Name(), decryptionKey)
 }
 
+// LoadFromBytes decodes a tag, deriving its ID from the supplied file name.
 func (e *Tag) LoadFromBytes(raw []byte, filename string, decryptionKey []byte) error {
 	id, err := uuid.Parse(strings.TrimSuffix(path.Base(filename), ".json")) // get tag id from the filename
 	if err != nil {

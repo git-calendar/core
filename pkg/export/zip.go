@@ -1,3 +1,4 @@
+// Package export writes filesystem data to portable archive formats.
 package export
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
+// Zip writes all files from fs to a ZIP archive on w.
 func Zip(fs billy.Filesystem, w io.Writer) error {
 	zw := zip.NewWriter(w)
 

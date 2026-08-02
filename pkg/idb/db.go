@@ -18,10 +18,11 @@ import (
 	"github.com/go-git/go-billy/v5"
 )
 
+// IndexedDB implements billy.Filesystem over an IndexedDB database.
 type IndexedDB struct {
-	name string   // The DB name.
+	name string   // The DB name
 	jsDB js.Value // JS IDBDatabase object (https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
-	root string   // The current abosolute root.
+	root string   // The current abosolute root
 }
 
 const (
@@ -29,6 +30,7 @@ const (
 	infoStoreName    = "info"
 )
 
+// New opens an IndexedDB database and initializes its filesystem stores.
 func New(name string, version int) (*IndexedDB, error) {
 	jsIdb := js.Global().Get("indexedDB")
 	if jsIdb.IsUndefined() {
@@ -77,6 +79,7 @@ func New(name string, version int) (*IndexedDB, error) {
 	return &idb, nil
 }
 
+// Create creates or truncates filename and opens it for reading and writing.
 func (idb *IndexedDB) Create(filename string) (billy.File, error) {
 	if err := idb.MkdirAll(path.Dir(filename), 0o755); err != nil {
 		return nil, err
@@ -105,6 +108,7 @@ func (idb *IndexedDB) Create(filename string) (billy.File, error) {
 	}, nil
 }
 
+// Open opens filename for reading.
 func (idb *IndexedDB) Open(filename string) (billy.File, error) {
 	key := idb.absolutePath(filename)
 
@@ -125,6 +129,7 @@ func (idb *IndexedDB) Open(filename string) (billy.File, error) {
 	}, nil
 }
 
+// OpenFile opens filename with the supplied flags and permissions.
 func (idb *IndexedDB) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
 	key := idb.absolutePath(filename)
 	create := flag&os.O_CREATE != 0
@@ -172,6 +177,7 @@ func (idb *IndexedDB) OpenFile(filename string, flag int, perm os.FileMode) (bil
 	return &file, nil
 }
 
+// Stat returns file information for name.
 func (idb *IndexedDB) Stat(name string) (os.FileInfo, error) {
 	key := idb.absolutePath(name)
 
@@ -225,6 +231,7 @@ func (idb *IndexedDB) hasChildren(name string) (bool, error) {
 	return result.Length() > 0, nil
 }
 
+// Rename moves oldpath to newpath.
 func (idb *IndexedDB) Rename(oldpath, newpath string) error {
 	// check source exists
 	info, err := idb.Stat(oldpath)
@@ -246,6 +253,7 @@ func (idb *IndexedDB) Rename(oldpath, newpath string) error {
 	return idb.renameFile(oldpath, newpath)
 }
 
+// Remove removes name when it is a file or an empty directory.
 func (idb *IndexedDB) Remove(name string) error {
 	key := idb.absolutePath(name)
 
@@ -292,10 +300,12 @@ func (idb *IndexedDB) Remove(name string) error {
 	return tx.Commit(idb.jsDB)
 }
 
+// Join joins path elements using slash-separated filesystem semantics.
 func (idb *IndexedDB) Join(elem ...string) string {
 	return path.Join(elem...)
 }
 
+// MkdirAll creates p and any missing parent directories.
 func (idb *IndexedDB) MkdirAll(p string, perm os.FileMode) error {
 	parts := strings.Split(path.Clean(p), "/")
 	currentPath := idb.root
@@ -340,6 +350,7 @@ func (idb *IndexedDB) MkdirAll(p string, perm os.FileMode) error {
 	return tx.Commit(idb.jsDB)
 }
 
+// ReadDir returns the direct children of p sorted by name.
 func (idb *IndexedDB) ReadDir(p string) ([]os.FileInfo, error) {
 	fullpath := idb.absolutePath(p)
 	prefix := strings.TrimSuffix(fullpath, "/") + "/"
@@ -435,23 +446,28 @@ func (idb *IndexedDB) ReadDir(p string) ([]os.FileInfo, error) {
 	return files, nil
 }
 
+// TempFile creates a temporary file in dir with the supplied prefix.
 func (idb *IndexedDB) TempFile(dir, prefix string) (billy.File, error) {
 	filename := prefix + randString(10)
 	return idb.Create(idb.Join(dir, filename))
 }
 
+// Lstat returns the same information as Stat because symlinks are unsupported.
 func (idb *IndexedDB) Lstat(filename string) (os.FileInfo, error) {
-	return idb.Stat(filename) // Lstat is same as Stat, but if the file is a symbolic link, it doesn't resolve it
+	return idb.Stat(filename)
 }
 
+// Symlink reports that symbolic links are unsupported.
 func (idb *IndexedDB) Symlink(target, link string) error {
 	return billy.ErrNotSupported
 }
 
+// Readlink reports that symbolic links are unsupported.
 func (idb *IndexedDB) Readlink(link string) (string, error) {
 	return "", billy.ErrNotSupported
 }
 
+// Chroot returns a filesystem rooted at path, creating path if necessary.
 func (idb *IndexedDB) Chroot(path string) (billy.Filesystem, error) {
 	// make sure it exists
 	if err := idb.MkdirAll(path, 0o777); err != nil {
@@ -465,11 +481,12 @@ func (idb *IndexedDB) Chroot(path string) (billy.Filesystem, error) {
 	}, nil
 }
 
+// Root returns the current filesystem root.
 func (idb *IndexedDB) Root() string {
 	return idb.root
 }
 
-// ----- HELPERS -----
+// ----- Helpers -----
 
 func (idb *IndexedDB) renameFile(oldpath, newpath string) error {
 	txRead := NewTx()
@@ -556,7 +573,7 @@ func (idb *IndexedDB) renameDir(oldpath, newpath string) error {
 	return idb.Remove(oldpath)
 }
 
-// Applies the O_TRUNC and O_APPEND flags to a file.
+// applyFlags applies O_TRUNC and O_APPEND to f.
 func (idb *IndexedDB) applyFlags(f *IDBFile, flag int) error {
 	if flag&os.O_TRUNC != 0 {
 		// truncate the file and then return it empty

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -18,20 +17,20 @@ import (
 func TestAddEvent_CreatesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	id := uuid.New()
 	title := "Foo Event"
 	eventIn := core.Event{
-		Id:       id,
-		Calendar: TestCalendarName,
+		ID:       id,
+		Calendar: testCalendarName,
 		Title:    title,
 		From:     time.Now(),
 		To:       time.Now().Add(2 * time.Hour),
@@ -47,7 +46,7 @@ func TestAddEvent_CreatesJsonFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
+	b, err := os.ReadFile(filepath.Join(home, filesystem.DirName, testCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id)))
 	if err != nil {
 		t.Errorf("failed to read event json file: %v", err)
 	}
@@ -68,20 +67,20 @@ func TestAddEvent_CreatesJsonFile(t *testing.T) {
 func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	id := uuid.New()
 	startTime := time.Now()
 	eventIn := core.Event{
-		Id:       id,
-		Calendar: TestCalendarName,
+		ID:       id,
+		Calendar: testCalendarName,
 		Title:    "Event To Delete",
 		From:     startTime,
 		To:       startTime.Add(1 * time.Hour),
@@ -96,8 +95,8 @@ func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 	if err != nil || out == nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
-	if out.Id != id {
-		t.Errorf("id should be %s, got %s", id, out.Id)
+	if out.ID != id {
+		t.Errorf("id should be %s, got %s", id, out.ID)
 	}
 
 	home, err := os.UserHomeDir()
@@ -105,7 +104,7 @@ func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	filePath := path.Join(home, filesystem.DirName, TestCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id))
+	filePath := filepath.Join(home, filesystem.DirName, testCalendarName, core.EventsDirName, fmt.Sprintf("%s.json", id))
 
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
@@ -128,19 +127,19 @@ func TestRemoveEvent_DeletesJsonFile(t *testing.T) {
 func TestAddEventAndGetEvent(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	date := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 	eventIn := core.Event{
-		Id:       uuid.New(),
-		Calendar: TestCalendarName,
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
 		Title:    "Foo Event",
 		From:     date,
 		To:       date.Add(2 * time.Hour),
@@ -151,7 +150,7 @@ func TestAddEventAndGetEvent(t *testing.T) {
 		t.Errorf("failed to create an event: %v", err)
 	}
 
-	eventOut, err := c.GetEvent(eventIn.Id)
+	eventOut, err := c.GetEvent(eventIn.ID)
 	if err != nil {
 		t.Fatalf("failed to get an event by id: %v", err)
 	}
@@ -165,21 +164,21 @@ func TestAddEventAndGetEvent(t *testing.T) {
 func TestAddEventsAndGetThemByInterval(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	numEvents := 5
 	for i := range numEvents {
 		eventIn := core.Event{
-			Id:       uuid.New(),
-			Calendar: TestCalendarName,
+			ID:       uuid.New(),
+			Calendar: testCalendarName,
 			Title:    fmt.Sprintf("Event %d", i+1),
 			From:     date.AddDate(0, 0, i),
 			To:       date.AddDate(0, 0, i).Add(time.Hour),
@@ -200,67 +199,63 @@ func TestAddEventsAndGetThemByInterval(t *testing.T) {
 func TestAddNormalEventsAndRemoveEvent(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	numEvents := 5
 	for i := range numEvents {
 		eventIn := core.Event{
-			Id:       uuid.New(),
-			Calendar: TestCalendarName,
+			ID:       uuid.New(),
+			Calendar: testCalendarName,
 			Title:    fmt.Sprintf("Event %d", i+1),
 			From:     date.AddDate(0, 0, i),
 			To:       date.AddDate(0, 0, i).Add(time.Hour),
 		}
-		_, err = c.CreateEvent(eventIn)
-		if err != nil {
-			t.Errorf("failed to create an event: %v", err)
+		if _, err = c.CreateEvent(eventIn); err != nil {
+			t.Fatalf("failed to create an event: %v", err)
 		}
 	}
 
 	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != numEvents {
-		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
-		t.Errorf("eventsOut: %v", eventsOut)
+		t.Fatalf("not the correct number of events: got %d, want %d; events: %v", len(eventsOut), numEvents, eventsOut)
 	}
 
-	err = c.RemoveEvent(eventsOut[0])
-	if err != nil {
-		t.Errorf("failed to remove event: %v", err)
+	if err = c.RemoveEvent(eventsOut[0]); err != nil {
+		t.Fatalf("failed to remove event: %v", err)
 	}
 
 	eventsOut = c.GetEvents(date, date.AddDate(0, 1, 0), nil)
 	if len(eventsOut) != numEvents-1 {
-		t.Errorf("not the correct number of events: got %d, want %d", len(eventsOut), numEvents)
-		t.Errorf("eventsOut: %v", eventsOut)
+		t.Fatalf("not the correct number of events: got %d, want %d; events: %v", len(eventsOut), numEvents-1, eventsOut)
 	}
 }
 
 func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var events []core.Event
 	for i := range 5 {
 		eventIn := core.Event{
-			Id:       uuid.New(),
-			Calendar: TestCalendarName,
+			ID:       uuid.New(),
+			Calendar: testCalendarName,
 			Title:    fmt.Sprintf("Event %d", i+1),
 			From:     date.AddDate(0, 0, 1),
 			To:       date.AddDate(0, 0, 1).Add(time.Hour),
@@ -275,7 +270,9 @@ func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 	}
 
 	for i := range events {
-		c.RemoveEvent(events[i])
+		if err := c.RemoveEvent(events[i]); err != nil {
+			t.Fatalf("failed to remove event: %v", err)
+		}
 	}
 
 	eventsOut := c.GetEvents(date, date.AddDate(0, 1, 0), nil)
@@ -288,19 +285,19 @@ func TestAddNormalEventsInSameIntervalAndRemoveEvents(t *testing.T) {
 func TestUpdateStandardEvent(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	startTime := time.Now()
 	eventIn := core.Event{
-		Id:       uuid.New(),
-		Calendar: TestCalendarName,
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
 		Title:    "Original Title",
 		From:     startTime,
 		To:       startTime.Add(time.Hour),
@@ -308,7 +305,7 @@ func TestUpdateStandardEvent(t *testing.T) {
 
 	_, err = c.CreateEvent(eventIn)
 	if err != nil {
-		t.Errorf("failed to create an event: %v", err)
+		t.Fatalf("failed to create an event: %v", err)
 	}
 
 	eventIn.Title = "Updated Title"
@@ -316,10 +313,13 @@ func TestUpdateStandardEvent(t *testing.T) {
 
 	updatedEvent, err := c.UpdateEvent(eventIn)
 	if err != nil {
-		t.Errorf("failed to update event: %v", err)
+		t.Fatalf("failed to update event: %v", err)
+	}
+	if updatedEvent == nil {
+		t.Fatal("updated event is nil")
 	}
 
-	eventOut, err := c.GetEvent(eventIn.Id)
+	eventOut, err := c.GetEvent(eventIn.ID)
 	if err != nil {
 		t.Fatalf("failed to get updated event: %v", err)
 	}
@@ -335,8 +335,8 @@ func TestUpdateStandardEvent(t *testing.T) {
 func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 	c := core.NewCore()
 
-	calendarA := TestCalendarName + "-filter-a"
-	calendarB := TestCalendarName + "-filter-b"
+	calendarA := testCalendarName + "-filter-a"
+	calendarB := testCalendarName + "-filter-b"
 
 	if err := c.CreateCalendar(calendarA, ""); err != nil {
 		t.Fatalf("failed to create calendar A: %v", err)
@@ -364,28 +364,28 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 
 	events := []core.Event{
 		{
-			Id:       matchingID,
+			ID:       matchingID,
 			Calendar: calendarA,
 			Title:    "matching event",
 			From:     from,
 			To:       to,
-			TagId:    new(tagA),
+			TagID:    new(tagA),
 		},
 		{
-			Id:       wrongTagID,
+			ID:       wrongTagID,
 			Calendar: calendarA,
 			Title:    "wrong tag",
 			From:     from,
 			To:       to,
-			TagId:    new(tagB),
+			TagID:    new(tagB),
 		},
 		{
-			Id:       wrongCalendarID,
+			ID:       wrongCalendarID,
 			Calendar: calendarB,
 			Title:    "wrong calendar",
 			From:     from,
 			To:       to,
-			TagId:    new(tagA),
+			TagID:    new(tagA),
 		},
 	}
 
@@ -404,15 +404,15 @@ func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d: %#v", len(got), got)
 	}
 
-	if got[0].Id != matchingID {
-		t.Errorf("expected event %s, got %s", matchingID, got[0].Id)
+	if got[0].ID != matchingID {
+		t.Errorf("expected event %s, got %s", matchingID, got[0].ID)
 	}
 }
 
 func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 	c := core.NewCore()
 
-	calendar := TestCalendarName + "-nil-filter"
+	calendar := testCalendarName + "-nil-filter"
 
 	if err := c.CreateCalendar(calendar, ""); err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
@@ -428,20 +428,20 @@ func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 	tagB := uuid.New()
 
 	eventA := core.Event{
-		Id:       uuid.New(),
+		ID:       uuid.New(),
 		Calendar: calendar,
 		Title:    "event A",
 		From:     from,
 		To:       to,
-		TagId:    new(tagA),
+		TagID:    new(tagA),
 	}
 	eventB := core.Event{
-		Id:       uuid.New(),
+		ID:       uuid.New(),
 		Calendar: calendar,
 		Title:    "event B",
 		From:     from.Add(30 * time.Minute),
 		To:       to.Add(30 * time.Minute),
-		TagId:    new(tagB),
+		TagID:    new(tagB),
 	}
 
 	if _, err := c.CreateEvent(eventA); err != nil {
@@ -457,17 +457,17 @@ func TestGetEvents_NilFilterReturnsAllEvents(t *testing.T) {
 		t.Fatalf("expected 2 events, got %d: %#v", len(got), got)
 	}
 
-	if !hasEvent(got, eventA.Id) {
+	if !hasEvent(got, eventA.ID) {
 		t.Errorf("missing event A")
 	}
-	if !hasEvent(got, eventB.Id) {
+	if !hasEvent(got, eventB.ID) {
 		t.Errorf("missing event B")
 	}
 }
 
 func hasEvent(events []core.Event, id uuid.UUID) bool {
 	for _, e := range events {
-		if e.Id == id {
+		if e.ID == id {
 			return true
 		}
 	}

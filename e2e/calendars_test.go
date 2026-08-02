@@ -6,23 +6,25 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/git-calendar/core/pkg/filesystem"
+	"github.com/google/uuid"
 )
 
-const TestCalendarName = "test"
+const testCalendarName = "test"
 
 func TestCreateCalendar(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	home, err := os.UserHomeDir()
@@ -37,7 +39,7 @@ func TestCreateCalendar(t *testing.T) {
 
 	var found bool
 	for _, d := range dirs {
-		if d.Name() == TestCalendarName {
+		if d.Name() == testCalendarName {
 			found = true
 			break
 		}
@@ -50,13 +52,13 @@ func TestCreateCalendar(t *testing.T) {
 func TestListCalendars(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	calendars, err := c.ListCalendars()
@@ -66,7 +68,7 @@ func TestListCalendars(t *testing.T) {
 
 	var found bool
 	for _, calendar := range calendars {
-		if calendar.Name != TestCalendarName {
+		if calendar.Name != testCalendarName {
 			continue
 		}
 
@@ -82,25 +84,25 @@ func TestListCalendars(t *testing.T) {
 	}
 
 	if !found {
-		t.Errorf("calendar %q not found in list", TestCalendarName)
+		t.Errorf("calendar %q not found in list", testCalendarName)
 	}
 }
 
 func TestListCalendars_WithRemote(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
 	remoteUrl := "https://github.com/git-calendar/calendar.git"
 
-	err = c.UpdateRemote(TestCalendarName, mustParseUrl(remoteUrl), false)
+	err = c.UpdateRemote(testCalendarName, mustParseUrl(remoteUrl), false)
 	if err != nil {
 		t.Fatalf("failed to update remotes: %v", err)
 	}
@@ -112,7 +114,7 @@ func TestListCalendars_WithRemote(t *testing.T) {
 
 	var found bool
 	for _, calendar := range calendars {
-		if calendar.Name != TestCalendarName {
+		if calendar.Name != testCalendarName {
 			continue
 		}
 		rurl, err := calendar.RemoteURL()
@@ -127,19 +129,22 @@ func TestListCalendars_WithRemote(t *testing.T) {
 	}
 
 	if !found {
-		t.Errorf("calendar %q not found in list", TestCalendarName)
+		t.Errorf("calendar %q not found in list", testCalendarName)
 	}
 }
 
 func TestRemoveCalendar(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
 	}
+	if err := c.UpdateRemote(testCalendarName, mustParseUrl("https://example.com/calendar.git"), true); err != nil {
+		t.Fatalf("failed to make calendar read-only: %v", err)
+	}
 
-	err = c.RemoveCalendar(TestCalendarName)
+	err = c.RemoveCalendar(testCalendarName)
 	if err != nil {
 		t.Fatalf("failed to remove calendar: %v", err)
 	}
@@ -149,7 +154,7 @@ func TestRemoveCalendar(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	calendarPath := filepath.Join(home, filesystem.DirName, TestCalendarName)
+	calendarPath := filepath.Join(home, filesystem.DirName, testCalendarName)
 
 	_, err = os.Stat(calendarPath)
 	if err == nil {
@@ -159,13 +164,18 @@ func TestRemoveCalendar(t *testing.T) {
 	if err != nil && !os.IsNotExist(err) {
 		t.Errorf("failed to check calendar directory: %v", err)
 	}
+
+	readonlyPath := filepath.Join(home, filesystem.DirName, testCalendarName+core.ReadonlyFileSuffix)
+	if _, err := os.Stat(readonlyPath); !os.IsNotExist(err) {
+		t.Errorf("read-only marker still exists or could not be checked: %v", err)
+	}
 }
 
 func TestRenameCalendar(t *testing.T) {
 	c := core.NewCore()
 
-	oldName := TestCalendarName + "_old"
-	newName := TestCalendarName + "_new"
+	oldName := testCalendarName + "_old"
+	newName := testCalendarName + "_new"
 
 	err := c.CreateCalendar(oldName, "")
 	if err != nil {
@@ -176,6 +186,18 @@ func TestRenameCalendar(t *testing.T) {
 		_ = c.RemoveCalendar(oldName)
 	})
 
+	start := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
+	event, err := c.CreateEvent(core.Event{
+		ID:       uuid.New(),
+		Title:    "Renamed calendar event",
+		From:     start,
+		To:       start.Add(time.Hour),
+		Calendar: oldName,
+	})
+	if err != nil {
+		t.Fatalf("failed to create event: %v", err)
+	}
+
 	err = c.RenameCalendar(oldName, newName)
 	if err != nil {
 		t.Fatalf("failed to rename calendar: %v", err)
@@ -184,6 +206,14 @@ func TestRenameCalendar(t *testing.T) {
 	t.Cleanup(func() {
 		_ = c.RemoveCalendar(newName)
 	})
+
+	renamedEvent, err := c.GetEvent(event.ID)
+	if err != nil {
+		t.Fatalf("failed to get event after rename: %v", err)
+	}
+	if renamedEvent.Calendar != newName {
+		t.Fatalf("event calendar = %q, want %q", renamedEvent.Calendar, newName)
+	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -211,15 +241,15 @@ func TestRenameCalendar(t *testing.T) {
 func TestRenameCalendar_SameName(t *testing.T) {
 	c := core.NewCore()
 
-	err := c.CreateCalendar(TestCalendarName, "")
+	err := c.CreateCalendar(testCalendarName, "")
 	if err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = c.RemoveCalendar(TestCalendarName)
+		_ = c.RemoveCalendar(testCalendarName)
 	})
 
-	err = c.RenameCalendar(TestCalendarName, TestCalendarName)
+	err = c.RenameCalendar(testCalendarName, testCalendarName)
 	if err != nil {
 		t.Fatalf("renaming calendar to same name should not fail: %v", err)
 	}
@@ -229,7 +259,7 @@ func TestRenameCalendar_SameName(t *testing.T) {
 		t.Errorf("failed to get home dir: %v", err)
 	}
 
-	calendarPath := filepath.Join(home, filesystem.DirName, TestCalendarName)
+	calendarPath := filepath.Join(home, filesystem.DirName, testCalendarName)
 
 	_, err = os.Stat(calendarPath)
 	if err != nil {
@@ -240,9 +270,9 @@ func TestRenameCalendar_SameName(t *testing.T) {
 func TestRenameCalendar_MissingCalendar(t *testing.T) {
 	c := core.NewCore()
 
-	c.RemoveCalendar(TestCalendarName)
+	c.RemoveCalendar(testCalendarName)
 
-	err := c.RenameCalendar(TestCalendarName, "new-calendar")
+	err := c.RenameCalendar(testCalendarName, "new-calendar")
 	if err == nil {
 		t.Fatal("expected error when renaming missing calendar")
 	}
@@ -251,8 +281,8 @@ func TestRenameCalendar_MissingCalendar(t *testing.T) {
 func TestRenameCalendar_AlreadyExists(t *testing.T) {
 	c := core.NewCore()
 
-	oldName := TestCalendarName + "_old"
-	newName := TestCalendarName + "_new"
+	oldName := testCalendarName + "_old"
+	newName := testCalendarName + "_new"
 
 	err := c.CreateCalendar(oldName, "")
 	if err != nil {

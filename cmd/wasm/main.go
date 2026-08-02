@@ -13,12 +13,12 @@ import (
 func main() {
 	api := api.NewApi()
 
-	RegisterCallbacks(api)
+	registerCallbacks(api)
 
 	select {} // block infinitely
 }
 
-func RegisterCallbacks(api *api.Api) {
+func registerCallbacks(api *api.Api) {
 	js.Global().Set(
 		"CalendarCore",
 		js.ValueOf(map[string]any{ // we wrap each method
