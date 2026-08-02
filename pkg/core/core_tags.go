@@ -24,7 +24,7 @@ func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 	}
 
 	if slices.ContainsFunc(cal.Tags, func(t Tag) bool {
-		return t.Id == tag.Id
+		return t.ID == tag.ID
 	}) {
 		return nil, fmt.Errorf("tag already exists")
 	}
@@ -39,7 +39,7 @@ func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 
 	cal.Tags = append(cal.Tags, tag)
 
-	return &tag, commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.Id))
+	return &tag, commitWorktree(wt, fmt.Sprintf("Created tag %s", tag.ID))
 }
 
 // UpdateTag replaces a tag with the same ID.
@@ -54,7 +54,7 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 	}
 
 	index := slices.IndexFunc(cal.Tags, func(t Tag) bool {
-		return t.Id == tag.Id
+		return t.ID == tag.ID
 	})
 	if index == -1 {
 		return nil, errors.New("tag with this id does not exist")
@@ -70,7 +70,7 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 
 	cal.Tags[index] = tag // replace
 
-	return &tag, commitWorktree(wt, fmt.Sprintf("Updated tag %s", tag.Id))
+	return &tag, commitWorktree(wt, fmt.Sprintf("Updated tag %s", tag.ID))
 }
 
 // RemoveTag deletes one tag from a calendar repository.
@@ -84,13 +84,13 @@ func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
 		return err
 	}
 
-	gitPath := Tag{Id: id}.getPath()
+	gitPath := Tag{ID: id}.getPath()
 	if _, err := wt.Remove(gitPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to git remove %q: %w", gitPath, err)
 	}
 
 	cal.Tags = slices.DeleteFunc(cal.Tags, func(tag Tag) bool {
-		return tag.Id == id
+		return tag.ID == id
 	})
 
 	return commitWorktree(wt, fmt.Sprintf("Deleted tag %s", id))

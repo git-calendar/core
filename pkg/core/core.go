@@ -29,7 +29,7 @@ type Core struct {
 	events       map[uuid.UUID]*Event
 	calendars    map[string]*Calendar
 	fs           billy.Filesystem // root "/" for OPFS/IDB, "$HOME" for classic FS
-	proxyUrl     *url.URL         // cors proxy, that works like https://cors-proxy.abc/https://github.com/... (only needed for the browser!)
+	proxyURL     *url.URL         // cors proxy, that works like https://cors-proxy.abc/https://github.com/... (only needed for the browser!)
 }
 
 // NewCore creates an initialized Core using the platform filesystem.
@@ -48,15 +48,15 @@ func NewCore() *Core {
 }
 
 // SetCorsProxy configures the CORS proxy used by browser transports.
-func (c *Core) SetCorsProxy(proxyUrl string) error {
-	if proxyUrl == "" {
-		c.proxyUrl = nil
+func (c *Core) SetCorsProxy(proxyURL string) error {
+	if proxyURL == "" {
+		c.proxyURL = nil
 		return nil
 	}
 
 	var err error
-	trimmed := strings.TrimSuffix(proxyUrl, "/") // remove trailing "/"
-	c.proxyUrl, err = url.ParseRequestURI(trimmed)
+	trimmed := strings.TrimSuffix(proxyURL, "/") // remove trailing "/"
+	c.proxyURL, err = url.ParseRequestURI(trimmed)
 	return err
 }
 
@@ -100,7 +100,7 @@ func (c *Core) SyncAll() error {
 
 // syncCalendar assumes the worktree is clean and all local calendar changes have already been committed.
 func (c *Core) syncCalendar(cal *Calendar) error {
-	if err := fetchCalendar(cal, c.proxyUrl); err != nil {
+	if err := fetchCalendar(cal, c.proxyURL); err != nil {
 		switch {
 		case errors.Is(err, gogit.ErrRemoteNotFound):
 			return nil // this is ok
@@ -115,7 +115,7 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 			if localCommit == nil {
 				return nil // local and remote are both empty
 			}
-			return pushCalendar(cal, c.proxyUrl)
+			return pushCalendar(cal, c.proxyURL)
 
 		default:
 			return fmt.Errorf("fetch: %w", err)
@@ -137,7 +137,7 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 
 	case remoteCommit == nil:
 		// remote has no commits
-		return pushCalendar(cal, c.proxyUrl)
+		return pushCalendar(cal, c.proxyURL)
 
 	case localCommit.Hash == remoteCommit.Hash:
 		return nil // already in sync
@@ -148,7 +148,7 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 
 	case isAncestor(remoteCommit, localCommit):
 		// local is ahead
-		return pushCalendar(cal, c.proxyUrl)
+		return pushCalendar(cal, c.proxyURL)
 
 	default:
 		// Diverged histories require the custom merge policy before pushing.
@@ -159,7 +159,7 @@ func (c *Core) syncCalendar(cal *Calendar) error {
 		}
 		fmt.Printf("Custom merge successful for %q\n", cal.Name)
 
-		return pushCalendar(cal, c.proxyUrl)
+		return pushCalendar(cal, c.proxyURL)
 	}
 }
 

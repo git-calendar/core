@@ -214,10 +214,10 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 	result := make([]Event, 0, len(intervalsMatched))
 
 	for _, intersection := range intervalsMatched {
-		for _, eId := range intersection {
-			curEvent, ok := c.events[eId]
+		for _, eID := range intersection {
+			curEvent, ok := c.events[eID]
 			if !ok {
-				fmt.Printf("WARN: event %q is missing from the events map\n", eId)
+				fmt.Printf("WARN: event %q is missing from the events map\n", eID)
 				continue
 			}
 
@@ -228,7 +228,7 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 
 			// non-repeating events can be appended right away
 			if curEvent.Repeat == nil {
-				result = append(result, *c.events[eId])
+				result = append(result, *c.events[eID])
 				continue
 			}
 
@@ -480,10 +480,10 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 }
 
 // deleteAndCommitEvent removes event from filesystem and commits the change.
-func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
-	event, ok := c.events[eventId]
+func (c *Core) deleteAndCommitEvent(eventID uuid.UUID, commitMsg string) error {
+	event, ok := c.events[eventID]
 	if !ok {
-		return fmt.Errorf("event not found: %s", eventId)
+		return fmt.Errorf("event not found: %s", eventID)
 	}
 
 	cal, ok := c.calendars[event.Calendar]
@@ -499,7 +499,7 @@ func (c *Core) deleteAndCommitEvent(eventId uuid.UUID, commitMsg string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	gitPath := path.Join(EventsDirName, fmt.Sprintf("%s.json", eventId))
+	gitPath := path.Join(EventsDirName, fmt.Sprintf("%s.json", eventID))
 
 	if _, err := wt.Remove(gitPath); err != nil {
 		return fmt.Errorf("git remove %q: %w", gitPath, err)

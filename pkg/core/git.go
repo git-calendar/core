@@ -13,34 +13,34 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func pushCalendar(cal *Calendar, proxyUrl *url.URL) error {
-	repoUrl, err := repoUrlFromCalendar(cal)
+func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
+	repoURL, err := repoURLFromCalendar(cal)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("pushing", cal.Name)
 
-	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
+	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
 	return ignoreUpToDate(cal.repository.Push(&gogit.PushOptions{
 		RemoteName: GitRemoteName,
-		RemoteURL:  finalUrl.String(),
+		RemoteURL:  finalURL.String(),
 		Auth:       auth,
 	}))
 }
 
-func fetchCalendar(cal *Calendar, proxyUrl *url.URL) error {
-	repoUrl, err := repoUrlFromCalendar(cal)
+func fetchCalendar(cal *Calendar, proxyURL *url.URL) error {
+	repoURL, err := repoURLFromCalendar(cal)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("fetching", cal.Name)
 
-	finalUrl, auth := prepareRepoUrl(repoUrl, proxyUrl)
+	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
 	return ignoreUpToDate(cal.repository.Fetch(&gogit.FetchOptions{
 		RemoteName: GitRemoteName,
-		RemoteURL:  finalUrl.String(),
+		RemoteURL:  finalURL.String(),
 		Auth:       auth,
 	}))
 }

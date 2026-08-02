@@ -16,7 +16,7 @@ import (
 
 // Tag represents a user-defined category/label for multiple events within one calendar.
 type Tag struct {
-	Id        uuid.UUID `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
 	Color     string    `json:"color"`
 	UpdatedAt time.Time `json:"-"`
@@ -27,13 +27,13 @@ func (t *Tag) Validate() error {
 	if t == nil {
 		return nil
 	}
-	if t.Id != uuid.Nil {
+	if t.ID != uuid.Nil {
 		// if id is set
-		if t.Id.Version() != 4 { // enforce version
+		if t.ID.Version() != 4 { // enforce version
 			return errors.New("unsupported UUID version")
 		}
 	} else {
-		t.Id = uuid.New()
+		t.ID = uuid.New()
 	}
 	if t.Name == "" {
 		return errors.New("tag name cannot be empty")
@@ -45,7 +45,7 @@ func (t *Tag) Validate() error {
 }
 
 func (tag Tag) getPath() string {
-	return path.Join(TagsDirName, tag.Id.String()+".json")
+	return path.Join(TagsDirName, tag.ID.String()+".json")
 }
 
 // ----------------------------------------------------------------
@@ -59,7 +59,7 @@ type tagInFile struct {
 
 func (tf tagInFile) toTag(id uuid.UUID) Tag {
 	return Tag{
-		Id:        id,
+		ID:        id,
 		Name:      tf.Name,
 		Color:     tf.Color,
 		UpdatedAt: tf.UpdatedAt,
@@ -76,7 +76,7 @@ func (e Tag) fileData() tagInFile {
 
 // WriteToFile serializes the tag to a repository file, encrypting it when key is set.
 func (e Tag) WriteToFile(file billy.File, key []byte) error {
-	if e.Id == uuid.Nil {
+	if e.ID == uuid.Nil {
 		return errors.New("tag id has to be set")
 	}
 
@@ -98,7 +98,7 @@ func (e Tag) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// encrypt everything recursively
-	encrypted, err := encryption.EncryptFields(plain, key, e.Id[:])
+	encrypted, err := encryption.EncryptFields(plain, key, e.ID[:])
 	if err != nil {
 		return err
 	}

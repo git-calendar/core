@@ -15,26 +15,26 @@ import (
 	"github.com/google/uuid"
 )
 
-// prepareRepoUrl separates HTTP credentials and optionally routes through a browser CORS proxy as <proxy>/<repository-url>.
-func prepareRepoUrl(repoUrl *url.URL, proxyUrl *url.URL) (*url.URL, *http.BasicAuth) {
-	if repoUrl == nil {
+// prepareRepoURL separates HTTP credentials and optionally routes through a browser CORS proxy as <proxy>/<repository-url>.
+func prepareRepoURL(repoURL *url.URL, proxyURL *url.URL) (*url.URL, *http.BasicAuth) {
+	if repoURL == nil {
 		return nil, nil
 	}
-	repo := *repoUrl // copy
+	repo := *repoURL // copy
 
 	// parse auth from url and delete the credentials
-	auth := authFromUrl(&repo)
+	auth := authFromURL(&repo)
 	repo.User = nil
 
 	// add proxy if specified
-	if proxyUrl != nil {
-		return useCorsProxy(&repo, proxyUrl), auth
+	if proxyURL != nil {
+		return useCorsProxy(&repo, proxyURL), auth
 	}
 
 	return &repo, auth
 }
 
-func repoUrlFromCalendar(cal *Calendar) (*url.URL, error) {
+func repoURLFromCalendar(cal *Calendar) (*url.URL, error) {
 	remote, err := cal.repository.Remote(GitRemoteName)
 	if err != nil {
 		if errors.Is(err, gogit.ErrRemoteNotFound) {
@@ -84,8 +84,8 @@ func useCorsProxy(original, proxy *url.URL) *url.URL {
 	return result
 }
 
-// authFromUrl extracts BasicAuth credentials from a URL.
-func authFromUrl(u *url.URL) *http.BasicAuth {
+// authFromURL extracts BasicAuth credentials from a URL.
+func authFromURL(u *url.URL) *http.BasicAuth {
 	if u == nil {
 		return nil
 	}
@@ -102,9 +102,9 @@ func authFromUrl(u *url.URL) *http.BasicAuth {
 	}
 }
 
-// calendarNameFromUrl derives a name from a repository URL;
+// calendarNameFromURL derives a name from a repository URL;
 // for example, "https://example.com/foo/my-calendar.git" returns "my-calendar".
-func calendarNameFromUrl(u *url.URL) string {
+func calendarNameFromURL(u *url.URL) string {
 	if u == nil {
 		return ""
 	}
@@ -116,12 +116,12 @@ func calendarNameFromUrl(u *url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// generateCustomUUID generates custom uuid from parentId and some time. It uses 6 bytes for the parent and 6 bytes for the time.
+// generateCustomUUID generates custom uuid from parentID and some time. It uses 6 bytes for the parent and 6 bytes for the time.
 // If the generation fails, it returns uuid.New().
-func generateCustomUUID(parentId uuid.UUID, t time.Time) uuid.UUID {
+func generateCustomUUID(parentID uuid.UUID, t time.Time) uuid.UUID {
 	idBuf := make([]byte, 16)
-	copy(idBuf[:6], parentId[:6])      // take first 6 bytes from parentId
-	copy(idBuf[9:12], parentId[13:16]) // take another 3 bytes from parentId
+	copy(idBuf[:6], parentID[:6])      // take first 6 bytes from parentID
+	copy(idBuf[9:12], parentID[13:16]) // take another 3 bytes from parentID
 	idBuf[6] = 0x80                    // set version
 	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
 	idBuf[8] = 0x80                    // RFC 9562
@@ -145,8 +145,8 @@ func getTimeFromUUID(id uuid.UUID) time.Time {
 
 // CalendarEventsFilter controls event visibility for one calendar.
 type CalendarEventsFilter struct {
-	// HiddenTagIds lists tags whose events are excluded.
-	HiddenTagIds []uuid.UUID `json:"hidden_tag_ids"`
+	// HiddenTagIDs lists tags whose events are excluded.
+	HiddenTagIDs []uuid.UUID `json:"hidden_tag_ids"`
 	// HideUntagged excludes events that have no tag.
 	HideUntagged bool `json:"hide_untagged"`
 }
@@ -164,5 +164,5 @@ func checkFilter(e *Event, filters GetEventsFilter) bool {
 		return !filter.HideUntagged
 	}
 
-	return !slices.Contains(filter.HiddenTagIds, *e.TagID)
+	return !slices.Contains(filter.HiddenTagIDs, *e.TagID)
 }

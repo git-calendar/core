@@ -186,11 +186,11 @@ func (c *Core) LoadCalendars() error {
 }
 
 // CloneCalendar clones a remote Git calendar, using CORS proxy, if set.
-func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) error {
-	if !strings.HasSuffix(repoUrl.Path, ".git") {
+func (c *Core) CloneCalendar(repoURL *url.URL, password string, readonly bool) error {
+	if !strings.HasSuffix(repoURL.Path, ".git") {
 		return errors.New(`remote URL must end with ".git"`)
 	}
-	calendarName := calendarNameFromUrl(repoUrl)
+	calendarName := calendarNameFromURL(repoURL)
 	if _, ok := c.calendars[calendarName]; ok {
 		return errors.New("calendar with this name already exists")
 	}
@@ -214,11 +214,11 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 	}
 
 	storage := gogitfs.NewStorage(dotGitFS, cache.NewObjectLRUDefault())
-	finalUrl, auth := prepareRepoUrl(repoUrl, c.proxyUrl)
+	finalURL, auth := prepareRepoURL(repoURL, c.proxyURL)
 	// clone now
 	repo, err := gogit.Clone(storage, repoFS, &gogit.CloneOptions{
 		RemoteName: GitRemoteName,
-		URL:        finalUrl.String(),
+		URL:        finalURL.String(),
 		Auth:       auth,
 	})
 	if err != nil {
@@ -254,9 +254,9 @@ func (c *Core) CloneCalendar(repoUrl *url.URL, password string, readonly bool) e
 
 	c.calendars[calendarName] = cal
 
-	if c.proxyUrl != nil {
+	if c.proxyURL != nil {
 		// repair the remote url (set the pure url with auth, without proxy)
-		if err := c.UpdateRemote(calendarName, repoUrl, readonly); err != nil {
+		if err := c.UpdateRemote(calendarName, repoURL, readonly); err != nil {
 			return err
 		}
 	}

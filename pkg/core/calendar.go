@@ -73,7 +73,7 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 		Name      string `json:"name"`
 		Tags      []Tag  `json:"tags"`
 		RemoteURL string `json:"remote_url"`
-		ICalUrl   string `json:"ical_url"`
+		ICalURL   string `json:"ical_url"`
 		Encrypted bool   `json:"encrypted"`
 		Readonly  bool   `json:"readonly"`
 	}
@@ -92,7 +92,7 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 		Name:      cal.Name,
 		Tags:      cal.Tags,
 		RemoteURL: remoteURL,
-		ICalUrl:   icalURL,
+		ICalURL:   icalURL,
 		Encrypted: cal.IsEncrypted(),
 		Readonly:  cal.Readonly,
 	})

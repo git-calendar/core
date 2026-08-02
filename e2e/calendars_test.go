@@ -100,9 +100,9 @@ func TestListCalendars_WithRemote(t *testing.T) {
 		_ = c.RemoveCalendar(testCalendarName)
 	})
 
-	remoteUrl := "https://github.com/git-calendar/calendar.git"
+	remoteURL := "https://github.com/git-calendar/calendar.git"
 
-	err = c.UpdateRemote(testCalendarName, mustParseUrl(remoteUrl), false)
+	err = c.UpdateRemote(testCalendarName, mustParseURL(remoteURL), false)
 	if err != nil {
 		t.Fatalf("failed to update remotes: %v", err)
 	}
@@ -121,8 +121,8 @@ func TestListCalendars_WithRemote(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get remote url: %v", err)
 		}
-		if rurl != remoteUrl {
-			t.Fatalf("remote url mismatch: got %v, want %v", rurl, remoteUrl)
+		if rurl != remoteURL {
+			t.Fatalf("remote url mismatch: got %v, want %v", rurl, remoteURL)
 		}
 		found = true
 		break
@@ -140,7 +140,7 @@ func TestRemoveCalendar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create calendar: %v", err)
 	}
-	if err := c.UpdateRemote(testCalendarName, mustParseUrl("https://example.com/calendar.git"), true); err != nil {
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/calendar.git"), true); err != nil {
 		t.Fatalf("failed to make calendar read-only: %v", err)
 	}
 
@@ -327,7 +327,7 @@ func TestRenameCalendar_AlreadyExists(t *testing.T) {
 }
 
 // Helper
-func mustParseUrl(raw string) *url.URL {
+func mustParseURL(raw string) *url.URL {
 	u, err := url.Parse(raw)
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse url: %v", err))

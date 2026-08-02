@@ -258,10 +258,10 @@ func TestRepeatingEvent_Update_StrategiesRejectParentEvents(t *testing.T) {
 func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.T) {
 	c := newTestCore(t)
 
-	parentId := uuid.New()
+	parentID := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	parent := core.Event{
-		ID:       parentId,
+		ID:       parentID,
 		Calendar: testCalendarName,
 		Title:    "Daily Meeting",
 		From:     startTime,
@@ -284,7 +284,7 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 	}
 
 	if newParent.ParentID != nil {
-		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentID)
+		t.Fatalf("new event should be a parent, got ParentID %s", newParent.ParentID)
 	}
 	if newParent.Title != updated.Title {
 		t.Fatalf("new parent title mismatch: expected %q, got %q", updated.Title, newParent.Title)
@@ -293,7 +293,7 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 		t.Fatalf("new parent From mismatch: expected %s, got %s", target.From, newParent.From)
 	}
 
-	oldParent := requireEvent(t, c, parentId)
+	oldParent := requireEvent(t, c, parentID)
 	if oldParent.Repeat == nil {
 		t.Fatalf("old parent should still repeat before the split")
 	}
@@ -307,10 +307,10 @@ func TestRepeatingEvent_Update_Following_SplitsSeriesFromTargetChild(t *testing.
 func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParent(t *testing.T) {
 	c := newTestCore(t)
 
-	parentId := uuid.New()
+	parentID := uuid.New()
 	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	parent := core.Event{
-		ID:       parentId,
+		ID:       parentID,
 		Calendar: testCalendarName,
 		Title:    "Daily Meeting",
 		From:     startTime,
@@ -331,10 +331,10 @@ func TestRepeatingEvent_Update_Following_SecondChild_DoesNotLeaveInvalidOldParen
 		t.Fatalf("failed to update second child with Following strategy: %v", err)
 	}
 	if newParent.ParentID != nil {
-		t.Fatalf("new event should be a parent, got ParentId %s", newParent.ParentID)
+		t.Fatalf("new event should be a parent, got ParentID %s", newParent.ParentID)
 	}
 
-	oldParent := requireEvent(t, c, parentId)
+	oldParent := requireEvent(t, c, parentID)
 	if oldParent.Repeat != nil {
 		t.Fatalf("old parent should not repeat when only its first occurrence remains; got RRULE %q", oldParent.Repeat.GetRRule().OrigOptions.RRuleString())
 	}

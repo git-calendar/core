@@ -21,12 +21,12 @@ func TestUpdateRemote_ReplacesExistingRemote(t *testing.T) {
 	oldCalRemote := "https://github.com/git-calendar/old-calendar.git"
 	newCalRemote := "https://github.com/git-calendar/new-calendar.git"
 
-	err = c.UpdateRemote(testCalendarName, mustParseUrl(oldCalRemote), false)
+	err = c.UpdateRemote(testCalendarName, mustParseURL(oldCalRemote), false)
 	if err != nil {
 		t.Fatalf("failed to set initial remotes: %v", err)
 	}
 
-	err = c.UpdateRemote(testCalendarName, mustParseUrl(newCalRemote), true)
+	err = c.UpdateRemote(testCalendarName, mustParseURL(newCalRemote), true)
 	if err != nil {
 		t.Fatalf("failed to replace remotes: %v", err)
 	}
@@ -44,12 +44,12 @@ func TestUpdateRemote_ReplacesExistingRemote(t *testing.T) {
 		if calendar.Name != testCalendarName {
 			continue
 		}
-		remoteUrl, err := calendar.RemoteURL()
+		remoteURL, err := calendar.RemoteURL()
 		if err != nil {
 			t.Fatalf("failed to get remote url: %v", err)
 		}
-		if remoteUrl != newCalRemote {
-			t.Fatalf("remote url mismatch: got %v, want %v", remoteUrl, newCalRemote)
+		if remoteURL != newCalRemote {
+			t.Fatalf("remote url mismatch: got %v, want %v", remoteURL, newCalRemote)
 		}
 		if !calendar.Readonly {
 			t.Fatal("calendar is not read-only after updating the remote")
@@ -75,7 +75,7 @@ func TestUpdateRemote_DeletesWhenEmpty(t *testing.T) {
 		_ = c.RemoveCalendar(testCalendarName)
 	})
 
-	err = c.UpdateRemote(testCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"), true)
+	err = c.UpdateRemote(testCalendarName, mustParseURL("https://github.com/git-calendar/calendar.git"), true)
 	if err != nil {
 		t.Fatalf("failed to set remotes: %v", err)
 	}
@@ -98,12 +98,12 @@ func TestUpdateRemote_DeletesWhenEmpty(t *testing.T) {
 		if calendar.Name != testCalendarName {
 			continue
 		}
-		remoteUrl, err := calendar.RemoteURL()
+		remoteURL, err := calendar.RemoteURL()
 		if err != nil {
 			t.Fatalf("failed to get remote url: %v", err)
 		}
-		if remoteUrl != "" {
-			t.Fatalf("remote url mismatch: got %v, want \"\"", remoteUrl)
+		if remoteURL != "" {
+			t.Fatalf("remote url mismatch: got %v, want \"\"", remoteURL)
 		}
 		if calendar.Readonly {
 			t.Fatal("calendar is still read-only after clearing the remote")
@@ -125,7 +125,7 @@ func TestUpdateRemote_MissingCalendar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = c.UpdateRemote(testCalendarName, mustParseUrl("https://github.com/git-calendar/calendar.git"), false)
+	err = c.UpdateRemote(testCalendarName, mustParseURL("https://github.com/git-calendar/calendar.git"), false)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

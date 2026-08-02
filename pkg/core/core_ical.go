@@ -17,7 +17,7 @@ import (
 )
 
 // ImportICalFile imports events once and saves them as regular events.
-func (c *Core) ImportICalFile(calendar string, tagId *uuid.UUID, r io.Reader) error {
+func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
 		return fmt.Errorf("calendar not found: %s", calendar)
@@ -31,9 +31,9 @@ func (c *Core) ImportICalFile(calendar string, tagId *uuid.UUID, r io.Reader) er
 		return err
 	}
 
-	if tagId != nil && *tagId != uuid.Nil {
+	if tagID != nil && *tagID != uuid.Nil {
 		for i := range events {
-			events[i].TagID = tagId
+			events[i].TagID = tagID
 		}
 	}
 
@@ -145,8 +145,8 @@ func (c *Core) readICalURL(name string) (*url.URL, error) {
 
 func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 	requestURL := sourceURL
-	if c.proxyUrl != nil {
-		requestURL = useCorsProxy(sourceURL, c.proxyUrl)
+	if c.proxyURL != nil {
+		requestURL = useCorsProxy(sourceURL, c.proxyURL)
 	}
 	if requestURL == nil {
 		return errors.New("invalid proxied iCalendar URL")

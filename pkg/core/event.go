@@ -12,9 +12,9 @@ import (
 // Event represents a single calendar entry.
 //
 // Can be one of these:
-//  1. Basic:   A standalone event that does not repeat (ParentId is nil, Repeat is nil).
-//  2. Parent:  The "source of truth" for a recurring series (ParentId is nil, Repeat defines the rule).
-//  3. Child:   A generated occurrence from a Parent (ParentId points to its Parent, Repeat copies the Parent rule).
+//  1. Basic:   A standalone event that does not repeat (ParentID is nil, Repeat is nil).
+//  2. Parent:  The "source of truth" for a recurring series (ParentID is nil, Repeat defines the rule).
+//  3. Child:   A generated occurrence from a Parent (ParentID points to its Parent, Repeat copies the Parent rule).
 type Event struct {
 	// ID must not change (different id = different event).
 	// Standalone events and parents use UUIDv4; generated occurrences/children use UUIDv8 with start time embedded.

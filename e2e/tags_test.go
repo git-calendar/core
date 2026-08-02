@@ -45,7 +45,7 @@ func TestTag_CreateTag_InvalidTagReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
 	tag := core.Tag{
-		Id:    uuid.New(),
+		ID:    uuid.New(),
 		Color: "blue",
 	}
 
@@ -60,7 +60,7 @@ func TestTag_CreateTag_InvalidTagReturnsError(t *testing.T) {
 
 func TestTag_CreateTag_ReadonlyCalendarReturnsError(t *testing.T) {
 	c := newTestCore(t)
-	if err := c.UpdateRemote(testCalendarName, mustParseUrl("https://example.com/calendar.git"), true); err != nil {
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/calendar.git"), true); err != nil {
 		t.Fatalf("failed to make calendar read-only: %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestTag_UpdateTag_UpdatesExistingTag(t *testing.T) {
 	}
 
 	updated := core.Tag{
-		Id:    tag.Id,
+		ID:    tag.ID,
 		Name:  "personal",
 		Color: "blue",
 	}
@@ -139,13 +139,13 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 		t.Fatalf("CreateTag failed: %v", err)
 	}
 
-	if err := c.RemoveTag(testCalendarName, tag.Id); err != nil {
+	if err := c.RemoveTag(testCalendarName, tag.ID); err != nil {
 		t.Fatalf("RemoveTag failed: %v", err)
 	}
 
 	// creating the same id again proves it was removed from the in-memory tag list
 	recreated := core.Tag{
-		Id:    tag.Id,
+		ID:    tag.ID,
 		Name:  "recreated",
 		Color: "blue",
 	}
@@ -161,7 +161,7 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 	assertTagEqual(t, recreated, *got)
 }
 
-func TestTag_RemoveTag_InvalidIdReturnsError(t *testing.T) {
+func TestTag_RemoveTag_InvalidIDReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
 	err := c.RemoveTag(testCalendarName, uuid.Nil)
@@ -183,14 +183,14 @@ func TestTag_InvalidCalendarReturnsError(t *testing.T) {
 		t.Fatalf("expected UpdateTag invalid calendar error")
 	}
 
-	if err := c.RemoveTag("missing", tag.Id); err == nil {
+	if err := c.RemoveTag("missing", tag.ID); err == nil {
 		t.Fatalf("expected RemoveTag invalid calendar error")
 	}
 }
 
 func newTestTag(name string, color string) core.Tag {
 	return core.Tag{
-		Id:    uuid.New(),
+		ID:    uuid.New(),
 		Name:  name,
 		Color: color,
 	}
@@ -199,8 +199,8 @@ func newTestTag(name string, color string) core.Tag {
 func assertTagEqual(t *testing.T, want core.Tag, got core.Tag) {
 	t.Helper()
 
-	if got.Id != want.Id {
-		t.Fatalf("tag id mismatch: expected %s, got %s", want.Id, got.Id)
+	if got.ID != want.ID {
+		t.Fatalf("tag id mismatch: expected %s, got %s", want.ID, got.ID)
 	}
 	if got.Name != want.Name {
 		t.Fatalf("tag name mismatch: expected %q, got %q", want.Name, got.Name)

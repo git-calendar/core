@@ -16,15 +16,15 @@ import (
 )
 
 // eventInFile represents event inside file.
-// It doesn't have an Id and Calendar fields, since they can be derrived from the file path/name itself.
+// It doesn't have an ID and Calendar fields, since they can be derrived from the file path/name itself.
 type eventInFile struct {
 	Title       string     `json:"title,omitzero"`
 	Location    string     `json:"location,omitzero"`
 	Description string     `json:"description,omitzero"`
 	From        time.Time  `json:"from,omitzero"`
 	To          time.Time  `json:"to,omitzero"`
-	TagId       *uuid.UUID `json:"tag_id,omitzero"`
-	ParentId    *uuid.UUID `json:"parent_id,omitzero"`
+	TagID       *uuid.UUID `json:"tag_id,omitzero"`
+	ParentID    *uuid.UUID `json:"parent_id,omitzero"`
 	Repeat      string     `json:"repeat,omitzero"`
 	UpdatedAt   time.Time  `json:"updated_at,omitzero"`
 }
@@ -46,8 +46,8 @@ func (ef eventInFile) toEvent(id uuid.UUID, calendar string) (Event, error) {
 		From:        ef.From,
 		To:          ef.To,
 		Calendar:    calendar,
-		TagID:       ef.TagId,
-		ParentID:    ef.ParentId,
+		TagID:       ef.TagID,
+		ParentID:    ef.ParentID,
 		Repeat:      repeat,
 		UpdatedAt:   ef.UpdatedAt,
 	}, nil
@@ -64,8 +64,8 @@ func (e Event) fileData() eventInFile {
 		Description: e.Description,
 		From:        e.From,
 		To:          e.To,
-		TagId:       e.TagID,
-		ParentId:    e.ParentID,
+		TagID:       e.TagID,
+		ParentID:    e.ParentID,
 		Repeat:      repeat,
 		UpdatedAt:   e.UpdatedAt,
 	}
