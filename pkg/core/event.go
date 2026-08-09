@@ -91,6 +91,9 @@ func (e Event) getTreeEndTime() time.Time {
 	if e.Repeat == nil {
 		return e.To
 	}
+	if recurrenceIsUnbounded(e.Repeat) {
+		return maxRecurrenceEnd
+	}
 
 	last := recurrenceLast(e.Repeat)
 	if last.IsZero() {

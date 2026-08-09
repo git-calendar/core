@@ -19,9 +19,6 @@ func validateRecurrence(set *rrule.Set, dtstart time.Time) error {
 		return errors.New("recurrence requires an RRULE")
 	}
 	option := rule.OrigOptions
-	if option.Count == 0 && option.Until.IsZero() {
-		return errors.New("RRULE requires COUNT or UNTIL")
-	}
 	if option.Count != 0 && !option.Until.IsZero() {
 		return errors.New("RRULE cannot contain both COUNT and UNTIL")
 	}
@@ -43,6 +40,16 @@ func recurrenceIndex(set *rrule.Set, at time.Time) (int, bool) {
 		return -1, false
 	}
 	return len(times) - 1, true
+}
+
+var maxRecurrenceEnd = time.Date(rrule.MAXYEAR, time.December, 31, 23, 59, 59, int(time.Second-time.Nanosecond), time.UTC)
+
+func recurrenceIsUnbounded(set *rrule.Set) bool {
+	if set == nil || set.GetRRule() == nil {
+		return false
+	}
+	option := set.GetRRule().OrigOptions
+	return option.Count == 0 && option.Until.IsZero()
 }
 
 func recurrenceLast(set *rrule.Set) time.Time {
