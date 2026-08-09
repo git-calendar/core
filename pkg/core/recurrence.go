@@ -13,6 +13,10 @@ func validateRecurrence(set *rrule.Set, dtstart time.Time) error {
 	if set == nil {
 		return nil
 	}
+	recurrenceStart := set.GetDTStart()
+	if !recurrenceStart.IsZero() {
+		dtstart = dtstart.In(recurrenceStart.Location()) // needed to keep recurring wall-clock times across DST
+	}
 	set.DTStart(dtstart)
 	rule := set.GetRRule()
 	if rule == nil {
