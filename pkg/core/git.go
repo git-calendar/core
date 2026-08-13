@@ -97,8 +97,8 @@ func mergeOriginMain(repo *gogit.Repository, calendar string, encryptionKey []by
 		RemoteName: GitRemoteName,
 		AuthorName: GitAuthorName,
 		IncludePath: func(gitPath string) bool {
-			return path.Dir(gitPath) == EventsDirName &&
-				path.Ext(gitPath) == ".json"
+			dir := path.Dir(gitPath)
+			return (dir == EventsDirName || dir == TagsDirName) && path.Ext(gitPath) == ".json"
 		},
 		UpdatedAt: func(gitPath string, data []byte) (time.Time, error) {
 			dir := path.Dir(gitPath)
