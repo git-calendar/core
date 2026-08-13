@@ -10,6 +10,8 @@ import (
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/git-calendar/core/pkg/filesystem"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/google/uuid"
 )
 
@@ -46,6 +48,71 @@ func TestCreateCalendar(t *testing.T) {
 	}
 	if !found {
 		t.Error("directory not found")
+	}
+}
+
+func TestCloneCalendarLoadsEventsImmediately(t *testing.T) {
+	remotePath := filepath.Join(t.TempDir(), "cloned-calendar.git")
+	repo, err := gogit.PlainInit(remotePath, false)
+	if err != nil {
+		t.Fatalf("failed to initialize source repository: %v", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to get source worktree: %v", err)
+	}
+	if err := wt.Filesystem.MkdirAll(core.EventsDirName, 0o755); err != nil {
+		t.Fatalf("failed to create source events directory: %v", err)
+	}
+
+	start := time.Date(2026, time.January, 1, 10, 0, 0, 0, time.UTC)
+	event := core.Event{
+		ID:        uuid.New(),
+		Title:     "Cloned event",
+		From:      start,
+		To:        start.Add(time.Hour),
+		Calendar:  "cloned-calendar",
+		UpdatedAt: start,
+	}
+	filePath := filepath.Join(core.EventsDirName, event.ID.String()+".json")
+	file, err := wt.Filesystem.Create(filePath)
+	if err != nil {
+		t.Fatalf("failed to create source event file: %v", err)
+	}
+	if err := event.WriteToFile(file, nil); err != nil {
+		_ = file.Close()
+		t.Fatalf("failed to write source event: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("failed to close source event: %v", err)
+	}
+	if _, err := wt.Add(filePath); err != nil {
+		t.Fatalf("failed to stage source event: %v", err)
+	}
+	if _, err := wt.Commit("add event", &gogit.CommitOptions{
+		Author: &object.Signature{Name: "Test", When: start},
+	}); err != nil {
+		t.Fatalf("failed to commit source event: %v", err)
+	}
+
+	c := core.NewCore()
+	remoteURL := &url.URL{Scheme: "file", Path: remotePath}
+	if err := c.CloneCalendar(remoteURL, "", false); err != nil {
+		t.Fatalf("failed to clone calendar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar("cloned-calendar")
+	})
+
+	got, err := c.GetEvent(event.ID)
+	if err != nil {
+		t.Fatalf("cloned event was not loaded immediately: %v", err)
+	}
+	if got.Title != event.Title || !got.From.Equal(event.From) || !got.To.Equal(event.To) {
+		t.Fatalf("cloned event = %+v, want %+v", got, event)
+	}
+	if got.Calendar != "cloned-calendar" {
+		t.Fatalf("cloned event calendar = %q, want %q", got.Calendar, "cloned-calendar")
 	}
 }
 

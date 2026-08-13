@@ -146,39 +146,8 @@ func (c *Core) LoadCalendars() error {
 			continue
 		}
 
-		wt, _ := cal.repository.Worktree()
-		eventsDir, _ := wt.Filesystem.Chroot(EventsDirName)
-		eventEntries, _ := eventsDir.ReadDir("/")
-		for _, eventEntry := range eventEntries {
-			if eventEntry.IsDir() || !strings.HasSuffix(eventEntry.Name(), ".json") {
-				continue
-			}
-
-			file, err := eventsDir.Open(eventEntry.Name())
-			if err != nil {
-				fmt.Printf("failed to open file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
-				continue
-			}
-			defer file.Close()
-
-			var event Event
-			err = event.LoadFromFile(file, cal.Name, cal.EncryptionKey)
-			if err != nil {
-				fmt.Printf("failed to load event from file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
-				continue
-			}
-
-			if err := event.Validate(); err != nil {
-				fmt.Printf("invalid event: %v\n", err)
-				continue
-			}
-
-			c.events[event.ID] = &event
-
-			if err := c.intervalTree.InsertEvent(event); err != nil {
-				fmt.Printf("failed to insert event %q into index tree: %v\n", event.ID, err)
-				continue
-			}
+		if err := c.loadCalendarEvents(cal); err != nil {
+			fmt.Printf("WARN: failed to load events for %q calendar: %v\n", cal.Name, err)
 		}
 	}
 
@@ -246,6 +215,11 @@ func (c *Core) CloneCalendar(repoURL *url.URL, password string, readonly bool) e
 	// load tags
 	if err := cal.LoadTags(); err != nil {
 		fmt.Printf("WARN: failed to load tags for %q calendar: %v\n", cal.Name, err)
+	}
+	if err := c.loadCalendarEvents(cal); err != nil {
+		_ = gogitutil.RemoveAll(c.fs, calendarName)
+		_ = c.fs.Remove(calendarName + KeyFileSuffix)
+		return fmt.Errorf("failed to load cloned calendar events: %w", err)
 	}
 
 	if err := c.updateReadonlyFile(calendarName, readonly); err != nil {
@@ -398,6 +372,62 @@ func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) 
 }
 
 // ------------------------------------------------ Helpers -------------------------------------------------
+
+func (c *Core) loadCalendarEvents(cal *Calendar) error {
+	wt, err := cal.repository.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	eventsDir, err := wt.Filesystem.Chroot(EventsDirName)
+	if err != nil {
+		return fmt.Errorf("failed to open events directory: %w", err)
+	}
+	eventEntries, err := eventsDir.ReadDir("/")
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read events directory: %w", err)
+	}
+
+	for _, eventEntry := range eventEntries {
+		if eventEntry.IsDir() || !strings.HasSuffix(eventEntry.Name(), ".json") {
+			continue
+		}
+
+		file, err := eventsDir.Open(eventEntry.Name())
+		if err != nil {
+			fmt.Printf("failed to open file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+			continue
+		}
+
+		var event Event
+		err = event.LoadFromFile(file, cal.Name, cal.EncryptionKey)
+		closeErr := file.Close()
+		if err != nil {
+			fmt.Printf("failed to load event from file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), err)
+			continue
+		}
+		if closeErr != nil {
+			fmt.Printf("failed to close event file %q from cal %s: %v\n", eventEntry.Name(), wt.Filesystem.Root(), closeErr)
+		}
+
+		if err := event.Validate(); err != nil {
+			fmt.Printf("invalid event: %v\n", err)
+			continue
+		}
+
+		c.events[event.ID] = &event
+
+		if err := c.intervalTree.InsertEvent(event); err != nil {
+			fmt.Printf("failed to insert event %q into index tree: %v\n", event.ID, err)
+			continue
+		}
+	}
+
+	return nil
+}
 
 func (c *Core) createKeyFile(calendarName, password string) ([]byte, error) {
 	key := encryption.DeriveKey(password, []byte(calendarName))
