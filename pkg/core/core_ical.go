@@ -191,7 +191,8 @@ func (c *Core) loadICalFile(name string) error {
 	}
 
 	seen := make(map[uuid.UUID]struct{}, len(events))
-	for _, event := range events {
+	for i := range events {
+		event := &events[i]
 		_, alreadyLoaded := c.events[event.ID]
 		_, duplicate := seen[event.ID]
 		if alreadyLoaded || duplicate {
@@ -199,10 +200,7 @@ func (c *Core) loadICalFile(name string) error {
 			continue
 		}
 		seen[event.ID] = struct{}{}
-	}
 
-	for i := range events {
-		event := &events[i]
 		if err := c.intervalTree.InsertEvent(*event); err != nil {
 			return err
 		}
