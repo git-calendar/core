@@ -236,16 +236,20 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 			if err != nil {
 				continue
 			}
-			starts := recurrenceBetween(curEvent.Repeat, from, to)
 			eventDuration := curEvent.To.Sub(curEvent.From)
+			starts := curEvent.Repeat.Between(from.Add(-eventDuration), to, true)
 			for _, start := range starts {
+				end := start.Add(eventDuration)
+				if start.After(to) || end.Before(from) {
+					continue
+				}
 				result = append(result, Event{
 					ID:          generateCustomUUID(curEvent.ID, start),
 					Title:       curEvent.Title,
 					Location:    curEvent.Location,
 					Description: curEvent.Description,
 					From:        start,
-					To:          start.Add(eventDuration),
+					To:          end,
 					Calendar:    curEvent.Calendar,
 					TagID:       curEvent.TagID,
 					ParentID:    &curEvent.ID,
