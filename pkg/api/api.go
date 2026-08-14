@@ -91,16 +91,25 @@ func (a *Api) UpdateICalURL(name, rawURL string) error {
 }
 
 // ImportICalFile imports iCalendar data into a calendar using the given tag ID.
+// An empty tag ID imports events without a tag.
 func (a *Api) ImportICalFile(calendar, tagID, data string) error {
-	parsedID, err := uuid.Parse(tagID)
-	if err != nil {
-		return fmt.Errorf("invalid tag ID: %w", err)
+	var parsedID *uuid.UUID
+	if tagID != "" {
+		id, err := uuid.Parse(tagID)
+		if err != nil {
+			return fmt.Errorf("invalid tag ID: %w", err)
+		}
+		parsedID = &id
 	}
-	return a.inner.ImportICalFile(calendar, &parsedID, strings.NewReader(data))
+	return a.inner.ImportICalFile(calendar, parsedID, strings.NewReader(data))
 }
 
 // UpdateRemote configures the Git remote for a calendar.
+// An empty remote URL removes the configured remote.
 func (a *Api) UpdateRemote(calendar, remoteURL string, readonly bool) error {
+	if remoteURL == "" {
+		return a.inner.UpdateRemote(calendar, nil, readonly)
+	}
 	parsed, err := url.Parse(remoteURL)
 	if err != nil {
 		return fmt.Errorf("remote URL is invalid: %w", err)
