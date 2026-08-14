@@ -20,6 +20,21 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check Formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Check Module Tidiness
+        run: go mod tidy -diff
+
+      - name: Verify Modules
+        run: go mod verify
+
+      - name: Run Vet
+        run: go vet ./...
+
+      - name: Run Staticcheck
+        run: go tool staticcheck ./...
+
       - name: Run Standard Tests
         run: go test -v -race ./...
 

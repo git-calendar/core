@@ -55,13 +55,13 @@ func (e *Event) Validate() error {
 		e.ID = uuid.New()
 	}
 	if e.Title == "" {
-		return errors.New("Title cannot be empty")
+		return errors.New("title cannot be empty")
 	}
 	if e.From.IsZero() || e.To.IsZero() {
 		return errors.New("timestamps From & To cannot be 0")
 	}
 	if e.From.Compare(e.To) != -1 {
-		return errors.New("From timestamp cannot be greater or equal than To (cannot end before it starts)")
+		return errors.New("from timestamp cannot be greater or equal than to (cannot end before it starts)")
 	}
 	if e.ParentID == nil {
 		if err := validateRecurrence(e.Repeat, e.From); err != nil {
