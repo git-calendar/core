@@ -5,8 +5,8 @@
   - [ ] indexing
     - [x] interval-btree?
     - [ ] smart indexing (index file)
-  - [ ] repeating events
-    - [ ] infinite repeat (ghost events)
+  - [x] repeating events
+    - [x] infinite repeat
     - [x] basic repetition
     - [x] update repeating
     - [x] remove repeating
