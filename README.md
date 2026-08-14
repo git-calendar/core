@@ -10,14 +10,13 @@ Related projects:
 - CORS Proxy: [git-calendar/cors-proxy](https://github.com/git-calendar/cors-proxy)
 
 ## Build
-Install [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile) for Android and iOS builds:
-```sh
-go install golang.org/x/mobile/cmd/gomobile@latest
-```
+Build tools are pinned in `go.mod` and invoked through `go tool`.
+For Android builds, install the Android SDK and NDK, set `ANDROID_HOME`, and ensure Android API 35 is available.
+For iOS builds, use macOS with Xcode installed.
 
 Build a target:
 ```sh
+make build_web
 make build_android
 make build_ios
-make build_web
 ```

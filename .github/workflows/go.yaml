@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
 
@@ -48,29 +48,143 @@ jobs:
       # - name: Run WASM Tests
       #   run: GOOS=js GOARCH=wasm go test ./pkg/... ./cmd/wasm # no e2e cuz they wont work (no opfsRootHandle exists etc.)
 
-  build-and-release:
-    name: Build and Release
-    needs: tests # only release if all tests pass
+  build-web:
+    name: Build Web
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build WASM
+        run: make prod_build_web
+
+      - name: Verify Web artifacts
+        run: |
+          test -s build/web/core.wasm
+          test -s build/web/wasm_exec.js
+
+      - name: Upload Web artifacts
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: core-web
+          path: |
+            build/web/core.wasm
+            build/web/wasm_exec.js
+          if-no-files-found: error
+
+  build-android:
+    name: Build Android
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Java
+        uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Verify Android toolchain
+        run: |
+          go version
+          java -version
+          javac -version
+
+      - name: Build Android AAR
+        run: make prod_build_android
+
+      - name: Verify Android AAR
+        run: unzip -tq build/android/core.aar
+
+      - name: Upload Android AAR
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: core-android
+          path: build/android/core.aar
+          if-no-files-found: error
+
+  build-ios:
+    name: Build iOS
+    needs: tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Select Xcode 26.3
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
+      - name: Verify iOS toolchain
+        run: |
+          go version
+          xcodebuild -version
+
+      - name: Build iOS XCFramework
+        run: make prod_build_ios
+
+      - name: Package iOS XCFramework
+        run: |
+          test -f build/ios/Core.xcframework/Info.plist
+          ditto -c -k --sequesterRsrc --keepParent build/ios/Core.xcframework build/ios/Core.xcframework.zip
+          unzip -tq build/ios/Core.xcframework.zip
+
+      - name: Upload iOS XCFramework
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: core-ios
+          path: build/ios/Core.xcframework.zip
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: [build-android, build-ios, build-web]
     if: startsWith(github.ref, 'refs/tags/') # only with tag push (vX.X.X)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Download Android AAR
+        uses: actions/download-artifact@v8.0.1
         with:
-          go-version-file: go.mod
+          name: core-android
+          path: build/android
 
-      - name: Build WASM
-        run: make prod_build_web # just web for now
+      - name: Download iOS XCFramework
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-ios
+          path: build/ios
+
+      - name: Download Web artifacts
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-web
+          path: build/web
 
       - name: Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.2
         with:
           files: |
+            build/android/core.aar
+            build/ios/Core.xcframework.zip
             build/web/core.wasm
             build/web/wasm_exec.js
           generate_release_notes: true

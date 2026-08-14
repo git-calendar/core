@@ -1,69 +1,60 @@
-BUILD_DIR := ./build
+GO ?= go
+BUILD_DIR ?= ./build
+ANDROID_API ?= 35
 
-.PHONY: all build_android build_ios build_web prod production_build_android production_build_web create_build_dir clean
+ANDROID_BUILD_DIR := $(BUILD_DIR)/android
+IOS_BUILD_DIR := $(BUILD_DIR)/ios
+WEB_BUILD_DIR := $(BUILD_DIR)/web
+MOBILE_TOOLS_DIR := $(abspath $(BUILD_DIR)/tools)
+GOROOT := $(shell $(GO) env GOROOT)
 
-# -------------------------------------------------------------------------------------------
-# Regular builds
-# -------------------------------------------------------------------------------------------
+.PHONY: all mobile_tools build_android build_ios build_web prod_build prod_build_android prod_build_ios prod_build_web wasm_glue clean help
 
 all: build_android build_ios build_web
 
-build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -o ${BUILD_DIR}/android/core.aar ./pkg/api
+mobile_tools:
+	mkdir -p $(MOBILE_TOOLS_DIR)
+	$(GO) build -o $(MOBILE_TOOLS_DIR)/gobind golang.org/x/mobile/cmd/gobind
 
-# requires Xcode installed (mac only)
-#build_ios: create_build_dir
-# 	gomobile bind -target=ios ./pkg/api # TODO
+build_android: mobile_tools
+	mkdir -p $(ANDROID_BUILD_DIR)
+	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
 
-build_web: create_build_dir wasm_glue
-	GOOS=js GOARCH=wasm go build -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm
+build_ios: mobile_tools
+	mkdir -p $(IOS_BUILD_DIR)
+	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=ios -o $(IOS_BUILD_DIR)/Core.xcframework ./pkg/api
 
+build_web: wasm_glue
+	GOOS=js GOARCH=wasm $(GO) build -o $(WEB_BUILD_DIR)/core.wasm ./cmd/wasm
 
+prod_build: prod_build_android prod_build_ios prod_build_web
 
-# -------------------------------------------------------------------------------------------
-# Production builds (ldflags make the binary smaller)
-# -------------------------------------------------------------------------------------------
+prod_build_android: mobile_tools
+	mkdir -p $(ANDROID_BUILD_DIR)
+	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -ldflags="-s -w" -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
 
-prod: prod_build_android prod_build_web
+prod_build_ios: mobile_tools
+	mkdir -p $(IOS_BUILD_DIR)
+	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=ios -ldflags="-s -w" -o $(IOS_BUILD_DIR)/Core.xcframework ./pkg/api
 
-prod_build_android: create_build_dir
-	gomobile bind -target=android -androidapi=35 -ldflags="-s -w" -o ${BUILD_DIR}/android/core.aar ./pkg/api
+prod_build_web: wasm_glue
+	GOOS=js GOARCH=wasm $(GO) build -ldflags="-s -w" -o $(WEB_BUILD_DIR)/core.wasm ./cmd/wasm
 
-prod_build_web: create_build_dir wasm_glue
-	GOOS=js GOARCH=wasm go build -ldflags="-w -s" -o ${BUILD_DIR}/web/core.wasm ./cmd/wasm
-
-
-
-# -------------------------------------------------------------------------------------------
-# Other
-# -------------------------------------------------------------------------------------------
-
-# copy wasm_exec.js "glue"
-wasm_glue: create_build_dir
-	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js ${BUILD_DIR}/web/wasm_exec.js
-
-proxy:
-	cd cmd/cors-proxy && go run .
-
-create_build_dir:
-	mkdir -p ${BUILD_DIR}/android
-	mkdir -p ${BUILD_DIR}/ios
-	mkdir -p ${BUILD_DIR}/web
+wasm_glue:
+	mkdir -p $(WEB_BUILD_DIR)
+	cp "$(GOROOT)/lib/wasm/wasm_exec.js" $(WEB_BUILD_DIR)/wasm_exec.js
 
 clean:
-	rm -rf ${BUILD_DIR}
-	gomobile clean
+	rm -rf $(BUILD_DIR)
 
-# @echo "  build_ios - iOS XCFramework (works on MacOS only)"
 help:
 	@echo "Available targets:"
-	@echo "  all                  - build Android + iOS + Web"
-	@echo "  build_android        - Android AAR"
-	@echo "  build_web            - WASM module + wasm_exec.js"
-	@echo ""
-	@echo "  prod                 - production (stripped) builds"
-	@echo "  prod_build_android   - production Android AAR"
-	@echo "  prod_build_web       - production WASM module + wasm_exec.js"
-	@echo ""
-	@echo "  proxy                - runs CORS proxy on localhost"
+	@echo "  all                  - build Android, iOS, and Web"
+	@echo "  build_android        - build the Android AAR"
+	@echo "  build_ios            - build the iOS XCFramework (macOS only)"
+	@echo "  build_web            - build the WASM module and glue"
+	@echo "  prod_build           - build stripped Android, iOS, and Web artifacts"
+	@echo "  prod_build_android   - build the stripped Android AAR"
+	@echo "  prod_build_ios       - build the stripped iOS XCFramework (macOS only)"
+	@echo "  prod_build_web       - build the stripped WASM module and glue"
 	@echo "  clean                - remove build artifacts"
