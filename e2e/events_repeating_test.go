@@ -434,6 +434,7 @@ func TestRepeatingEvent_Update_Following_TitleOnlyKeepsFutureDeletedChildHidden(
 		startTime.AddDate(0, 0, 1),
 		startTime.AddDate(0, 0, 2),
 		startTime.AddDate(0, 0, 4),
+		startTime.AddDate(0, 0, 5),
 	)
 	assertNoEventAt(t, events, startTime.AddDate(0, 0, 3))
 }
