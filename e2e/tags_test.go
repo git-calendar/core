@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"testing"
+	"time"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/google/uuid"
@@ -161,6 +162,63 @@ func TestTag_RemoveTag_RemovesTag(t *testing.T) {
 	assertTagEqual(t, recreated, *got)
 }
 
+func TestTag_RemoveTag_UntagsAffectedEvents(t *testing.T) {
+	c := newTestCore(t)
+
+	removedTag := newTestTag("work", "blue")
+	otherTag := newTestTag("personal", "green")
+	if _, err := c.CreateTag(testCalendarName, removedTag); err != nil {
+		t.Fatalf("CreateTag removed tag failed: %v", err)
+	}
+	if _, err := c.CreateTag(testCalendarName, otherTag); err != nil {
+		t.Fatalf("CreateTag other tag failed: %v", err)
+	}
+
+	start := time.Date(2026, time.January, 1, 10, 0, 0, 0, time.UTC)
+	removedTagID := removedTag.ID
+	otherTagID := otherTag.ID
+	tagged := createEvent(t, c, core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Tagged event",
+		From:     start,
+		To:       start.Add(time.Hour),
+		TagID:    &removedTagID,
+	})
+	repeating := createEvent(t, c, core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Tagged repeating event",
+		From:     start.AddDate(0, 0, 1),
+		To:       start.AddDate(0, 0, 1).Add(time.Hour),
+		TagID:    &removedTagID,
+		Repeat:   recurrenceWithCount(t, start.AddDate(0, 0, 1), "DAILY", 3),
+	})
+	unaffected := createEvent(t, c, core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Other tag event",
+		From:     start.AddDate(0, 0, 2),
+		To:       start.AddDate(0, 0, 2).Add(time.Hour),
+		TagID:    &otherTagID,
+	})
+
+	if err := c.RemoveTag(testCalendarName, removedTag.ID); err != nil {
+		t.Fatalf("RemoveTag failed: %v", err)
+	}
+
+	assertEventTag(t, c, tagged.ID, nil)
+	assertEventTag(t, c, repeating.ID, nil)
+	assertEventTag(t, c, unaffected.ID, &otherTag.ID)
+
+	if err := c.LoadCalendars(); err != nil {
+		t.Fatalf("LoadCalendars failed: %v", err)
+	}
+	assertEventTag(t, c, tagged.ID, nil)
+	assertEventTag(t, c, repeating.ID, nil)
+	assertEventTag(t, c, unaffected.ID, &otherTag.ID)
+}
+
 func TestTag_RemoveTag_InvalidIDReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
@@ -185,6 +243,24 @@ func TestTag_InvalidCalendarReturnsError(t *testing.T) {
 
 	if err := c.RemoveTag("missing", tag.ID); err == nil {
 		t.Fatalf("expected RemoveTag invalid calendar error")
+	}
+}
+
+func assertEventTag(t *testing.T, c *core.Core, eventID uuid.UUID, want *uuid.UUID) {
+	t.Helper()
+
+	event, err := c.GetEvent(eventID)
+	if err != nil {
+		t.Fatalf("GetEvent(%s) failed: %v", eventID, err)
+	}
+	if want == nil {
+		if event.TagID != nil {
+			t.Fatalf("event %s tag = %s, want nil", eventID, *event.TagID)
+		}
+		return
+	}
+	if event.TagID == nil || *event.TagID != *want {
+		t.Fatalf("event %s tag = %v, want %s", eventID, event.TagID, *want)
 	}
 }
 

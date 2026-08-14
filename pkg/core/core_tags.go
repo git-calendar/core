@@ -73,7 +73,7 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 	return &tag, commitWorktree(wt, fmt.Sprintf("Updated tag %s", tag.ID))
 }
 
-// RemoveTag deletes one tag from a calendar repository.
+// RemoveTag clears the tag from affected events, then deletes it from the calendar repository.
 func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return errors.New("invalid tag id")
@@ -82,6 +82,19 @@ func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
 	cal, wt, err := c.tagWorktree(calendar)
 	if err != nil {
 		return err
+	}
+
+	for _, event := range c.events {
+		if event == nil || event.Calendar != calendar || event.TagID == nil || *event.TagID != id {
+			continue
+		}
+
+		updated := *event
+		updated.TagID = nil
+		if err := c.saveAndCommitEvent(&updated, fmt.Sprintf("Removed tag %s from event %s", id, event.ID)); err != nil {
+			return fmt.Errorf("failed to remove tag from event %s: %w", event.ID, err)
+		}
+		*event = updated
 	}
 
 	gitPath := Tag{ID: id}.getPath()
