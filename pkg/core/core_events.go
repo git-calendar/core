@@ -3,10 +3,12 @@ package core
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"time"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
@@ -451,10 +453,15 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 		return fmt.Errorf("worktree: %w", err)
 	}
 
-	filename := fmt.Sprintf("%s.json", event.ID)
-	gitPath := path.Join(EventsDirName, filename)
+	if err := writeAndStageEvent(wt, event, cal.EncryptionKey); err != nil {
+		return err
+	}
 
-	// ensure the events directory exists
+	return commitWorktree(wt, commitMsg)
+}
+
+func writeAndStageEvent(wt *gogit.Worktree, event *Event, encryptionKey []byte) error {
+	gitPath := path.Join(EventsDirName, fmt.Sprintf("%s.json", event.ID))
 	if err := wt.Filesystem.MkdirAll(EventsDirName, 0o755); err != nil {
 		return fmt.Errorf("mkdir events: %w", err)
 	}
@@ -466,21 +473,54 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 	}
 	defer file.Close()
 
-	if err := event.WriteToFile(file, cal.EncryptionKey); err != nil {
+	if err := event.WriteToFile(file, encryptionKey); err != nil {
 		return fmt.Errorf("write event file: %w", err)
 	}
-
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close event file: %w", err)
-	}
-
-	// stage
+	// just stage
 	if _, err := wt.Add(gitPath); err != nil {
 		return fmt.Errorf("git add %q: %w", gitPath, err)
 	}
+	return nil
+}
 
-	// commit
-	return commitWorktree(wt, commitMsg)
+func (c *Core) saveAndCommitEvents(cal *Calendar, events []Event, commitMsg string) error {
+	wt, err := cal.repository.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	newPaths := make([]string, 0, len(events))
+	updatedAt := time.Now()
+	for i := range events {
+		if _, exists := c.events[events[i].ID]; !exists {
+			newPaths = append(newPaths, path.Join(EventsDirName, events[i].ID.String()+".json"))
+		}
+		events[i].UpdatedAt = updatedAt
+		if err := writeAndStageEvent(wt, &events[i], cal.EncryptionKey); err != nil {
+			return rollbackEventBatch(wt, newPaths, fmt.Errorf("save event %d: %w", i+1, err))
+		}
+	}
+
+	if err := commitWorktree(wt, commitMsg); err != nil {
+		return rollbackEventBatch(wt, newPaths, err)
+	}
+	return nil
+}
+
+func rollbackEventBatch(wt *gogit.Worktree, newPaths []string, cause error) error {
+	var rollbackErr error
+	if err := wt.Reset(&gogit.ResetOptions{Mode: gogit.HardReset}); err != nil {
+		rollbackErr = errors.Join(rollbackErr, err)
+	}
+	for _, gitPath := range newPaths {
+		if err := wt.Filesystem.Remove(gitPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			rollbackErr = errors.Join(rollbackErr, err)
+		}
+	}
+	if rollbackErr != nil {
+		return errors.Join(cause, fmt.Errorf("rollback failed: %w", rollbackErr))
+	}
+	return cause
 }
 
 // deleteAndCommitEvent removes event from filesystem and commits the change.

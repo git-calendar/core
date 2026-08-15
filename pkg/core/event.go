@@ -17,7 +17,7 @@ import (
 //  3. Child:   A generated occurrence from a Parent (ParentID points to its Parent, Repeat copies the Parent rule).
 type Event struct {
 	// ID must not change (different id = different event).
-	// Standalone events and parents use UUIDv4; generated occurrences/children use UUIDv8 with start time embedded.
+	// App-created standalone events and parents use UUIDv4. Imported iCalendar events use stable UUIDv5 IDs; generated occurrences use UUIDv8 with start time embedded.
 	ID uuid.UUID `json:"id"`
 	// Title is the event's non-empty display name.
 	Title string `json:"title"`
@@ -48,7 +48,7 @@ func (e *Event) Validate() error {
 		return nil
 	}
 	if e.ID != uuid.Nil {
-		if e.ID.Version() != 4 && e.ID.Version() != 8 { // enforce version
+		if e.ID.Version() != 4 && e.ID.Version() != 5 && e.ID.Version() != 8 { // enforce version
 			return errors.New("unsupported UUID version")
 		}
 	} else {

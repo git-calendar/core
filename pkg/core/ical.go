@@ -1,7 +1,6 @@
 package core
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"time"
@@ -125,5 +124,5 @@ func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {
 		// fallback if uid is missing
 		uid = fmt.Sprintf("%d\x00%s\x00%s", index, event.Title, event.From.Format(time.RFC3339Nano))
 	}
-	return uuid.NewHash(sha256.New(), uuid.Nil, []byte(calendar+"\x00"+uid), 8)
+	return uuid.NewSHA1(uuid.Nil, []byte("git-calendar:event\x00"+calendar+"\x00"+uid))
 }

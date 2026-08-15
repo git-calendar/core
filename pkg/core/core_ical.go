@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ImportICalFile imports events once and saves them as regular events.
+// ImportICalFile atomically upserts events using stable IDs derived from their iCalendar UIDs.
 func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
@@ -25,25 +26,48 @@ func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) er
 	if cal.Readonly {
 		return errors.New("the specified calendar is read-only")
 	}
+	if cal.repository == nil {
+		return errors.New("calendar repo not initialized")
+	}
 
-	events, err := parseICal(r, calendar, false)
+	events, err := parseICal(r, calendar, true)
 	if err != nil {
 		return err
 	}
 
-	if tagID != nil && *tagID != uuid.Nil {
-		for i := range events {
-			events[i].TagID = tagID
+	seen := make(map[uuid.UUID]struct{}, len(events))
+	changed := make([]Event, 0, len(events))
+	for _, event := range events {
+		if _, duplicate := seen[event.ID]; duplicate {
+			continue
 		}
+		seen[event.ID] = struct{}{}
+
+		if tagID != nil && *tagID != uuid.Nil {
+			id := *tagID
+			event.TagID = &id
+		}
+		if importedEventEqual(c.events[event.ID], event) {
+			continue
+		}
+		changed = append(changed, event)
+	}
+	if len(changed) == 0 {
+		return nil
 	}
 
-	for i, event := range events {
-		if _, err := c.CreateEvent(event); err != nil {
-			return fmt.Errorf("save imported event %d: %w", i+1, err)
-		}
+	if err := c.saveAndCommitEvents(cal, changed, fmt.Sprintf("Imported %d iCalendar events", len(changed))); err != nil {
+		return fmt.Errorf("import iCalendar events: %w", err)
 	}
+	return c.LoadCalendars()
+}
 
-	return nil
+func importedEventEqual(existing *Event, imported Event) bool {
+	if existing == nil || existing.ID != imported.ID || existing.Calendar != imported.Calendar {
+		return false
+	}
+	imported.UpdatedAt = existing.UpdatedAt
+	return reflect.DeepEqual(existing.fileData(), imported.fileData())
 }
 
 // ImportICalURL creates a read-only calendar and caches its feed.
