@@ -13,6 +13,7 @@ import (
 	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/git-calendar/core/pkg/gitmerge"
 	"github.com/go-git/go-billy/v5"
+	gogitutil "github.com/go-git/go-billy/v5/util"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/cache"
@@ -194,7 +195,47 @@ func (c *Core) ExportZip(calendar string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// RestoreZip replaces all persisted data with a full backup.
+func (c *Core) RestoreZip(data []byte) error {
+	if err := export.ValidateZip(data); err != nil {
+		return err
+	}
+	if err := c.clearPersistedData(); err != nil {
+		return fmt.Errorf("clear existing data: %w", err)
+	}
+	c.resetCore()
+
+	if err := export.Unzip(c.fs, data); err != nil {
+		if cleanupErr := c.clearPersistedData(); cleanupErr != nil {
+			return errors.Join(err, fmt.Errorf("cleanup after failed restore: %w", cleanupErr))
+		}
+		return err
+	}
+	if err := c.LoadCalendars(); err != nil {
+		c.resetCore()
+		if cleanupErr := c.clearPersistedData(); cleanupErr != nil {
+			return errors.Join(err, fmt.Errorf("cleanup after failed restore: %w", cleanupErr))
+		}
+		return fmt.Errorf("load restored data: %w", err)
+	}
+	return nil
+}
+
 // ------------------------------------------------ Helpers -------------------------------------------------
+
+func (c *Core) clearPersistedData() error {
+	entries, err := c.fs.ReadDir(".")
+	if err != nil {
+		return err
+	}
+	var result error
+	for _, entry := range entries {
+		if err := gogitutil.RemoveAll(c.fs, entry.Name()); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	return result
+}
 
 // resetCore clears and reinitializes the in-memory indexes.
 func (c *Core) resetCore() {

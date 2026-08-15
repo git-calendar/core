@@ -70,6 +70,9 @@ func (a *Api) SyncAll() error { return a.inner.SyncAll() }
 // URL-backed calendars cannot be exported individually.
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }
 
+// RestoreZip replaces all persisted data with a full ZIP backup.
+func (a *Api) RestoreZip(data []byte) error { return a.inner.RestoreZip(data) }
+
 // ------------------------------------------ JSON wrapper methods ------------------------------------------
 
 // ImportICalURL imports an iCalendar feed URL under the given name.

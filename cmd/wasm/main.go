@@ -140,6 +140,13 @@ func registerCallbacks(api *api.Api) {
 					return api.ExportZip(args[0].String())
 				})
 			}),
+			"restoreZip": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					data := make([]byte, args[0].Get("byteLength").Int())
+					js.CopyBytesToGo(data, args[0])
+					return nil, api.RestoreZip(data)
+				})
+			}),
 		}),
 	)
 
