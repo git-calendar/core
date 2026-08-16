@@ -17,15 +17,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// ExportICal exports all events in the named calendar as an RFC 5545 iCalendar file.
+// ExportICal exports one calendar, or all calendars when calendar is empty, as an RFC 5545 file.
 func (c *Core) ExportICal(calendar string) ([]byte, error) {
-	if _, ok := c.calendars[calendar]; !ok {
-		return nil, fmt.Errorf("calendar not found: %s", calendar)
+	if calendar != "" {
+		if _, ok := c.calendars[calendar]; !ok {
+			return nil, fmt.Errorf("calendar not found: %s", calendar)
+		}
 	}
 
 	var events []Event
 	for _, event := range c.events {
-		if event != nil && event.Calendar == calendar {
+		if event != nil && (calendar == "" || event.Calendar == calendar) {
 			events = append(events, *event)
 		}
 	}

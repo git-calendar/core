@@ -131,8 +131,10 @@ func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {
 
 func serializeICal(calendarName string, events []Event) []byte {
 	calendar := ics.NewCalendarFor("git-calendar")
-	calendar.SetName(calendarName)
 	calendar.SetCalscale("GREGORIAN")
+	if calendarName != "" {
+		calendar.SetName(calendarName)
+	}
 
 	events = slices.Clone(events)
 	slices.SortFunc(events, func(a, b Event) int {

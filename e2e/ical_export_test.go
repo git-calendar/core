@@ -47,6 +47,18 @@ func TestExportICalExportsOnlyTheNamedCalendar(t *testing.T) {
 	if summary := exported.Events()[0].GetProperty(ics.ComponentPropertySummary); summary == nil || summary.Value != "First event" {
 		t.Fatalf("exported SUMMARY = %+v, want First event", summary)
 	}
+
+	data, err = calendarCore.ExportICal("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err = ics.ParseCalendar(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exported.Events()) != 2 {
+		t.Fatalf("got %d events from all calendars, want 2", len(exported.Events()))
+	}
 }
 
 func TestExportICalEmptyCalendar(t *testing.T) {
