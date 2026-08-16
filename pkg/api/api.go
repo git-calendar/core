@@ -66,6 +66,9 @@ func (a *Api) SetCorsProxy(proxyURL string) error { return a.inner.SetCorsProxy(
 // SyncAll synchronizes all configured calendars.
 func (a *Api) SyncAll() error { return a.inner.SyncAll() }
 
+// ExportICal exports the named calendar as an RFC 5545 iCalendar file.
+func (a *Api) ExportICal(calendar string) ([]byte, error) { return a.inner.ExportICal(calendar) }
+
 // ExportZip exports one Git-backed calendar, or all persisted data when calendar is empty, as a ZIP archive.
 // URL-backed calendars cannot be exported individually.
 func (a *Api) ExportZip(calendar string) ([]byte, error) { return a.inner.ExportZip(calendar) }

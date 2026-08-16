@@ -135,6 +135,11 @@ func registerCallbacks(api *api.Api) {
 					return nil, api.SyncAll()
 				})
 			}),
+			"exportICal": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					return api.ExportICal(args[0].String())
+				})
+			}),
 			"exportZip": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return api.ExportZip(args[0].String())
