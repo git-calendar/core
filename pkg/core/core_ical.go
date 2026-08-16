@@ -17,6 +17,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// ExportICal exports all events in the named calendar as an RFC 5545 iCalendar file.
+func (c *Core) ExportICal(calendar string) ([]byte, error) {
+	if _, ok := c.calendars[calendar]; !ok {
+		return nil, fmt.Errorf("calendar not found: %s", calendar)
+	}
+
+	var events []Event
+	for _, event := range c.events {
+		if event != nil && event.Calendar == calendar {
+			events = append(events, *event)
+		}
+	}
+	return serializeICal(calendar, events), nil
+}
+
 // ImportICalFile atomically upserts events using stable IDs derived from their iCalendar UIDs.
 func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]

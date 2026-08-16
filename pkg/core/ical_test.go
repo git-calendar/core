@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	ics "github.com/arran4/golang-ical"
+	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 
@@ -187,6 +189,97 @@ END:VCALENDAR`, test.tzid, test.start, test.tzid, test.end)
 			assertICalTime(t, events[0].From, test.wantStart)
 			assertICalTime(t, events[0].To, test.wantEnd)
 		})
+	}
+}
+
+func TestSerializeICal(t *testing.T) {
+	start := time.Date(2026, time.July, 14, 10, 0, 0, 0, time.UTC)
+	exception := start.AddDate(0, 0, 14)
+	repeat, err := newRecurrence(rrule.ROption{
+		Freq:     rrule.WEEKLY,
+		Dtstart:  start,
+		Interval: 2,
+		Count:    4,
+	}, []time.Time{exception})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	event := Event{
+		ID:          uuid.MustParse("9e678c47-63d1-4abc-98c0-a0032f1466c3"),
+		Title:       "Planning, review",
+		Location:    "Room 1; north wing",
+		Description: "Line one\nLine two",
+		From:        start,
+		To:          start.Add(90 * time.Minute),
+		Repeat:      repeat,
+		UpdatedAt:   time.Date(2026, time.July, 1, 8, 30, 0, 0, time.UTC),
+	}
+	data := serializeICal("Work", []Event{event})
+
+	calendar, err := ics.ParseCalendar(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calendar.Events()) != 1 {
+		t.Fatalf("got %d events, want 1", len(calendar.Events()))
+	}
+	exported := calendar.Events()[0]
+	if exported.Id() != "urn:uuid:"+event.ID.String() {
+		t.Errorf("UID = %q", exported.Id())
+	}
+	if got := icalText(exported, ics.ComponentPropertySummary); got != event.Title {
+		t.Errorf("SUMMARY = %q", got)
+	}
+	if got := icalText(exported, ics.ComponentPropertyLocation); got != event.Location {
+		t.Errorf("LOCATION = %q", got)
+	}
+	if got := icalText(exported, ics.ComponentPropertyDescription); got != event.Description {
+		t.Errorf("DESCRIPTION = %q", got)
+	}
+	if got := icalText(exported, ics.ComponentPropertyRrule); got != "FREQ=WEEKLY;INTERVAL=2;COUNT=4" {
+		t.Errorf("RRULE = %q", got)
+	}
+
+	gotStart, err := exported.GetStartAt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotEnd, err := exported.GetEndAt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertICalTime(t, gotStart, event.From)
+	assertICalTime(t, gotEnd, event.To)
+
+	exceptions, err := exported.GetExDates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exceptions) != 1 || !exceptions[0].Equal(exception) {
+		t.Errorf("EXDATE = %v, want [%v]", exceptions, exception)
+	}
+}
+
+func TestSerializeICalSortsEventsByID(t *testing.T) {
+	start := time.Date(2026, time.July, 14, 10, 0, 0, 0, time.UTC)
+	firstID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	secondID := uuid.MustParse("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+	data := serializeICal("Work", []Event{
+		{ID: secondID, Title: "Second", From: start, To: start.Add(time.Hour), UpdatedAt: start},
+		{ID: firstID, Title: "First", From: start, To: start.Add(time.Hour), UpdatedAt: start},
+	})
+
+	calendar, err := ics.ParseCalendar(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := calendar.Events()
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].Id() != "urn:uuid:"+firstID.String() || events[1].Id() != "urn:uuid:"+secondID.String() {
+		t.Errorf("event order = [%q, %q]", events[0].Id(), events[1].Id())
 	}
 }
 

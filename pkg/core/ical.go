@@ -1,8 +1,10 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	ics "github.com/arran4/golang-ical"
@@ -125,4 +127,57 @@ func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {
 		uid = fmt.Sprintf("%d\x00%s\x00%s", index, event.Title, event.From.Format(time.RFC3339Nano))
 	}
 	return uuid.NewSHA1(uuid.Nil, []byte("git-calendar:event\x00"+calendar+"\x00"+uid))
+}
+
+func serializeICal(calendarName string, events []Event) []byte {
+	calendar := ics.NewCalendarFor("git-calendar")
+	calendar.SetName(calendarName)
+	calendar.SetCalscale("GREGORIAN")
+
+	events = slices.Clone(events)
+	slices.SortFunc(events, func(a, b Event) int {
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
+
+	generatedAt := time.Now()
+	for _, event := range events {
+		addICalEvent(calendar, event, generatedAt)
+	}
+
+	return []byte(calendar.Serialize(ics.WithNewLineWindows))
+}
+
+func addICalEvent(calendar *ics.Calendar, event Event, generatedAt time.Time) {
+	exported := calendar.AddEvent("urn:uuid:" + event.ID.String())
+	exported.SetSummary(event.Title)
+	exported.SetStartAt(event.From)
+	exported.SetEndAt(event.To)
+
+	if event.Location != "" {
+		exported.SetLocation(event.Location)
+	}
+	if event.Description != "" {
+		exported.SetDescription(event.Description)
+	}
+
+	stamp := event.UpdatedAt
+	if stamp.IsZero() {
+		stamp = generatedAt
+	}
+	exported.SetDtStampTime(stamp)
+	if !event.UpdatedAt.IsZero() {
+		exported.SetLastModifiedAt(event.UpdatedAt)
+	}
+
+	if event.Repeat == nil {
+		return
+	}
+	rule := event.Repeat.GetRRule()
+	if rule == nil {
+		return
+	}
+	exported.AddRrule(rule.OrigOptions.RRuleString())
+	for _, exception := range event.Repeat.GetExDate() {
+		exported.AddExdate(exception.UTC().Format(rrule.DateTimeFormat))
+	}
 }
