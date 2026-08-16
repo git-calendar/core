@@ -21,8 +21,8 @@
   - [x] import
     - [x] one-time import into a Git-backed calendar
     - [x] URL calendar cached locally and refreshed by `SyncAll`
-  - [ ] export
-    - to a file
+  - [x] export
+    - [x] to a file
     - idk about url
       - github-pages?
       - custom http file server?
