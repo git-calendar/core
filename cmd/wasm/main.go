@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"syscall/js"
 	_ "time/tzdata" // microslop dates need this
 
@@ -188,7 +187,6 @@ func wrapPromise(fn func() (any, error)) any {
 				errorValue := errorConstructor.New(errorMessage)
 				if code, ok := errcode.CodeOf(err); ok {
 					errorValue.Set("code", string(code))
-					fmt.Printf("wrapPromise error: code=%q ok=%v type=%T err=%v\n", code, ok, err, err)
 				}
 				if calendar, ok := errcode.CalendarOf(err); ok {
 					errorValue.Set("calendar", calendar)
