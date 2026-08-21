@@ -7,22 +7,24 @@ import (
 	"path"
 	"time"
 
+	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/git-calendar/core/pkg/gitmerge"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
 func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
 	repoURL, err := repoURLFromCalendar(cal)
 	if err != nil {
-		return err
+		return errcode.Wrap(errcode.Validation, err)
 	}
 
 	fmt.Println("pushing", cal.Name)
 
 	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
-	return ignoreUpToDate(cal.repository.Push(&gogit.PushOptions{
+	return wrapGitRemoteError(cal.repository.Push(&gogit.PushOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
@@ -32,13 +34,13 @@ func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
 func fetchCalendar(cal *Calendar, proxyURL *url.URL) error {
 	repoURL, err := repoURLFromCalendar(cal)
 	if err != nil {
-		return err
+		return errcode.Wrap(errcode.Validation, err)
 	}
 
 	fmt.Println("fetching", cal.Name)
 
 	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
-	return ignoreUpToDate(cal.repository.Fetch(&gogit.FetchOptions{
+	return wrapGitRemoteError(cal.repository.Fetch(&gogit.FetchOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
@@ -67,6 +69,22 @@ func fastForwardCalendar(cal *Calendar, hash plumbing.Hash) error {
 	}
 
 	return nil
+}
+
+func wrapGitRemoteError(err error) error {
+	err = ignoreUpToDate(err)
+	if err == nil {
+		return nil
+	}
+
+	code := errcode.Network
+	switch {
+	case errors.Is(err, transport.ErrAuthenticationRequired):
+		code = errcode.Auth
+	case errors.Is(err, transport.ErrAuthorizationFailed):
+		code = errcode.Forbidden
+	}
+	return errcode.Wrap(code, err)
 }
 
 // ignoreUpToDate swallows the benign "already up to date" error from push/fetch.

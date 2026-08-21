@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/git-calendar/core/pkg/core"
+	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/git-calendar/core/pkg/filesystem"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -334,6 +335,17 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 		t.Errorf("URL was fetched %d times during load, want 1", requests.Load())
 	}
 
+	if err := c.SyncAll(); err == nil {
+		t.Fatal("SyncAll() succeeded while the feed was offline")
+	} else {
+		if code, ok := errcode.CodeOf(err); !ok || code != errcode.Network {
+			t.Fatalf("SyncAll() error code = %q, %t, want %q, true: %v", code, ok, errcode.Network, err)
+		}
+		if calendar, ok := errcode.CalendarOf(err); !ok || calendar != name {
+			t.Fatalf("SyncAll() error calendar = %q, %t, want %q, true: %v", calendar, ok, name, err)
+		}
+	}
+
 	offline.Store(false)
 	if err := c.SyncAll(); err != nil {
 		t.Fatal(err)
@@ -345,8 +357,8 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	if events[0].ID != id {
 		t.Errorf("event ID changed after sync: got %s, want %s", events[0].ID, id)
 	}
-	if requests.Load() != 2 {
-		t.Errorf("URL was fetched %d times, want 2", requests.Load())
+	if requests.Load() != 3 {
+		t.Errorf("URL was fetched %d times, want 3", requests.Load())
 	}
 
 	if err := c.RenameCalendar(name, renamedName); err != nil {
@@ -370,8 +382,8 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	} else if string(data) != icalFeed("Second title") {
 		t.Errorf("renamed cached iCalendar = %q", data)
 	}
-	if requests.Load() != 2 {
-		t.Errorf("URL was fetched %d times after rename, want 2", requests.Load())
+	if requests.Load() != 3 {
+		t.Errorf("URL was fetched %d times after rename, want 3", requests.Load())
 	}
 
 	if err := c.RemoveCalendar(renamedName); err != nil {

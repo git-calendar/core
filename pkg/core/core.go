@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/git-calendar/core/pkg/export"
 	"github.com/git-calendar/core/pkg/filesystem"
 	"github.com/git-calendar/core/pkg/gitmerge"
@@ -79,7 +80,7 @@ func (c *Core) SyncAll() error {
 				err = c.syncCalendar(cal)
 			}
 			if err != nil {
-				errs <- fmt.Errorf("%q: sync failed: %w", cal.Name, err)
+				errs <- errcode.WithCalendar(cal.Name, fmt.Errorf("sync failed: %w", err))
 			}
 		})
 	}
@@ -93,7 +94,7 @@ func (c *Core) SyncAll() error {
 	}
 
 	if err := c.LoadCalendars(); err != nil { // reload events from disk
-		resultErr = errors.Join(resultErr, err)
+		resultErr = errors.Join(resultErr, errcode.Wrap(errcode.Storage, fmt.Errorf("reload calendars: %w", err)))
 	}
 
 	return resultErr

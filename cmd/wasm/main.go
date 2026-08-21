@@ -3,10 +3,12 @@
 package main
 
 import (
+	"fmt"
 	"syscall/js"
 	_ "time/tzdata" // microslop dates need this
 
 	"github.com/git-calendar/core/pkg/api"
+	"github.com/git-calendar/core/pkg/errcode"
 )
 
 // This is the starting point which gets called from JS.
@@ -183,7 +185,16 @@ func wrapPromise(fn func() (any, error)) any {
 
 				// create the JS Error object
 				errorConstructor := js.Global().Get("Error")
-				reject.Invoke(errorConstructor.New(errorMessage))
+				errorValue := errorConstructor.New(errorMessage)
+				if code, ok := errcode.CodeOf(err); ok {
+					errorValue.Set("code", string(code))
+					fmt.Printf("wrapPromise error: code=%q ok=%v type=%T err=%v\n", code, ok, err, err)
+				}
+				if calendar, ok := errcode.CalendarOf(err); ok {
+					errorValue.Set("calendar", calendar)
+				}
+
+				reject.Invoke(errorValue)
 			} else { // no error, pass the result
 				resolve.Invoke(toJSValue(res))
 			}

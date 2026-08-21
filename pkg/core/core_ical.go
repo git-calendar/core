@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/go-git/go-billy/v5/util"
 	"github.com/google/uuid"
 )
@@ -190,7 +191,7 @@ func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 		requestURL = useCorsProxy(sourceURL, c.proxyURL)
 	}
 	if requestURL == nil {
-		return errors.New("invalid proxied iCalendar URL")
+		return errcode.Wrap(errcode.Validation, errors.New("invalid proxied iCalendar URL"))
 	}
 
 	fmt.Println("fetching ical", name)
@@ -198,23 +199,30 @@ func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 	client := http.Client{Timeout: 30 * time.Second}
 	response, err := client.Get(requestURL.String())
 	if err != nil {
-		return err
+		return errcode.Wrap(errcode.Network, err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("fetch iCalendar: %s", response.Status)
+		code := errcode.Network
+		switch response.StatusCode {
+		case http.StatusUnauthorized:
+			code = errcode.Auth
+		case http.StatusForbidden:
+			code = errcode.Forbidden
+		}
+		return errcode.Wrap(code, fmt.Errorf("fetch iCalendar: %s", response.Status))
 	}
 
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
-		return err
+		return errcode.Wrap(errcode.Network, err)
 	}
 	if _, err := parseICal(bytes.NewReader(data), name, true); err != nil {
-		return err
+		return errcode.Wrap(errcode.Validation, err)
 	}
 	if err := util.WriteFile(c.fs, name+ICalFileSuffix, data, 0o644); err != nil {
-		return fmt.Errorf("cache iCalendar: %w", err)
+		return errcode.Wrap(errcode.Storage, fmt.Errorf("cache iCalendar: %w", err))
 	}
 	return nil
 }
