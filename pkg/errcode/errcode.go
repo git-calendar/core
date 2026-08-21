@@ -10,6 +10,7 @@ const (
 	Network    Code = "NETWORK"
 	Auth       Code = "AUTH"
 	Forbidden  Code = "FORBIDDEN"
+	RateLimit  Code = "RATELIMIT"
 	Validation Code = "VALIDATION"
 	Storage    Code = "STORAGE"
 )

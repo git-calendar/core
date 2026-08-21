@@ -210,6 +210,8 @@ func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 			code = errcode.Auth
 		case http.StatusForbidden:
 			code = errcode.Forbidden
+		case http.StatusTooManyRequests:
+			code = errcode.RateLimit
 		}
 		return errcode.Wrap(code, fmt.Errorf("fetch iCalendar: %s", response.Status))
 	}

@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path"
 	"time"
@@ -83,8 +84,27 @@ func wrapGitRemoteError(err error) error {
 		code = errcode.Auth
 	case errors.Is(err, transport.ErrAuthorizationFailed):
 		code = errcode.Forbidden
+	case gitHTTPStatusCode(err) == http.StatusTooManyRequests:
+		code = errcode.RateLimit
 	}
 	return errcode.Wrap(code, err)
+}
+
+func gitHTTPStatusCode(err error) int {
+	type statusError interface {
+		StatusCode() int
+	}
+
+	var statusErr statusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode()
+	}
+
+	var unexpectedErr *plumbing.UnexpectedError
+	if errors.As(err, &unexpectedErr) && errors.As(unexpectedErr.Err, &statusErr) {
+		return statusErr.StatusCode()
+	}
+	return 0
 }
 
 // ignoreUpToDate swallows the benign "already up to date" error from push/fetch.
