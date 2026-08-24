@@ -6,10 +6,10 @@ import (
 	"os"
 	"slices"
 	"time"
+	"uuid"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/google/uuid"
 )
 
 // CreateTag saves one tag into a calendar repository.
@@ -75,7 +75,7 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 
 // RemoveTag clears the tag from affected events, then deletes it from the calendar repository.
 func (c *Core) RemoveTag(calendar string, id uuid.UUID) error {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return errors.New("invalid tag id")
 	}
 

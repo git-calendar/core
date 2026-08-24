@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	ics "github.com/arran4/golang-ical"
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 
@@ -41,8 +41,8 @@ END:VCALENDAR`
 	}
 
 	first := events[0]
-	if first.ID.Version() != 4 {
-		t.Errorf("event ID version = %d, want 4", first.ID.Version())
+	if version := uuidVersion(first.ID); version != 4 {
+		t.Errorf("event ID version = %d, want 4", version)
 	}
 	if first.Title != "Planning, review" {
 		t.Errorf("Title = %q, want %q", first.Title, "Planning, review")
@@ -76,6 +76,14 @@ END:VCALENDAR`
 	}
 	if option.Count != 4 {
 		t.Errorf("Count = %d, want 4", option.Count)
+	}
+}
+
+func TestICalEventIDMatchesExistingUUIDv5(t *testing.T) {
+	got := icalEventID("work", "one@example.com", 0, Event{})
+	want := uuid.MustParse("429365a8-2322-5588-b3fd-2213b307e11d")
+	if got != want {
+		t.Fatalf("icalEventID() = %s, want %s", got, want)
 	}
 }
 

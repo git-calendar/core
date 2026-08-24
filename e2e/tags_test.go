@@ -3,9 +3,9 @@ package e2e
 import (
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
-	"github.com/google/uuid"
 )
 
 func TestTag_CreateTag_CreatesTag(t *testing.T) {
@@ -222,7 +222,7 @@ func TestTag_RemoveTag_UntagsAffectedEvents(t *testing.T) {
 func TestTag_RemoveTag_InvalidIDReturnsError(t *testing.T) {
 	c := newTestCore(t)
 
-	err := c.RemoveTag(testCalendarName, uuid.Nil)
+	err := c.RemoveTag(testCalendarName, uuid.Nil())
 	if err == nil {
 		t.Fatalf("expected invalid tag id error")
 	}

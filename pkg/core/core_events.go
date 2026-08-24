@@ -7,15 +7,15 @@ import (
 	"path"
 	"slices"
 	"time"
+	"uuid"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 
 // CreateEvent validates, stores, and commits a new event.
 func (c *Core) CreateEvent(event Event) (*Event, error) {
-	if _, ok := c.events[event.ID]; ok && event.ID != uuid.Nil {
+	if _, ok := c.events[event.ID]; ok && event.ID != uuid.Nil() {
 		return nil, errors.New("an event with this id already exists")
 	}
 
@@ -280,10 +280,10 @@ func (c *Core) updateCurrentChild(original, updated *Event) (*Event, error) {
 	}
 
 	// detach the updated event from series and creete a new standalone instance
-	detachedEvent := *updated    // shallow copy
-	detachedEvent.Repeat = nil   // not repeating anymore
-	detachedEvent.ParentID = nil // not child anymore
-	detachedEvent.ID = uuid.Nil  // set to uuid.Nil; CreateEvent will asign a new one
+	detachedEvent := *updated     // shallow copy
+	detachedEvent.Repeat = nil    // not repeating anymore
+	detachedEvent.ParentID = nil  // not child anymore
+	detachedEvent.ID = uuid.Nil() // set to uuid.Nil(); CreateEvent will assign a new one
 
 	return c.CreateEvent(detachedEvent) // save as new
 }

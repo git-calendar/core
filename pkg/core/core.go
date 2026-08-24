@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/git-calendar/core/pkg/export"
@@ -21,7 +22,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gogitfs "github.com/go-git/go-git/v5/storage/filesystem"
-	"github.com/google/uuid"
 )
 
 // Core manages calendars, events, tags, synchronization, and persistence using Go values.

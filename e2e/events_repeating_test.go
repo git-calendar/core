@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 

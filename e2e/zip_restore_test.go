@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
-	"github.com/google/uuid"
 )
 
 func TestRestoreZipRoundTrip(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/git-calendar/core/pkg/filesystem"
-	"github.com/google/uuid"
 )
 
 func TestAddEvent_CreatesJsonFile(t *testing.T) {

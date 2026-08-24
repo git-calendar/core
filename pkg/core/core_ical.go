@@ -12,10 +12,10 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/go-git/go-billy/v5/util"
-	"github.com/google/uuid"
 )
 
 // ExportICal exports one calendar, or all calendars when calendar is empty, as an RFC 5545 file.
@@ -61,7 +61,7 @@ func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) er
 		}
 		seen[event.ID] = struct{}{}
 
-		if tagID != nil && *tagID != uuid.Nil {
+		if tagID != nil && *tagID != uuid.Nil() {
 			id := *tagID
 			event.TagID = &id
 		}

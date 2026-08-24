@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/rdleal/intervalst/interval"
 )
 

@@ -37,8 +37,8 @@ func TestImportICalFilePersistsEvents(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("got %d imported events, want 1", len(events))
 	}
-	if events[0].ID.Version() != 5 {
-		t.Errorf("event ID version = %d, want 5", events[0].ID.Version())
+	if version := events[0].ID[6] >> 4; version != 5 {
+		t.Errorf("event ID version = %d, want 5", version)
 	}
 	id := events[0].ID
 
@@ -275,8 +275,8 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	if len(events) != 1 || events[0].Title != "First title" {
 		t.Fatalf("first URL import = %+v", events)
 	}
-	if events[0].ID.Version() != 5 {
-		t.Errorf("event ID version = %d, want 5", events[0].ID.Version())
+	if version := events[0].ID[6] >> 4; version != 5 {
+		t.Errorf("event ID version = %d, want 5", version)
 	}
 	id := events[0].ID
 

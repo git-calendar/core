@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 
@@ -34,7 +34,7 @@ type Event struct {
 	// TagID optionally associates the event with a tag.
 	TagID *uuid.UUID `json:"tag_id"`
 	// ParentID identifies a generated occurrence's parent.
-	// Standalone events and recurring-series parents use nil, not uuid.Nil.
+	// Standalone events and recurring-series parents use nil, not uuid.Nil().
 	ParentID *uuid.UUID `json:"parent_id"`
 	// Repeat is an internal recurrence representation. It is serialized as RFC 5545 text.
 	Repeat *rrule.Set `json:"-"`
@@ -47,8 +47,9 @@ func (e *Event) Validate() error {
 	if e == nil {
 		return nil
 	}
-	if e.ID != uuid.Nil {
-		if e.ID.Version() != 4 && e.ID.Version() != 5 && e.ID.Version() != 8 { // enforce version
+	if e.ID != uuid.Nil() {
+		version := uuidVersion(e.ID)
+		if version != 4 && version != 5 && version != 8 {
 			return errors.New("unsupported UUID version")
 		}
 	} else {

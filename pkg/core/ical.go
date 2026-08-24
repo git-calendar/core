@@ -6,9 +6,9 @@ import (
 	"io"
 	"slices"
 	"time"
+	"uuid"
 
 	ics "github.com/arran4/golang-ical"
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 	"github.com/thommeo/winianatz"
 )
@@ -126,7 +126,7 @@ func icalEventID(calendar, uid string, index int, event Event) uuid.UUID {
 		// fallback if uid is missing
 		uid = fmt.Sprintf("%d\x00%s\x00%s", index, event.Title, event.From.Format(time.RFC3339Nano))
 	}
-	return uuid.NewSHA1(uuid.Nil, []byte("git-calendar:event\x00"+calendar+"\x00"+uid))
+	return newUUIDv5(uuid.Nil(), []byte("git-calendar:event\x00"+calendar+"\x00"+uid))
 }
 
 func serializeICal(calendarName string, events []Event) []byte {

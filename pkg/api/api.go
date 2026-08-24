@@ -14,9 +14,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
-	"github.com/google/uuid"
 	"github.com/teambition/rrule-go"
 )
 

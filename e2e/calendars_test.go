@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/git-calendar/core/pkg/filesystem"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/google/uuid"
 )
 
 const testCalendarName = "test"

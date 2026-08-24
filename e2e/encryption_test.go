@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
 	"github.com/git-calendar/core/pkg/filesystem"
-	"github.com/google/uuid"
 	aessiv "github.com/jedisct1/go-aes-siv"
 )
 

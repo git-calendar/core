@@ -5,10 +5,10 @@ import (
 	"net/url"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 )
 
 func TestPrepareRepoURL(t *testing.T) {

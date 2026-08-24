@@ -9,10 +9,10 @@ import (
 	"path"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/go-git/go-billy/v5"
-	"github.com/google/uuid"
 )
 
 // Tag represents a user-defined category/label for multiple events within one calendar.
@@ -28,9 +28,8 @@ func (t *Tag) Validate() error {
 	if t == nil {
 		return nil
 	}
-	if t.ID != uuid.Nil {
-		// if id is set
-		if t.ID.Version() != 4 { // enforce version
+	if t.ID != uuid.Nil() {
+		if uuidVersion(t.ID) != 4 {
 			return errors.New("unsupported UUID version")
 		}
 	} else {
@@ -77,7 +76,7 @@ func (e Tag) fileData() tagInFile {
 
 // WriteToFile serializes the tag to a repository file, encrypting it when key is set.
 func (e Tag) WriteToFile(file billy.File, key []byte) error {
-	if e.ID == uuid.Nil {
+	if e.ID == uuid.Nil() {
 		return errors.New("tag id has to be set")
 	}
 

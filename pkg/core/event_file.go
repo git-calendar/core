@@ -9,10 +9,10 @@ import (
 	"path"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/git-calendar/core/pkg/encryption"
 	"github.com/go-git/go-billy/v5"
-	"github.com/google/uuid"
 	rrule "github.com/teambition/rrule-go"
 )
 
@@ -74,7 +74,7 @@ func (e Event) fileData() eventInFile {
 
 // WriteToFile serializes the event to a repository file, encrypting it when key is set.
 func (e Event) WriteToFile(file billy.File, key []byte) error {
-	if e.ID == uuid.Nil {
+	if e.ID == uuid.Nil() {
 		return errors.New("event id has to be set")
 	}
 

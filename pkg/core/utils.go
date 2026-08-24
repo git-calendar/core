@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -9,10 +10,10 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/google/uuid"
 )
 
 // prepareRepoURL separates HTTP credentials and optionally routes through a browser CORS proxy as <proxy>/<repository-url>.
@@ -115,27 +116,38 @@ func calendarNameFromURL(u *url.URL) string {
 	return strings.TrimSuffix(name, ".git")
 }
 
-// generateCustomUUID generates custom uuid from parentID and some time. It uses 6 bytes for the parent and 6 bytes for the time.
-// If the generation fails, it returns uuid.New().
+func uuidVersion(id uuid.UUID) byte {
+	return id[6] >> 4
+}
+
+// newUUIDv5 generates a deterministic UUID using RFC 9562's SHA-1 algorithm.
+func newUUIDv5(namespace uuid.UUID, data []byte) uuid.UUID {
+	hash := sha1.New()
+	hash.Write(namespace[:])
+	hash.Write(data)
+
+	var id uuid.UUID
+	copy(id[:], hash.Sum(nil))
+	id[6] = (id[6] & 0x0f) | 0x50
+	id[8] = (id[8] & 0x3f) | 0x80
+	return id
+}
+
+// generateCustomUUID generates a UUIDv8 from a parent ID and time.
 func generateCustomUUID(parentID uuid.UUID, t time.Time) uuid.UUID {
-	idBuf := make([]byte, 16)
-	copy(idBuf[:6], parentID[:6])      // take first 6 bytes from parentID
-	copy(idBuf[9:12], parentID[13:16]) // take another 3 bytes from parentID
-	idBuf[6] = 0x80                    // set version
-	idBuf[7] = 0x69                    // could be a flag, but now is just 0x69
-	idBuf[8] = 0x80                    // RFC 9562
-	unix32 := uint32(t.Unix())
-	binary.BigEndian.PutUint32(idBuf[12:16], unix32) // add the time
-	id, err := uuid.FromBytes(idBuf)
-	if err != nil {
-		return uuid.New()
-	}
+	var id uuid.UUID
+	copy(id[:6], parentID[:6])      // take first 6 bytes from parentID
+	copy(id[9:12], parentID[13:16]) // take another 3 bytes from parentID
+	id[6] = 0x80                    // set version
+	id[7] = 0x69                    // could be a flag, but now is just 0x69
+	id[8] = 0x80                    // RFC 9562
+	binary.BigEndian.PutUint32(id[12:16], uint32(t.Unix()))
 	return id
 }
 
 // getTimeFromUUID extracts the encoded time from a custom UUIDv8.
 func getTimeFromUUID(id uuid.UUID) time.Time {
-	if id.Version() != 8 {
+	if uuidVersion(id) != 8 {
 		return time.Time{}
 	}
 	unix32 := binary.BigEndian.Uint32(id[12:16])
