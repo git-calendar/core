@@ -8,7 +8,7 @@
 package api
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/url"
@@ -138,7 +138,7 @@ func (a *Api) ListCalendars() (string, error) {
 	if err != nil {
 		return emptyJSONArray, err
 	}
-	data, err := json.Marshal(calendars)
+	data, err := json.Marshal(calendars, json.Deterministic(true))
 	if err != nil {
 		return emptyJSONArray, fmt.Errorf("failed to marshal calendars to JSON: %w", err)
 	}
@@ -240,7 +240,7 @@ func (a *Api) CreateTag(calendar, tagJSON string) (string, error) {
 		return emptyJSON, err
 	}
 
-	data, err := json.Marshal(newTag)
+	data, err := json.Marshal(newTag, json.Deterministic(true))
 	if err != nil {
 		return emptyJSON, err
 	}
@@ -260,7 +260,7 @@ func (a *Api) UpdateTag(calendar, tagJSON string) (string, error) {
 		return emptyJSON, err
 	}
 
-	data, err := json.Marshal(updatedTag)
+	data, err := json.Marshal(updatedTag, json.Deterministic(true))
 	if err != nil {
 		return emptyJSON, err
 	}
@@ -313,7 +313,7 @@ func unmarshalEvent(raw string) (core.Event, error) {
 
 // marshalEvent converts the recurrence set to its string form and encodes the event.
 func marshalEvent(event *core.Event) (string, error) {
-	data, err := json.Marshal(eventToJSON(*event))
+	data, err := json.Marshal(eventToJSON(*event), json.Deterministic(true))
 	if err != nil {
 		return emptyJSON, fmt.Errorf("failed to marshal event data: %w", err)
 	}
@@ -325,7 +325,7 @@ func marshalEvents(events []core.Event) (string, error) {
 	for i := range events {
 		result[i] = eventToJSON(events[i])
 	}
-	data, err := json.Marshal(result)
+	data, err := json.Marshal(result, json.Deterministic(true))
 	if err != nil {
 		return emptyJSONArray, fmt.Errorf("failed to marshal event data: %w", err)
 	}

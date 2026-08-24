@@ -1,7 +1,8 @@
 package core
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +82,7 @@ func (e Tag) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// marshal normally
-	raw, err := json.MarshalIndent(e.fileData(), "", "  ")
+	raw, err := json.Marshal(e.fileData(), json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func (e Tag) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// marshal again
-	finalRaw, err := json.MarshalIndent(encrypted, "", "  ")
+	finalRaw, err := json.Marshal(encrypted, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -152,7 +153,7 @@ func (e *Tag) LoadFromBytes(raw []byte, filename string, decryptionKey []byte) e
 	}
 
 	// eww (map to struct conversion)
-	tmp, err := json.Marshal(decrypted)
+	tmp, err := json.Marshal(decrypted, json.Deterministic(true))
 	if err != nil {
 		return err
 	}

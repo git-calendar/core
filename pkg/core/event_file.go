@@ -1,7 +1,8 @@
 package core
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -78,7 +79,7 @@ func (e Event) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// marshal normally
-	raw, err := json.MarshalIndent(e.fileData(), "", "  ")
+	raw, err := json.Marshal(e.fileData(), json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -101,7 +102,7 @@ func (e Event) WriteToFile(file billy.File, key []byte) error {
 	}
 
 	// marshal again
-	finalRaw, err := json.MarshalIndent(encrypted, "", "  ")
+	finalRaw, err := json.Marshal(encrypted, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -136,7 +137,7 @@ func (e *Event) LoadFromBytes(raw []byte, name string, calendar string, decrypti
 		if err != nil {
 			return err
 		}
-		raw, err = json.Marshal(decrypted)
+		raw, err = json.Marshal(decrypted, json.Deterministic(true))
 		if err != nil {
 			return err
 		}

@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/url"
@@ -95,7 +95,7 @@ func (cal *Calendar) MarshalJSON() ([]byte, error) {
 		ICalURL:   icalURL,
 		Encrypted: cal.IsEncrypted(),
 		Readonly:  cal.Readonly,
-	})
+	}, json.Deterministic(true))
 }
 
 // LoadTags reloads the calendar's tags from its repository.

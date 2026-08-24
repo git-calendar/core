@@ -1,7 +1,7 @@
 package gitmerge
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"testing"
@@ -278,7 +278,7 @@ func applyEvent(t *testing.T, wt *gogit.Worktree, from, to *time.Time) {
 func writeEvent(t *testing.T, wt *gogit.Worktree, when time.Time) {
 	t.Helper()
 
-	data, err := json.Marshal(testEvent{UpdatedAt: when})
+	data, err := json.Marshal(testEvent{UpdatedAt: when}, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("marshal event: %v", err)
 	}

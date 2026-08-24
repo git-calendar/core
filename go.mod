@@ -1,6 +1,6 @@
 module github.com/git-calendar/core
 
-go 1.26.6
+go 1.27
 
 require (
 	github.com/arran4/golang-ical v0.3.5

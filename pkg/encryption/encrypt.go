@@ -11,7 +11,7 @@ package encryption
 
 import (
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strconv"
 
@@ -57,7 +57,7 @@ func encryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {
 
 	default:
 		// leaf value
-		b, err := json.Marshal(val)
+		b, err := json.Marshal(val, json.Deterministic(true))
 		if err != nil {
 			return nil, err
 		}
