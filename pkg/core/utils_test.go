@@ -70,6 +70,11 @@ func TestUseCorsProxy(t *testing.T) {
 		want     *url.URL
 	}{
 		{
+			name:  "no original",
+			proxy: mustParseURL("http://cors-proxy.abc"),
+			want:  mustParseURL("http://cors-proxy.abc"),
+		},
+		{
 			name:     "basic proxy",
 			original: mustParseURL("https://github.com/joe/my-calendar.git"),
 			proxy:    mustParseURL("http://cors-proxy.abc"),

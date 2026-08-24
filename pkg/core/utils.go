@@ -20,18 +20,18 @@ func prepareRepoURL(repoURL *url.URL, proxyURL *url.URL) (*url.URL, *http.BasicA
 	if repoURL == nil {
 		return nil, nil
 	}
-	repo := *repoURL // copy
+	repo := repoURL.Clone()
 
 	// parse auth from url and delete the credentials
-	auth := authFromURL(&repo)
+	auth := authFromURL(repo)
 	repo.User = nil
 
 	// add proxy if specified
 	if proxyURL != nil {
-		return useCorsProxy(&repo, proxyURL), auth
+		return useCorsProxy(repo, proxyURL), auth
 	}
 
-	return &repo, auth
+	return repo, auth
 }
 
 func repoURLFromCalendar(cal *Calendar) (*url.URL, error) {
@@ -65,8 +65,7 @@ func useCorsProxy(original, proxy *url.URL) *url.URL {
 		return original
 	}
 	if original == nil {
-		u := *proxy
-		return &u
+		return proxy.Clone()
 	}
 
 	p := *proxy // copy

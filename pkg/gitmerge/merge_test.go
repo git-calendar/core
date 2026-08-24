@@ -3,7 +3,6 @@ package gitmerge
 import (
 	"encoding/json/v2"
 	"errors"
-	"io"
 	"testing"
 	"time"
 
@@ -341,14 +340,9 @@ func assertHeadEvent(t *testing.T, repo *gogit.Repository, want *time.Time) {
 	}
 	defer r.Close()
 
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read event blob: %v", err)
-	}
-
 	var got testEvent
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("unmarshal event: %v", err)
+	if err := json.UnmarshalRead(r, &got); err != nil {
+		t.Fatalf("read event blob: %v", err)
 	}
 
 	if !got.UpdatedAt.Equal(*want) {
