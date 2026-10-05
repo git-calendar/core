@@ -247,8 +247,12 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	feed.Store(icalFeed("First title"))
 	var requests atomic.Int32
 	var offline atomic.Bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
+		if r.Header.Get("Accept") != "text/calendar" {
+			http.Error(w, "iCalendar content must be requested", http.StatusUnsupportedMediaType)
+			return
+		}
 		if offline.Load() {
 			http.Error(w, "offline", http.StatusServiceUnavailable)
 			return

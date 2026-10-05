@@ -196,8 +196,14 @@ func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 
 	fmt.Println("fetching ical", name)
 
+	request, err := http.NewRequest(http.MethodGet, requestURL.String(), nil)
+	if err != nil {
+		return errcode.Wrap(errcode.Validation, err)
+	}
+	request.Header.Set("Accept", "text/calendar")
+
 	client := http.Client{Timeout: 30 * time.Second}
-	response, err := client.Get(requestURL.String())
+	response, err := client.Do(request)
 	if err != nil {
 		return errcode.Wrap(errcode.Network, err)
 	}
