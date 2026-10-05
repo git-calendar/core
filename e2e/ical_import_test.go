@@ -257,7 +257,7 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sourceURL, err := url.Parse(server.URL + "/calendar.ics")
+	sourceURL, err := url.Parse(server.URL + "/calendar")
 	if err != nil {
 		t.Fatal(err)
 	}

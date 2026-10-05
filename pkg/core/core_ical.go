@@ -266,9 +266,6 @@ func validateICalURL(sourceURL *url.URL) error {
 		(sourceURL.Scheme != "http" && sourceURL.Scheme != "https") {
 		return errors.New("iCalendar URL must be an absolute HTTP or HTTPS URL")
 	}
-	if !strings.HasSuffix(sourceURL.Path, ".ics") {
-		return errors.New(`iCalendar URL must end with ".ics"`)
-	}
 	return nil
 }
 
