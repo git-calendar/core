@@ -118,6 +118,10 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 		return err
 	}
 
+	if err := c.fetchICalURL(name, sourceURL); err != nil {
+		return fmt.Errorf("fetch iCalendar URL: %w", err)
+	}
+
 	file, err := c.fs.Create(fileName)
 	if err != nil {
 		return fmt.Errorf("create iCalendar URL file: %w", err)
@@ -133,10 +137,6 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 	}
 
 	c.calendars[name] = &Calendar{Name: name, Readonly: true, ICalURL: sourceURL}
-	if err := c.fetchICalURL(name, sourceURL); err != nil {
-		fmt.Printf("WARN: failed to fetch iCalendar %q: %v\n", name, err)
-		return nil
-	}
 	if err := c.loadICalFile(name); err != nil {
 		fmt.Printf("WARN: failed to load cached iCalendar %q: %v\n", name, err)
 	}

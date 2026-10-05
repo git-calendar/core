@@ -235,6 +235,47 @@ func TestUpdateICalURL(t *testing.T) {
 	}
 }
 
+func TestImportICalURLRejectsInvalidFeed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const name = "test-invalid-ical-url"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not an iCalendar feed"))
+	}))
+	defer server.Close()
+
+	sourceURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := core.NewCore()
+	if err := c.ImportICalURL(name, sourceURL); err == nil {
+		t.Fatal("expected invalid iCalendar URL import to fail")
+	}
+
+	calendars, err := c.ListCalendars()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, calendar := range calendars {
+		if calendar.Name == name {
+			t.Fatal("failed URL import registered a calendar")
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	calendarRoot := filepath.Join(home, filesystem.DirName)
+	for _, suffix := range []string{core.ICalURLFileSuffix, core.ICalFileSuffix} {
+		if _, err := os.Stat(filepath.Join(calendarRoot, name+suffix)); !os.IsNotExist(err) {
+			t.Fatalf("failed URL import left %s file: %v", suffix, err)
+		}
+	}
+}
+
 func TestImportICalURLCachesUntilSync(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
