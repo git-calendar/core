@@ -332,6 +332,104 @@ func TestUpdateStandardEvent(t *testing.T) {
 	}
 }
 
+func TestRemoveEventUsesStoredCalendarAndTimes(t *testing.T) {
+	c := newTestCore(t)
+
+	start := time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+	event := core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Stored event",
+		From:     start,
+		To:       start.Add(time.Hour),
+	}
+	if _, err := c.CreateEvent(event); err != nil {
+		t.Fatalf("failed to create event: %v", err)
+	}
+
+	stale := event
+	stale.Calendar = "caller-controlled-calendar"
+	stale.From = stale.From.AddDate(0, 0, 1)
+	stale.To = stale.To.AddDate(0, 0, 1)
+	if err := c.RemoveEvent(stale); err != nil {
+		t.Fatalf("remove should use stored event state: %v", err)
+	}
+
+	if _, err := c.GetEvent(event.ID); err == nil {
+		t.Fatal("event still exists after removal")
+	}
+	if events := c.GetEvents(start, start.Add(time.Hour), nil); len(events) != 0 {
+		t.Fatalf("stored interval was not removed: %+v", events)
+	}
+}
+
+func TestRemoveEventCannotForgeCalendarToBypassReadonly(t *testing.T) {
+	c := newTestCore(t)
+
+	start := time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+	event := core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Read-only event",
+		From:     start,
+		To:       start.Add(time.Hour),
+	}
+	if _, err := c.CreateEvent(event); err != nil {
+		t.Fatalf("failed to create event: %v", err)
+	}
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/readonly.git"), true); err != nil {
+		t.Fatalf("failed to make calendar read-only: %v", err)
+	}
+
+	forged := event
+	forged.Calendar = "caller-controlled-calendar"
+	if err := c.RemoveEvent(forged); err == nil {
+		t.Fatal("expected removal from stored read-only calendar to fail")
+	}
+	if _, err := c.GetEvent(event.ID); err != nil {
+		t.Fatalf("event was removed despite read-only source: %v", err)
+	}
+}
+
+func TestUpdateEventCannotMoveFromReadonlyCalendar(t *testing.T) {
+	c := newTestCore(t)
+	const destination = testCalendarName + "-destination"
+	if err := c.CreateCalendar(destination, ""); err != nil {
+		t.Fatalf("failed to create destination calendar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(destination)
+	})
+
+	start := time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+	event := core.Event{
+		ID:       uuid.New(),
+		Calendar: testCalendarName,
+		Title:    "Read-only source",
+		From:     start,
+		To:       start.Add(time.Hour),
+	}
+	if _, err := c.CreateEvent(event); err != nil {
+		t.Fatalf("failed to create event: %v", err)
+	}
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/readonly.git"), true); err != nil {
+		t.Fatalf("failed to make source calendar read-only: %v", err)
+	}
+
+	moved := event
+	moved.Calendar = destination
+	if _, err := c.UpdateEvent(moved); err == nil {
+		t.Fatal("expected move from stored read-only calendar to fail")
+	}
+	stored, err := c.GetEvent(event.ID)
+	if err != nil {
+		t.Fatalf("failed to get event after rejected move: %v", err)
+	}
+	if stored.Calendar != testCalendarName {
+		t.Fatalf("stored calendar changed to %q after rejected move", stored.Calendar)
+	}
+}
+
 func TestGetEvents_FilterByCalendarAndTag(t *testing.T) {
 	c := core.NewCore()
 

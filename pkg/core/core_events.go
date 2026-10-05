@@ -55,13 +55,11 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 	if !exists {
 		return nil, fmt.Errorf("no event found with id %q", event.ID)
 	}
-
-	cal, ok := c.calendars[event.Calendar]
-	if !ok {
-		return nil, errors.New("the specified calendar is missing")
+	if err := c.requireWritableCalendar(originalEvent.Calendar); err != nil {
+		return nil, fmt.Errorf("source calendar: %w", err)
 	}
-	if cal.Readonly {
-		return nil, errors.New("the specified calendar is read-only")
+	if err := c.requireWritableCalendar(event.Calendar); err != nil {
+		return nil, fmt.Errorf("destination calendar: %w", err)
 	}
 
 	oldEnd := originalEvent.getTreeEndTime()
@@ -105,7 +103,8 @@ func (c *Core) UpdateEvent(event Event) (*Event, error) {
 
 // UpdateRepeatingEvent updates occurrences in a recurring series.
 func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Event, error) {
-	if err := old.Validate(); err != nil {
+	canonical, parent, err := c.resolveOccurrence(old)
+	if err != nil {
 		return nil, fmt.Errorf("invalid old event: %w", err)
 	}
 	if err := new.Validate(); err != nil {
@@ -114,31 +113,26 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 	if !strat.IsValid() {
 		return nil, errors.New("incorrect strategy provided")
 	}
-	if old.ID != new.ID {
-		return nil, fmt.Errorf("invalid update event: id %q does not match parent id %q", old.ID, new.ID)
+	if canonical.ID != new.ID {
+		return nil, fmt.Errorf("invalid update event: id %q does not match occurrence id %q", new.ID, canonical.ID)
 	}
-	if !old.IsChild() || !new.IsChild() {
-		return nil, errors.New("repeating update requires child events")
+	if !new.IsChild() || *new.ParentID != parent.ID {
+		return nil, errors.New("updated event does not belong to the stored parent")
 	}
-	if *old.ParentID != *new.ParentID {
-		return nil, errors.New("old and new child events have different parent ids")
+	if err := c.requireWritableCalendar(parent.Calendar); err != nil {
+		return nil, fmt.Errorf("source calendar: %w", err)
 	}
-
-	cal, ok := c.calendars[new.Calendar]
-	if !ok {
-		return nil, errors.New("the specified calendar is missing")
-	}
-	if cal.Readonly {
-		return nil, errors.New("the specified calendar is read-only")
+	if err := c.requireWritableCalendar(new.Calendar); err != nil {
+		return nil, fmt.Errorf("destination calendar: %w", err)
 	}
 
 	switch strat {
 	case Current:
-		return c.updateCurrentChild(&old, &new)
+		return c.updateCurrentChild(&canonical, &new)
 	case Following:
-		return c.updateFollowingChildren(&old, &new)
+		return c.updateFollowingChildren(&canonical, &new)
 	case All:
-		return c.updateAllChildren(&old, &new)
+		return c.updateAllChildren(&canonical, &new)
 	default:
 		return nil, fmt.Errorf("update strategy %d isn't implemented", strat)
 	}
@@ -147,50 +141,39 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 // RemoveEvent removes a standalone event or recurring-series parent.
 // Use RemoveRepeatingEvent for generated child/occurances.
 func (c *Core) RemoveEvent(event Event) error {
-	if err := event.Validate(); err != nil {
-		return fmt.Errorf("invalid event: %w", err)
+	stored, ok := c.events[event.ID]
+	if !ok {
+		return fmt.Errorf("event not found: %s", event.ID)
 	}
-
-	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
-		return errors.New("the events calendar is read-only")
-	}
-
-	// delete file from disk and commit
-	err := c.deleteAndCommitEvent(event.ID, fmt.Sprintf("Deleted event %q", event.ID))
-	if err != nil {
+	if err := c.deleteAndCommitEvent(stored.ID, fmt.Sprintf("Deleted event %q", stored.ID)); err != nil {
 		return fmt.Errorf("failed to delete event from git: %w", err)
 	}
 
-	err = c.intervalTree.RemoveEvent(event)
-	if err != nil {
+	if err := c.intervalTree.RemoveEvent(*stored); err != nil {
 		return fmt.Errorf("failed to delete event from interval tree: %w", err)
 	}
 
-	delete(c.events, event.ID)
+	delete(c.events, stored.ID)
 	return nil
 }
 
 // RemoveRepeatingEvent removes occurrences from a recurring series.
 func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
-	if err := event.Validate(); err != nil {
+	canonical, parent, err := c.resolveOccurrence(event)
+	if err != nil {
 		return fmt.Errorf("invalid event: %w", err)
 	}
-
-	if cal, ok := c.calendars[event.Calendar]; ok && cal.Readonly {
-		return errors.New("the events calendar is read-only")
-	}
-
-	if !event.IsChild() {
-		return errors.New("event has to be a child to be removed using this method")
+	if err := c.requireWritableCalendar(parent.Calendar); err != nil {
+		return err
 	}
 
 	switch strat {
 	case Current:
-		return c.removeCurrentChild(&event)
+		return c.removeCurrentChild(&canonical)
 	case Following:
-		return c.removeFollowingChildren(&event)
+		return c.removeFollowingChildren(&canonical)
 	case All:
-		return c.removeAllChildren(&event)
+		return c.removeAllChildren(&canonical)
 	default:
 		return fmt.Errorf("update strategy %d isn't implemented", strat)
 	}
@@ -262,6 +245,44 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 	}
 
 	return result
+}
+
+func (c *Core) requireWritableCalendar(name string) error {
+	cal, ok := c.calendars[name]
+	if !ok || cal == nil {
+		return errors.New("the specified calendar is missing")
+	}
+	if cal.Readonly {
+		return errors.New("the specified calendar is read-only")
+	}
+	return nil
+}
+
+func (c *Core) resolveOccurrence(event Event) (Event, *Event, error) {
+	if event.ParentID == nil {
+		return Event{}, nil, errors.New("event is not a recurring occurrence")
+	}
+
+	parent, ok := c.events[*event.ParentID]
+	if !ok || parent == nil || !parent.IsParent() {
+		return Event{}, nil, errors.New("stored parent event not found")
+	}
+
+	start := parent.Repeat.After(event.From, true)
+	if !start.Equal(event.From) {
+		return Event{}, nil, fmt.Errorf("%s is not an occurrence of parent %q", event.From, parent.ID)
+	}
+
+	expectedID := generateCustomUUID(parent.ID, start)
+	if event.ID != expectedID {
+		return Event{}, nil, fmt.Errorf("event ID %q does not match stored occurrence %q", event.ID, expectedID)
+	}
+
+	parentID := parent.ID
+	event.From = start
+	event.To = start.Add(parent.To.Sub(parent.From))
+	event.ParentID = &parentID
+	return event, parent, nil
 }
 
 // updateCurrentChild updates one generated child by excluding it and creating a detached event.
@@ -530,10 +551,10 @@ func (c *Core) deleteAndCommitEvent(eventID uuid.UUID, commitMsg string) error {
 		return fmt.Errorf("event not found: %s", eventID)
 	}
 
-	cal, ok := c.calendars[event.Calendar]
-	if !ok {
-		return fmt.Errorf("calendar not found: %s", event.Calendar)
+	if err := c.requireWritableCalendar(event.Calendar); err != nil {
+		return err
 	}
+	cal := c.calendars[event.Calendar]
 	if cal.repository == nil {
 		return errors.New("calendar repo not initialized")
 	}

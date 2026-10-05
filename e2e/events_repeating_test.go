@@ -92,6 +92,48 @@ func TestRepeatingEvent_Remove_Current_AddsParentExceptionAndHidesChild(t *testi
 	}
 }
 
+func TestRepeatingEvent_Remove_UsesStoredParentAuthorization(t *testing.T) {
+	c := newTestCore(t)
+
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	_ = createRepeatingEvent(t, c, "Read-only series", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
+	child := requireEventAt(t, c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil), startTime.AddDate(0, 0, 1))
+
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/readonly.git"), true); err != nil {
+		t.Fatalf("failed to make calendar read-only: %v", err)
+	}
+	child.Calendar = "caller-controlled-calendar"
+	if err := c.RemoveRepeatingEvent(child, core.Current); err == nil {
+		t.Fatal("expected removal from stored read-only parent calendar to fail")
+	}
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
+	requireEventAt(t, events, startTime.AddDate(0, 0, 1))
+}
+
+func TestRepeatingEvent_Remove_RejectsForgedParent(t *testing.T) {
+	c := newTestCore(t)
+
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	first := createRepeatingEvent(t, c, "First series", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
+	second := createRepeatingEvent(t, c, "Second series", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
+	var child core.Event
+	for _, event := range c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil) {
+		if event.ParentID != nil && *event.ParentID == first.ID && event.From.Equal(startTime.AddDate(0, 0, 1)) {
+			child = event
+			break
+		}
+	}
+	if child.ID == uuid.Nil() {
+		t.Fatal("failed to find child from first series")
+	}
+
+	child.ParentID = &second.ID
+	if err := c.RemoveRepeatingEvent(child, core.Current); err == nil {
+		t.Fatal("expected forged parent ID to be rejected")
+	}
+}
+
 func TestRepeatingEvent_Remove_Current_RejectsParentEvent(t *testing.T) {
 	c := newTestCore(t)
 
@@ -178,6 +220,38 @@ func TestRepeatingEvent_Remove_All_RemovesWholeSeries(t *testing.T) {
 	events = c.GetEvents(startTime, startTime.AddDate(0, 0, count), nil)
 	if len(events) != 0 {
 		t.Fatalf("expected whole repeating series to be removed, got %d events", len(events))
+	}
+}
+
+func TestRepeatingEvent_Update_UsesStoredParentAuthorization(t *testing.T) {
+	c := newTestCore(t)
+	const destination = testCalendarName + "-repeat-destination"
+	if err := c.CreateCalendar(destination, ""); err != nil {
+		t.Fatalf("failed to create destination calendar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveCalendar(destination)
+	})
+
+	startTime := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	_ = createRepeatingEvent(t, c, "Read-only series", startTime, time.Hour, recurrenceWithCount(t, startTime, "DAILY", 3))
+	child := requireEventAt(t, c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil), startTime.AddDate(0, 0, 1))
+	if err := c.UpdateRemote(testCalendarName, mustParseURL("https://example.com/readonly.git"), true); err != nil {
+		t.Fatalf("failed to make calendar read-only: %v", err)
+	}
+
+	updated := cloneEvent(t, child)
+	updated.Calendar = destination
+	updated.Title = "Moved occurrence"
+	child.Calendar = destination
+	if _, err := c.UpdateRepeatingEvent(child, updated, core.Current); err == nil {
+		t.Fatal("expected update from stored read-only parent calendar to fail")
+	}
+
+	events := c.GetEvents(startTime, startTime.AddDate(0, 0, 3), nil)
+	stored := requireEventAt(t, events, startTime.AddDate(0, 0, 1))
+	if stored.Title != "Read-only series" || stored.Calendar != testCalendarName {
+		t.Fatalf("series changed after rejected update: %+v", stored)
 	}
 }
 
