@@ -111,6 +111,15 @@ func registerCallbacks(api *api.Api) {
 					return api.GetEvents(args[0].String(), args[1].String(), args[2].String())
 				})
 			}),
+			"getNotifications": js.FuncOf(func(this js.Value, args []js.Value) any {
+				return wrapPromise(func() (any, error) {
+					filter := ""
+					if len(args) > 2 && !args[2].IsNull() && !args[2].IsUndefined() {
+						filter = args[2].String()
+					}
+					return api.GetNotifications(args[0].String(), args[1].String(), filter)
+				})
+			}),
 			"createTag": js.FuncOf(func(this js.Value, args []js.Value) any {
 				return wrapPromise(func() (any, error) {
 					return api.CreateTag(args[0].String(), args[1].String())

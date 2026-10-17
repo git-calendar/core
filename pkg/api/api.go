@@ -228,6 +228,38 @@ func (a *Api) GetEvents(from, to, filterJSON string) (string, error) {
 	return marshalEvents(a.inner.GetEvents(f, t, filter))
 }
 
+// GetNotifications returns reminders due in the RFC 3339 interval [from, to) as JSON.
+// Delivery and deduplication are handled by the client, using event.id and at.
+func (a *Api) GetNotifications(from, to, filterJSON string) (string, error) {
+	f, err1 := time.Parse(time.RFC3339, from)
+	t, err2 := time.Parse(time.RFC3339, to)
+	if err := errors.Join(err1, err2); err != nil {
+		return emptyJSONArray, fmt.Errorf("invalid from/to parameter: %w", err)
+	}
+	if !f.Before(t) {
+		return emptyJSONArray, errors.New("from must be before to")
+	}
+	var filter core.GetEventsFilter
+	if filterJSON != "" {
+		if err := json.Unmarshal([]byte(filterJSON), &filter); err != nil {
+			return emptyJSONArray, err
+		}
+	}
+	type notificationJSON struct {
+		Event eventJSON `json:"event"`
+		At    time.Time `json:"at"`
+	}
+	result := make([]notificationJSON, 0)
+	for _, notification := range a.inner.GetNotifications(f, t, filter) {
+		result = append(result, notificationJSON{Event: eventToJSON(notification.Event), At: notification.At})
+	}
+	data, err := json.Marshal(result, json.Deterministic(true))
+	if err != nil {
+		return emptyJSONArray, fmt.Errorf("failed to marshal notifications: %w", err)
+	}
+	return string(data), nil
+}
+
 // CreateTag creates a tag from its JSON representation and returns it as JSON.
 func (a *Api) CreateTag(calendar, tagJSON string) (string, error) {
 	var tag core.Tag
