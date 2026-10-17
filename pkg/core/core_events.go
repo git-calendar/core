@@ -239,6 +239,7 @@ func (c *Core) GetEvents(from, to time.Time, filter GetEventsFilter) []Event {
 					TagID:       curEvent.TagID,
 					ParentID:    &curEvent.ID,
 					Repeat:      repeat,
+					Reminders:   slices.Clone(curEvent.Reminders),
 				})
 			}
 		}
@@ -386,6 +387,7 @@ func (c *Core) updateAllChildren(old, new *Event) (*Event, error) {
 	parent.Title = new.Title
 	parent.Location = new.Location
 	parent.Description = new.Description
+	parent.Reminders = slices.Clone(new.Reminders)
 	parent.From = parent.From.Add(fromDiff)
 	parent.To = parent.To.Add(toDiff)
 	parent.TagID = new.TagID
