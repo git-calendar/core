@@ -27,6 +27,7 @@ type eventInFile struct {
 	TagID       *uuid.UUID `json:"tag_id,omitzero"`
 	ParentID    *uuid.UUID `json:"parent_id,omitzero"`
 	Repeat      string     `json:"repeat,omitzero"`
+	Reminders   []Reminder `json:"reminders,omitempty"`
 	UpdatedAt   time.Time  `json:"updated_at,omitzero"`
 }
 
@@ -50,6 +51,7 @@ func (ef eventInFile) toEvent(id uuid.UUID, calendar string) (Event, error) {
 		TagID:       ef.TagID,
 		ParentID:    ef.ParentID,
 		Repeat:      repeat,
+		Reminders:   ef.Reminders,
 		UpdatedAt:   ef.UpdatedAt,
 	}, nil
 }
@@ -68,6 +70,7 @@ func (e Event) fileData() eventInFile {
 		TagID:       e.TagID,
 		ParentID:    e.ParentID,
 		Repeat:      repeat,
+		Reminders:   e.Reminders,
 		UpdatedAt:   e.UpdatedAt,
 	}
 }

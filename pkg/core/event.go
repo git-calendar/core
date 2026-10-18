@@ -38,6 +38,8 @@ type Event struct {
 	ParentID *uuid.UUID `json:"parent_id"`
 	// Repeat is an internal recurrence representation. It is serialized as RFC 5545 text.
 	Repeat *rrule.Set `json:"-"`
+	// Reminders schedules notifications before the event starts; empty means disabled.
+	Reminders []Reminder `json:"reminders,omitempty"`
 	// UpdatedAt resolves Git conflicts by latest value and is excluded from public JSON.
 	UpdatedAt time.Time `json:"-"`
 }
@@ -63,6 +65,16 @@ func (e *Event) Validate() error {
 	}
 	if e.From.Compare(e.To) != -1 {
 		return errors.New("from timestamp cannot be greater or equal than to (cannot end before it starts)")
+	}
+	seenReminders := make(map[int64]bool, len(e.Reminders))
+	for _, reminder := range e.Reminders {
+		if reminder.MinutesBefore < 0 || reminder.MinutesBefore > int64((1<<63-1)/time.Minute) {
+			return errors.New("reminder minutes_before must be non-negative and fit in a time.Duration")
+		}
+		if seenReminders[reminder.MinutesBefore] {
+			return errors.New("duplicate reminder minutes_before")
+		}
+		seenReminders[reminder.MinutesBefore] = true
 	}
 	if e.ParentID == nil {
 		if err := validateRecurrence(e.Repeat, e.From); err != nil {
