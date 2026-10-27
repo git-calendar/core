@@ -228,11 +228,9 @@ func (c *Core) CloneCalendar(repoURL *url.URL, password string, readonly bool) e
 
 	c.calendars[calendarName] = cal
 
-	if c.proxyURL != nil {
-		// repair the remote url (set the pure url with auth, without proxy)
-		if err := c.UpdateRemote(calendarName, repoURL, readonly); err != nil {
-			return err
-		}
+	// set the original remote url with credentials and without the proxy
+	if err := c.UpdateRemote(calendarName, repoURL, readonly); err != nil {
+		return err
 	}
 
 	return nil
