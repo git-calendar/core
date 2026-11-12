@@ -28,7 +28,7 @@ const (
 
 // Api wraps core.Core in a binding-friendly API.
 //
-// Api values must be created with NewApi.
+// Api values must be created with NewApi or NewApiAt.
 type Api struct {
 	inner *core.Core
 }

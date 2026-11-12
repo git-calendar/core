@@ -36,16 +36,19 @@ type Core struct {
 
 // NewCore creates an initialized Core using the platform filesystem.
 func NewCore() *Core {
-	var c Core
-	c.resetCore()
-
 	// Build tags select the classic or WebAssembly filesystem implementation.
-	var err error
-	c.fs, err = filesystem.GetFS()
+	fs, err := filesystem.GetFS()
 	if err != nil {
 		panic(err)
 	}
+	return NewCoreWithFS(fs)
+}
 
+// NewCoreWithFS creates an initialized Core that stores its data in fs.
+func NewCoreWithFS(fs billy.Filesystem) *Core {
+	var c Core
+	c.resetCore()
+	c.fs = fs
 	return &c
 }
 

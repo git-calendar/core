@@ -22,15 +22,18 @@ func GetFS() (billy.Filesystem, error) {
 	if err != nil {
 		return nil, err
 	}
+	return GetFSAt(home)
+}
 
+// GetFSAt returns a filesystem rooted at the application data directory inside dir.
+func GetFSAt(dir string) (billy.Filesystem, error) {
 	// ensure the directory exists on the real filesystem
-	rootPath := filepath.Join(home, DirName)
+	rootPath := filepath.Join(dir, DirName)
 	if err := os.MkdirAll(rootPath, 0o755); err != nil {
 		return nil, err
 	}
 
-	// base filesystem rooted at home
-	base := osfs.New(home)
+	base := osfs.New(dir)
 	scoped := chroot.New(base, DirName)
 	return scoped, nil
 }
