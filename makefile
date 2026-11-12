@@ -1,6 +1,8 @@
 GO ?= go
 BUILD_DIR ?= ./build
 ANDROID_API ?= 31
+# 16 KB page alignment for Android 15+ devices, older NDKs (< r28) default to 4 KB
+ANDROID_LDFLAGS := -Wl,-z,max-page-size=16384
 
 ANDROID_BUILD_DIR := $(BUILD_DIR)/android
 IOS_BUILD_DIR := $(BUILD_DIR)/ios
@@ -18,7 +20,7 @@ mobile_tools:
 
 build_android: mobile_tools
 	mkdir -p $(ANDROID_BUILD_DIR)
-	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
+	CGO_LDFLAGS="$(ANDROID_LDFLAGS) $$CGO_LDFLAGS" PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
 
 build_ios: mobile_tools
 	mkdir -p $(IOS_BUILD_DIR)
@@ -31,7 +33,7 @@ prod_build: prod_build_android prod_build_ios prod_build_web
 
 prod_build_android: mobile_tools
 	mkdir -p $(ANDROID_BUILD_DIR)
-	PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -ldflags="-s -w" -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
+	CGO_LDFLAGS="$(ANDROID_LDFLAGS) $$CGO_LDFLAGS" PATH="$(MOBILE_TOOLS_DIR):$$PATH" $(GO) tool gomobile bind -target=android -androidapi=$(ANDROID_API) -ldflags="-s -w" -o $(ANDROID_BUILD_DIR)/core.aar ./pkg/api
 
 prod_build_ios: mobile_tools
 	mkdir -p $(IOS_BUILD_DIR)
