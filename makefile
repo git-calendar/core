@@ -1,6 +1,6 @@
 GO ?= go
 BUILD_DIR ?= ./build
-ANDROID_API ?= 35
+ANDROID_API ?= 31
 
 ANDROID_BUILD_DIR := $(BUILD_DIR)/android
 IOS_BUILD_DIR := $(BUILD_DIR)/ios
