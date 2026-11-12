@@ -62,7 +62,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build WASM
-        run: make prod_build_web
+        run: make build_web LDFLAGS="-s -w"
 
       - name: Verify Web artifacts
         run: |
@@ -104,7 +104,7 @@ jobs:
           javac -version
 
       - name: Build Android AAR
-        run: make prod_build_android
+        run: make build_android LDFLAGS="-s -w"
 
       - name: Verify Android AAR
         run: unzip -tq build/android/core.aar
@@ -138,7 +138,7 @@ jobs:
           xcodebuild -version
 
       - name: Build iOS XCFramework
-        run: make prod_build_ios
+        run: make build_ios LDFLAGS="-s -w"
 
       - name: Package iOS XCFramework
         run: |
