@@ -17,6 +17,7 @@ import (
 	"uuid"
 
 	"github.com/git-calendar/core/pkg/core"
+	"github.com/git-calendar/core/pkg/errcode"
 	"github.com/teambition/rrule-go"
 )
 
@@ -62,6 +63,16 @@ func (a *Api) LoadCalendars() error { return a.inner.LoadCalendars() }
 
 // SetCorsProxy configures the CORS proxy used for remote requests.
 func (a *Api) SetCorsProxy(proxyURL string) error { return a.inner.SetCorsProxy(proxyURL) }
+
+// SetTimeZone sets the process local time zone (IANA name), which date-only iCalendar events use.
+func (a *Api) SetTimeZone(name string) error {
+	location, err := time.LoadLocation(name)
+	if err != nil {
+		return errcode.Wrap(errcode.Validation, err)
+	}
+	time.Local = location
+	return nil
+}
 
 // SyncAll synchronizes all configured calendars.
 func (a *Api) SyncAll() error { return a.inner.SyncAll() }

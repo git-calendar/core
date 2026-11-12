@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"syscall/js"
 	_ "time/tzdata" // microslop dates need this
 
@@ -13,6 +14,12 @@ import (
 // This is the starting point which gets called from JS.
 func main() {
 	api := api.NewApi()
+
+	// go's local zone in the browser is a fixed offset without dst
+	timeZone := js.Global().Get("Intl").Get("DateTimeFormat").New().Call("resolvedOptions").Get("timeZone").String()
+	if err := api.SetTimeZone(timeZone); err != nil {
+		fmt.Printf("WARN: failed to set time zone: %v\n", err)
+	}
 
 	registerCallbacks(api)
 
