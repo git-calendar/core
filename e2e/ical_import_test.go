@@ -507,3 +507,34 @@ SUMMARY:%s
 END:VEVENT
 END:VCALENDAR`, title)
 }
+
+func TestSyncICalURLReportsUnreachableProxy(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const name = "test-ical-proxy"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icalFeed("Title")))
+	}))
+	defer server.Close()
+	sourceURL, err := url.Parse(server.URL + "/feed.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := core.NewCore()
+	if err := c.ImportICalURL(name, sourceURL); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.RemoveCalendar(name) })
+
+	proxy := httptest.NewServer(http.NotFoundHandler())
+	proxy.Close() // nothing listens on its address anymore
+	if err := c.SetCorsProxy(proxy.URL); err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.SyncAll()
+	if code, ok := errcode.CodeOf(err); !ok || code != errcode.Proxy {
+		t.Fatalf("SyncAll() error code = %q, %t, want %q, true: %v", code, ok, errcode.Proxy, err)
+	}
+}

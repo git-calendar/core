@@ -29,7 +29,7 @@ func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
-	}))
+	}), proxyURL)
 }
 
 func fetchCalendar(cal *Calendar, proxyURL *url.URL) error {
@@ -45,7 +45,7 @@ func fetchCalendar(cal *Calendar, proxyURL *url.URL) error {
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
-	}))
+	}), proxyURL)
 }
 
 func fastForwardCalendar(cal *Calendar, hash plumbing.Hash) error {
@@ -72,13 +72,13 @@ func fastForwardCalendar(cal *Calendar, hash plumbing.Hash) error {
 	return nil
 }
 
-func wrapGitRemoteError(err error) error {
+func wrapGitRemoteError(err error, proxyURL *url.URL) error {
 	err = ignoreUpToDate(err)
 	if err == nil {
 		return nil
 	}
 
-	code := errcode.Network
+	code := networkCode(err, proxyURL)
 	switch {
 	case errors.Is(err, transport.ErrAuthenticationRequired):
 		code = errcode.Auth
@@ -105,6 +105,25 @@ func gitHTTPStatusCode(err error) int {
 		return statusErr.StatusCode()
 	}
 	return 0
+}
+
+// networkCode tells an unreachable CORS proxy apart from an unreachable remote.
+// A reachable proxy answers upstream failures with an HTTP status, so a request
+// that got no response at all never reached the proxy.
+func networkCode(err error, proxyURL *url.URL) errcode.Code {
+	if proxyURL == nil {
+		return errcode.Network
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return errcode.Proxy
+	}
+	var unexpectedErr *plumbing.UnexpectedError
+	if errors.As(err, &unexpectedErr) && errors.As(unexpectedErr.Err, &urlErr) {
+		return errcode.Proxy
+	}
+	return errcode.Network
 }
 
 // ignoreUpToDate swallows the benign "already up to date" error from push/fetch.

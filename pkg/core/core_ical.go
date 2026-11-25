@@ -205,7 +205,7 @@ func (c *Core) fetchICalURL(name string, sourceURL *url.URL) error {
 	client := http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
-		return errcode.Wrap(errcode.Network, err)
+		return errcode.Wrap(networkCode(err, c.proxyURL), err)
 	}
 	defer response.Body.Close()
 

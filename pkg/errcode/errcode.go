@@ -13,6 +13,7 @@ type Code string
 
 const (
 	Network    Code = "NETWORK"
+	Proxy      Code = "PROXY"
 	Auth       Code = "AUTH"
 	Forbidden  Code = "FORBIDDEN"
 	RateLimit  Code = "RATELIMIT"
