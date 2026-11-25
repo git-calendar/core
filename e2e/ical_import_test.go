@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -386,8 +387,8 @@ func TestImportICalURLCachesUntilSync(t *testing.T) {
 		if code, ok := errcode.CodeOf(err); !ok || code != errcode.Network {
 			t.Fatalf("SyncAll() error code = %q, %t, want %q, true: %v", code, ok, errcode.Network, err)
 		}
-		if calendar, ok := errcode.CalendarOf(err); !ok || calendar != name {
-			t.Fatalf("SyncAll() error calendar = %q, %t, want %q, true: %v", calendar, ok, name, err)
+		if calendars := errcode.CalendarsOf(err); !slices.Equal(calendars, []string{name}) {
+			t.Fatalf("SyncAll() error calendars = %q, want %q: %v", calendars, []string{name}, err)
 		}
 	}
 

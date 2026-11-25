@@ -204,8 +204,12 @@ func wrapPromise(fn func() (any, error)) any {
 				if code, ok := errcode.CodeOf(err); ok {
 					errorValue.Set("code", string(code))
 				}
-				if calendar, ok := errcode.CalendarOf(err); ok {
-					errorValue.Set("calendar", calendar)
+				if calendars := errcode.CalendarsOf(err); len(calendars) > 0 {
+					names := make([]any, len(calendars))
+					for i, calendar := range calendars {
+						names[i] = calendar
+					}
+					errorValue.Set("calendars", names)
 				}
 
 				reject.Invoke(errorValue)

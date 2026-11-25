@@ -1,7 +1,11 @@
 // Package errcode adds stable, machine-readable codes to errors.
 package errcode
 
-import "errors"
+import (
+	"errors"
+	"maps"
+	"slices"
+)
 
 // Code identifies an error category across API boundaries.
 type Code string
@@ -59,17 +63,11 @@ func CodeOf(err error) (Code, bool) {
 	return coded.code, true
 }
 
-// CalendarOf returns a calendar when all calendar-specific errors refer to the same one.
-func CalendarOf(err error) (string, bool) {
-	calendars := make(map[string]struct{})
-	collectCalendars(err, calendars)
-	if len(calendars) != 1 {
-		return "", false
-	}
-	for calendar := range calendars {
-		return calendar, true
-	}
-	return "", false
+// CalendarsOf returns the sorted, unique calendars referenced by err's chain.
+func CalendarsOf(err error) []string {
+	set := make(map[string]struct{})
+	collectCalendars(err, set)
+	return slices.Sorted(maps.Keys(set))
 }
 
 func collectCalendars(err error, calendars map[string]struct{}) {

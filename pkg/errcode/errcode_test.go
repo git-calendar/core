@@ -3,6 +3,7 @@ package errcode
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -51,8 +52,8 @@ func TestWithCalendar(t *testing.T) {
 	if !errors.Is(err, target) {
 		t.Fatal("wrapped error does not preserve its cause")
 	}
-	if got, ok := CalendarOf(err); !ok || got != "work" {
-		t.Fatalf("CalendarOf() = %q, %t, want %q, true", got, ok, "work")
+	if got := CalendarsOf(err); !slices.Equal(got, []string{"work"}) {
+		t.Fatalf("CalendarsOf() = %q, want %q", got, []string{"work"})
 	}
 }
 
@@ -62,15 +63,15 @@ func TestWithCalendarNil(t *testing.T) {
 	}
 }
 
-func TestCalendarOfJoinedErrors(t *testing.T) {
+func TestCalendarsOfJoinedErrors(t *testing.T) {
 	t.Run("same calendar", func(t *testing.T) {
 		err := errors.Join(
 			WithCalendar("work", errors.New("fetch failed")),
 			WithCalendar("work", errors.New("push failed")),
 		)
 
-		if got, ok := CalendarOf(err); !ok || got != "work" {
-			t.Fatalf("CalendarOf() = %q, %t, want %q, true", got, ok, "work")
+		if got := CalendarsOf(err); !slices.Equal(got, []string{"work"}) {
+			t.Fatalf("CalendarsOf() = %q, want %q", got, []string{"work"})
 		}
 	})
 
@@ -80,8 +81,8 @@ func TestCalendarOfJoinedErrors(t *testing.T) {
 			WithCalendar("personal", errors.New("fetch failed")),
 		)
 
-		if got, ok := CalendarOf(err); ok {
-			t.Fatalf("CalendarOf() = %q, true, want no calendar", got)
+		if got := CalendarsOf(err); !slices.Equal(got, []string{"personal", "work"}) {
+			t.Fatalf("CalendarsOf() = %q, want %q", got, []string{"personal", "work"})
 		}
 	})
 }
