@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,10 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
+// gitRemoteTimeout stops a stalled remote from hanging sync forever (go-git has no default timeout).
+// Slightly above the cors-proxy's 15s so its error arrives first.
+const gitRemoteTimeout = 17 * time.Second
+
 func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
 	repoURL, err := repoURLFromCalendar(cal)
 	if err != nil {
@@ -25,7 +30,9 @@ func pushCalendar(cal *Calendar, proxyURL *url.URL) error {
 	fmt.Println("pushing", cal.Name)
 
 	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
-	return wrapGitRemoteError(cal.repository.Push(&gogit.PushOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), gitRemoteTimeout)
+	defer cancel()
+	return wrapGitRemoteError(cal.repository.PushContext(ctx, &gogit.PushOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
@@ -41,7 +48,9 @@ func fetchCalendar(cal *Calendar, proxyURL *url.URL) error {
 	fmt.Println("fetching", cal.Name)
 
 	finalURL, auth := prepareRepoURL(repoURL, proxyURL)
-	return wrapGitRemoteError(cal.repository.Fetch(&gogit.FetchOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), gitRemoteTimeout)
+	defer cancel()
+	return wrapGitRemoteError(cal.repository.FetchContext(ctx, &gogit.FetchOptions{
 		RemoteName: GitRemoteName,
 		RemoteURL:  finalURL.String(),
 		Auth:       auth,
