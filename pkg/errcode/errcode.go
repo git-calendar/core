@@ -3,6 +3,7 @@ package errcode
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 )
@@ -51,7 +52,7 @@ func WithCalendar(calendar string, err error) error {
 	return &calendarError{calendar: calendar, err: err}
 }
 
-func (e *calendarError) Error() string { return e.err.Error() }
+func (e *calendarError) Error() string { return fmt.Sprintf("calendar %q: %v", e.calendar, e.err) }
 func (e *calendarError) Unwrap() error { return e.err }
 
 // CodeOf returns the first error code in err's chain.

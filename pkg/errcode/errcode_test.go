@@ -55,6 +55,9 @@ func TestWithCalendar(t *testing.T) {
 	if got := CalendarsOf(err); !slices.Equal(got, []string{"work"}) {
 		t.Fatalf("CalendarsOf() = %q, want %q", got, []string{"work"})
 	}
+	if got, want := err.Error(), `calendar "work": sync failed: offline`; got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
 }
 
 func TestWithCalendarNil(t *testing.T) {
