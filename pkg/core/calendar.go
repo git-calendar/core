@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"net/url"
 	"os"
 	"path"
@@ -29,7 +30,7 @@ func (cal *Calendar) Validate() error {
 		return nil
 	}
 	if cal.Name == "" {
-		return errors.New("calendar name cannot be empty")
+		return errcode.Wrap(errcode.NameRequired, errors.New("calendar name cannot be empty"))
 	}
 	for _, t := range cal.Tags {
 		if err := t.Validate(); err != nil {

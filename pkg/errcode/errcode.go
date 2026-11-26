@@ -19,6 +19,17 @@ const (
 	RateLimit  Code = "RATELIMIT"
 	Validation Code = "VALIDATION"
 	Storage    Code = "STORAGE"
+
+	// Specific errors the user can cause and fix, so clients can explain them in the user's language.
+	CalendarExists   Code = "CALENDAR_EXISTS"
+	CalendarNotFound Code = "CALENDAR_NOT_FOUND"
+	ReadOnly         Code = "READONLY"
+	EventNotFound    Code = "EVENT_NOT_FOUND"
+	TagExists        Code = "TAG_EXISTS"
+	TagNotFound      Code = "TAG_NOT_FOUND"
+	NameRequired     Code = "NAME_REQUIRED"
+	// Decryption means encrypted data could not be read, most likely because of a wrong key.
+	Decryption Code = "DECRYPTION"
 )
 
 type codedError struct {
@@ -39,7 +50,8 @@ func Wrap(code Code, err error) error {
 	return &codedError{code: code, err: err}
 }
 
-func (e *codedError) Error() string { return e.err.Error() }
+// Error starts with the code, "NETWORK: …", so clients that only get the text (gomobile) can read it.
+func (e *codedError) Error() string { return string(e.code) + ": " + e.err.Error() }
 func (e *codedError) Unwrap() error { return e.err }
 
 // WithCalendar associates err with a calendar. It returns nil when err is nil.

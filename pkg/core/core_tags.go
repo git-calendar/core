@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"os"
 	"slices"
 	"time"
@@ -26,7 +27,7 @@ func (c *Core) CreateTag(calendar string, tag Tag) (*Tag, error) {
 	if slices.ContainsFunc(cal.Tags, func(t Tag) bool {
 		return t.ID == tag.ID
 	}) {
-		return nil, fmt.Errorf("tag already exists")
+		return nil, errcode.Wrap(errcode.TagExists, fmt.Errorf("tag already exists"))
 	}
 
 	gitPath := tag.getPath()
@@ -57,7 +58,7 @@ func (c *Core) UpdateTag(calendar string, tag Tag) (*Tag, error) {
 		return t.ID == tag.ID
 	})
 	if index == -1 {
-		return nil, errors.New("tag with this id does not exist")
+		return nil, errcode.Wrap(errcode.TagNotFound, errors.New("tag with this id does not exist"))
 	}
 
 	gitPath := tag.getPath()
@@ -120,7 +121,7 @@ func (c *Core) tagWorktree(calendar string) (*Calendar, *gogit.Worktree, error) 
 		return nil, nil, fmt.Errorf("invalid calendar %q: no repository", calendar)
 	}
 	if cal.Readonly {
-		return nil, nil, fmt.Errorf("calendar %q is read-only", calendar)
+		return nil, nil, errcode.Wrap(errcode.ReadOnly, fmt.Errorf("calendar %q is read-only", calendar))
 	}
 
 	wt, err := cal.repository.Worktree()

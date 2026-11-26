@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"io"
 	"net/url"
 	"os"
@@ -21,7 +22,7 @@ import (
 // CreateCalendar creates a calendar backed by a local Git repository.
 func (c *Core) CreateCalendar(name, password string) error {
 	if _, exists := c.calendars[name]; exists {
-		return fmt.Errorf("calendar named %s already exists", name)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("calendar named %s already exists", name))
 	}
 
 	repo, err := c.initCalendarRepo(name)
@@ -161,7 +162,7 @@ func (c *Core) CloneCalendar(repoURL *url.URL, password string, readonly bool) e
 	}
 	calendarName := calendarNameFromURL(repoURL)
 	if _, ok := c.calendars[calendarName]; ok {
-		return errors.New("calendar with this name already exists")
+		return errcode.Wrap(errcode.CalendarExists, errors.New("calendar with this name already exists"))
 	}
 
 	// ensure the repo dir exists before cloning
@@ -270,13 +271,13 @@ func (c *Core) RemoveCalendar(name string) error {
 // RenameCalendar changes a calendar's name and associated storage paths.
 func (c *Core) RenameCalendar(oldName, newName string) error {
 	if _, exists := c.calendars[oldName]; !exists {
-		return fmt.Errorf("calendar %s doesn't exist", oldName)
+		return errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("calendar %s doesn't exist", oldName))
 	}
 	if oldName == newName {
 		return nil
 	}
 	if _, exists := c.calendars[newName]; exists {
-		return fmt.Errorf("calendar named %s already exists", newName)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("calendar named %s already exists", newName))
 	}
 
 	calendar := c.calendars[oldName]
@@ -335,7 +336,7 @@ func (c *Core) RenameCalendar(oldName, newName string) error {
 func (c *Core) UpdateRemote(calendar string, remoteURL *url.URL, readonly bool) error {
 	cal, ok := c.calendars[calendar]
 	if !ok || cal == nil {
-		return fmt.Errorf("calendar not found: %s", calendar)
+		return errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("calendar not found: %s", calendar))
 	}
 
 	if cal.repository == nil {

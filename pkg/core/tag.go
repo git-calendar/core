@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"io"
 	"path"
 	"strings"
@@ -36,7 +37,7 @@ func (t *Tag) Validate() error {
 		t.ID = uuid.New()
 	}
 	if t.Name == "" {
-		return errors.New("tag name cannot be empty")
+		return errcode.Wrap(errcode.NameRequired, errors.New("tag name cannot be empty"))
 	}
 	if t.Color == "" {
 		return errors.New("tag color cannot be empty")

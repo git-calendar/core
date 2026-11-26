@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"strconv"
 
 	aessiv "github.com/jedisct1/go-aes-siv"
@@ -16,7 +17,9 @@ func DecryptFields(v any, key, aad []byte) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes instance: %w", err)
 	}
-	return decryptAll(v, aad, siv)
+	values, err := decryptAll(v, aad, siv)
+	// a wrong key fails to authenticate the very first value
+	return values, errcode.Wrap(errcode.Decryption, err)
 }
 
 func decryptAll(v any, aad []byte, siv *aessiv.AESSIV) (any, error) {

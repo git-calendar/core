@@ -22,7 +22,7 @@ import (
 func (c *Core) ExportICal(calendar string) ([]byte, error) {
 	if calendar != "" {
 		if _, ok := c.calendars[calendar]; !ok {
-			return nil, fmt.Errorf("calendar not found: %s", calendar)
+			return nil, errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("calendar not found: %s", calendar))
 		}
 	}
 
@@ -39,10 +39,10 @@ func (c *Core) ExportICal(calendar string) ([]byte, error) {
 func (c *Core) ImportICalFile(calendar string, tagID *uuid.UUID, r io.Reader) error {
 	cal, ok := c.calendars[calendar]
 	if !ok {
-		return fmt.Errorf("calendar not found: %s", calendar)
+		return errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("calendar not found: %s", calendar))
 	}
 	if cal.Readonly {
-		return errors.New("the specified calendar is read-only")
+		return errcode.Wrap(errcode.ReadOnly, errors.New("the specified calendar is read-only"))
 	}
 	if cal.repository == nil {
 		return errors.New("calendar repo not initialized")
@@ -97,23 +97,23 @@ func (c *Core) ImportICalURL(name string, sourceURL *url.URL) error {
 		return err
 	}
 	if _, exists := c.calendars[name]; exists {
-		return fmt.Errorf("calendar named %s already exists", name)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("calendar named %s already exists", name))
 	}
 	if _, err := c.fs.Stat(name); err == nil {
-		return fmt.Errorf("file named %s already exists", name)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("file named %s already exists", name))
 	} else if !os.IsNotExist(err) {
 		return err
 	}
 
 	fileName := name + ICalURLFileSuffix
 	if _, err := c.fs.Stat(fileName); err == nil {
-		return fmt.Errorf("file named %s already exists", fileName)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("file named %s already exists", fileName))
 	} else if !os.IsNotExist(err) {
 		return err
 	}
 	cacheName := name + ICalFileSuffix
 	if _, err := c.fs.Stat(cacheName); err == nil {
-		return fmt.Errorf("file named %s already exists", cacheName)
+		return errcode.Wrap(errcode.CalendarExists, fmt.Errorf("file named %s already exists", cacheName))
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -151,7 +151,7 @@ func (c *Core) UpdateICalURL(name string, sourceURL *url.URL) error {
 
 	calendar, exists := c.calendars[name]
 	if !exists || calendar.ICalURL == nil {
-		return fmt.Errorf("iCalendar calendar not found: %s", name)
+		return errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("iCalendar calendar not found: %s", name))
 	}
 
 	if err := c.fetchICalURL(name, sourceURL); err != nil {

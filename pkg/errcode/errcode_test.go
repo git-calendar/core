@@ -17,8 +17,8 @@ func TestWrap(t *testing.T) {
 	if got, ok := CodeOf(fmt.Errorf("sync failed: %w", err)); !ok || got != Network {
 		t.Fatalf("CodeOf() = %q, %t, want %q, true", got, ok, Network)
 	}
-	if got := err.Error(); got != target.Error() {
-		t.Fatalf("Error() = %q, want %q", got, target.Error())
+	if got, want := err.Error(), "NETWORK: "+target.Error(); got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 }
 

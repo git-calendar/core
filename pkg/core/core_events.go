@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/git-calendar/core/pkg/errcode"
 	"os"
 	"path"
 	"slices"
@@ -24,7 +25,7 @@ func (c *Core) CreateEvent(event Event) (*Event, error) {
 		return nil, errors.New("the specified calendar is missing")
 	}
 	if cal.Readonly {
-		return nil, errors.New("the specified calendar is read-only")
+		return nil, errcode.Wrap(errcode.ReadOnly, errors.New("the specified calendar is read-only"))
 	}
 
 	if err := event.Validate(); err != nil {
@@ -143,7 +144,7 @@ func (c *Core) UpdateRepeatingEvent(old, new Event, strat UpdateStrategy) (*Even
 func (c *Core) RemoveEvent(event Event) error {
 	stored, ok := c.events[event.ID]
 	if !ok {
-		return fmt.Errorf("event not found: %s", event.ID)
+		return errcode.Wrap(errcode.EventNotFound, fmt.Errorf("event not found: %s", event.ID))
 	}
 	if err := c.deleteAndCommitEvent(stored.ID, fmt.Sprintf("Deleted event %q", stored.ID)); err != nil {
 		return fmt.Errorf("failed to delete event from git: %w", err)
@@ -183,7 +184,7 @@ func (c *Core) RemoveRepeatingEvent(event Event, strat UpdateStrategy) error {
 func (c *Core) GetEvent(id uuid.UUID) (*Event, error) {
 	e, ok := c.events[id]
 	if !ok {
-		return nil, fmt.Errorf("event with id: %q doesn't exist", id)
+		return nil, errcode.Wrap(errcode.EventNotFound, fmt.Errorf("event with id: %q doesn't exist", id))
 	}
 	return e, nil
 }
@@ -254,7 +255,7 @@ func (c *Core) requireWritableCalendar(name string) error {
 		return errors.New("the specified calendar is missing")
 	}
 	if cal.Readonly {
-		return errors.New("the specified calendar is read-only")
+		return errcode.Wrap(errcode.ReadOnly, errors.New("the specified calendar is read-only"))
 	}
 	return nil
 }
@@ -465,7 +466,7 @@ func (c *Core) saveAndCommitEvent(event *Event, commitMsg string) error {
 
 	cal, ok := c.calendars[event.Calendar]
 	if !ok {
-		return fmt.Errorf("calendar not found: %s", event.Calendar)
+		return errcode.Wrap(errcode.CalendarNotFound, fmt.Errorf("calendar not found: %s", event.Calendar))
 	}
 	if cal.repository == nil {
 		return errors.New("calendar repo not initialized")
@@ -550,7 +551,7 @@ func rollbackEventBatch(wt *gogit.Worktree, newPaths []string, cause error) erro
 func (c *Core) deleteAndCommitEvent(eventID uuid.UUID, commitMsg string) error {
 	event, ok := c.events[eventID]
 	if !ok {
-		return fmt.Errorf("event not found: %s", eventID)
+		return errcode.Wrap(errcode.EventNotFound, fmt.Errorf("event not found: %s", eventID))
 	}
 
 	if err := c.requireWritableCalendar(event.Calendar); err != nil {
